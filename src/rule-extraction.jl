@@ -1,27 +1,5 @@
 ############################################################################################
 
-const Consequent = Any
-
-struct Rule{L<:Logic,C<:Consequent}
-    antecedent :: Formula{L}
-    consequent :: C
-end
-
-antecedent(rule::Rule) = rule.antecedent
-consequent(rule::Rule) = rule.consequent
-
-const ClassificationRule = Rule{L,CLabel} where {L}
-const RegressionRule     = Rule{L,RLabel} where {L}
-
-struct RuleBasedModel{L<:Logic,C<:Consequent}
-    rules :: Vector{<:Rule{L,C}}
-end
-
-rules(model::RuleBasedModel) = model.rules
-
-const RuleBasedClassifier = RuleBasedModel{L,CLabel} where {L}
-const RuleBasedRegressor  = RuleBasedModel{L,RLabel} where {L}
-
 """
 TODO document
 """
@@ -120,9 +98,6 @@ end
 # TODO
 function evaluate_decision(dec::Decision, X::MultiFrameModalDataset) end
 
-# TODO remove
-logic = extract_logic
-
 ############################################################################################
 ############################################################################################
 ############################################################################################
@@ -130,7 +105,7 @@ logic = extract_logic
 # Extract decisions from rule
 function extract_decisions(formula::Formula{L}) where {L<:Logic}
     # TODO remove in favor of operators_set = operators(L)
-    operators_set = operators(logic(antecedent(rule)))
+    operators_set = operators(logic(formula))
     function _extract_decisions(node::FNode, decs::AbstractVector{<:Decision})
         # Leaf or internal node
         if !isdefined(node, :leftchild) && !isdefined(node, :rightchild)
