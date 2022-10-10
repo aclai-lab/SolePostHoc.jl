@@ -431,20 +431,19 @@ function extract_rules(
     ########################################################################################
     # Construct a rule-based model from the set of best rules
 
-    # D -> copy of the original dataset
-    D = copy(X)
+    D = copy(X) # Copy of the original dataset
     R = RuleBasedModel()  # Vector of ordered list
     S = RuleBasedModel()  # Vector of rules left
     append!(rules(S), best_rules)
+    #TODO: Formula{L}()
     push!(rules(S), Rule{L}(Formula{L}(), majority_vote(Y)))
 
-    # Delete rules that have a frequency less than min_frequency
+    # Rules with a frequency less than min_frequency
     S = begin
-        # "metrics" is a vector of dictionaries that contain the metrics of a specific rule
         metrics = rule_metrics.(S, X, Y)
-        freq_rules = [metrics[i][:support] for i in collect(1:length(metrics))]
-        idx_undeleted = findall(freq_rules .>= min_frequency) # Undeleted rule indexes
-        S[idx_undeleted]
+        rules_support = [metrics[i][:support] for i in eachindex(metrics)]
+        idxs_undeleted = findall(rules_support .>= min_frequency) # Undeleted rule indexes
+        S[idxs_undeleted]
     end
 
     while true
@@ -475,31 +474,28 @@ function extract_rules(
 
         # Add at the end the best rule
         push!(rules(R), S[idx_best])
-        # Delete the best rule from S
-        deleteat!(S,idx_best)
 
-        # Delete the instances satisfying the best rule
+        # Indices of the remaining instances
         idx_remaining = begin
-            # There remain instances that do not meet the best rule's condition
-            # (S[idx_best]).
             eval_result = evaluate_rule(S[idx_best], D, Y)
             sat_unsat = eval_result[:ant_sat]
-            #remain in D the rule that not satisfying the best rule's condition
+            # Remain in D the rule that not satisfying the best rule's condition
             findall(sat_unsat .== false)
         end
-
         D = D[idx_remaining,:]
-        # Update of the default rule
-        rules(S)[length(rules(S))] = Rule{L}(Formula{L}(), majority_vote(Y[idx_remaining]))
 
         if idx_best == length(rules(S))
             return R
-        end
-
-        if size(D, 1) == 0  #there are no instances in D
+        elseif size(D, 1) == 0
             push!(R, Rule{L}(Formula{L}(),majority_vote(Y)))
             return R
         end
+
+        # Delete the best rule from S
+        deleteat!(S,idx_best)
+        # Update of the default rule
+        # TODO: Formula{L}()
+        rules(S)[length(rules(S))] = Rule{L}(Formula{L}(), majority_vote(Y[idx_remaining]))
     end
     ########################################################################################
 end
