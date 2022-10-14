@@ -149,9 +149,58 @@ function extract_decisions(formula::Formula{L}) where {L<:Logic}
             decs
         end
     end
-    _extract_decisions(formula.tree, [])
+    _extract_decisions(tree(formula), [])
 end
 
+############################################################################################
+# Formula Update
+############################################################################################
+
+function formula_update(formula::Formula{L},nodes_deleted::AbstractVector)
+    root = tree(formula)
+
+    function _transplant(u::FNode,v::FNode)
+        #u è radice
+        u == root ? root = v : nothing
+
+        #u è figlio sx
+        u == leftchild(parent(u)) ? leftchild!(parent(u),v) : nothing
+
+        #u è figlio dx
+        u == rightchild(parent(u)) ? rightchild!(parent(u),v) : nothing
+
+        #v definito
+        isdefined(v,:token) ? parent!(v,parent(u)) : nothing
+
+        return nothing
+    end
+
+    function _formula_update(node::FNode,node_deleted::FNode)
+
+        #è il nodo da eliminare
+        if node == node_deleted
+            if leftchild(parent(node)) == node
+                return _transplant(parent(node),rightchild(parent(node)))
+            else
+                return _transplant(parent(node),leftchild(parent(node)))
+            end
+        end
+
+        #non è il nodo da eliminare
+
+        #se non sono in una foglia, passo ai rami
+        isdefined(node, :leftchild)  && _formula_update(leftchild(node), node_deleted)
+        isdefined(node, :rightchild) && _formula_update(rightchild(node), node_deleted)
+
+        return nothing
+    end
+
+    for node in nodes_deleted
+        _formula_update(root,node)
+    end
+
+    return Formula{L}(root)
+end
 
 ############################################################################################
 # Rule evaluation
@@ -381,6 +430,7 @@ function extract_rules(
                 end
             end
             # Assemble formula from vector of decisions (decs)
+            #TODO: formula_update(antecedent(rule),nodes_deleted)
             antecedent = TODO
             #TODO check if this works:
             Rule(antecedent, cons)
