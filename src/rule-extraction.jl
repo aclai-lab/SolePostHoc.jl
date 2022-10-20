@@ -22,9 +22,175 @@ rules(model::RuleBasedModel) = model.rules
 const RuleBasedClassifier = RuleBasedModel{L,CLabel} where {L}
 const RuleBasedRegressor  = RuleBasedModel{L,RLabel} where {L}
 
+
+############################################################################################
+# MDTv1 translation
+############################################################################################
+function translate_mdtv1(tree:DTree)
+    formula = Formula{L}(SoleLogics.TOP) # Formula wrapped in the root
+    # Maybe it's more realistic to translate each node as follows
+    # pure_node = deepcopy(non_pure_node)
+    # formula!(pure_root) = formula
+    # In this sketch of implementation, I only create nodes containing a formula.
+    # This is why the variable `tree` here is never used.
+    pure_root = DTInternal(formula)
+    pure_tree = DTree(pure_root)
+
+    translate_mdtv1(pure_root, leftchild(tree))
+    translate_mdtv1(pure_root, rightchild(tree))
+
+    return pure_tree
+end
+
+function translate_mdtv1(prev_node::DTInternal, node::Union{DTInternal, DTLeaf, NSFTLeaf})
+    # `node` comes from a non-pure DTree, while `prev_node` is part of a pure DTree
+
+    # formula in `node` is modified, depending on its parent formula
+    # accordingly to ModalDecisionTree paper (pg. 17)
+    formula  = compose_pureformula(node, prev_node)
+    new_node = DTInternal(formula)  # new pure-tree node
+
+    # Linking
+    # if node was a left child
+    if is_lchild(node)
+        # then the new pure-tree node has to be a left child too
+        leftchild!(prev_node, new_node)
+    else
+        # like above
+        rightchild!(prev_node, new_node)
+    end
+    # the pure-tree has now, officialy, the `new_node`
+    parent!(new_node, prev_node)
+
+    # if `node` is a DTLeaf or NSFTLeaf, stop the recursion
+    # else continue linking some nodes as `new_node` descendents
+    if !(typeof(node) <: Union{DTLeaf, NSFTleaf})
+        translate_mdtv1(leftchild(new_node), new_node)
+        translate_mdtv1(rightchild(new_node), new_node)
+    end
+end
+
+function compose_pureformula(node::DTInternal, lambda::DTInternal)
+    # ModalDecisionTree paper, pg.17
+    # base case (h=1) and "λ ∈ S⁻" case ("p ∧ φπ" is returned)
+    if height(lambda) == 1 || is_rchild(lambda)
+        conj = FNode{L}(CONJUNCTION)
+        p    = FNode{L}(formula(lambda))
+        φ    = FNode{L}(formula(node))
+        link_nodes(conj, l, r)
+        return Formula{L}(conj)
+    else
+        # other cases dispatch
+        return compose_pureformula(
+            node::DTInternal,
+            lambda::DTInternal,
+            Val(agreement(node, parent(node)))
+        )
+    end
+end
+
+# first and second case
+function compose_pureformula(node::DTInternal, lambda::DTInternal, ::Val{true})
+    conj = FNode{L}(CONJUNCTION)
+    p    = FNode{L}(formula(lambda))
+    φ    = FNode{L}(formula(node))
+    link_nodes(conj, p, φ)
+
+    if is_propositional_decision(lambda)
+        # first case (p ∧ φπ)
+        return Formula{L}(conj)
+    else
+        # second case (⟨X⟩(p ∧ φπ))
+        diamond = FNode{L}(EXMODOP(relation(lambda)))
+        link_nodes(diamond, conj)
+        return Formula{L}(diamond)
+    end
+end
+
+# third and fourth case
+function compose_pureformula(node::DTInternal, lambda::DTInternal, ::Val{false})
+    p = FNode{L}(formula(lambda))
+    φ = FNode{L}(formula(node))
+    impl = FNode{L}(IMPLICATION)
+    conj = FNode{L}(CONJUNCTION)
+
+    # NOTE: p2 is identical to p, but we need double the memory
+    # to correctly represent every link in the tree.
+    # See if-else statement to better understand p2 role.
+    p2 = FNode{L}(formula(lambda))
+
+    # In both cases the fragment p => φπ is common
+    link_nodes(impl, p, φ)
+
+    if is_propositional_decision(lambda)
+        # third case p2 ∧ (p => φπ)
+        link_nodes(conj, p2, impl)
+    else
+        # fourth case ⟨X⟩p2 ∧ [X](p => φπ)
+        diamond = FNode{L}(EXMODOP(relation(lambda)))
+        box = FNode{L}(UNIVMODOP(relation(lambda)))
+
+        link_nodes(box, impl)
+        link_nodes(diamond, p2)
+        link_nodes(conj, diamond, box)
+    end
+
+    # `conj` is the formula(syntax)-tree root
+    return Formula{L}(conj)
+end
+
+# utility to link one parent to exactly one children
+function link_nodes(p::FNode{L}, r::FNode{L}) where {L <: AbstractLogic}
+    rightchild!(p, r)
+    parent!(r, p)
+end
+
+# utility to link one parent to its left and right childrens
+function link_nodes(p::FNode{L}, l::FNode{L}, r::FNode{L}) where {L <: AbstractLogic}
+    leftchild!(p, l)
+    rightchild!(p, r)
+    parent!(l, p)
+    parent!(r, p)
+end
+
+
+############################################################################################
+# List rules
+############################################################################################
+
+# utility to list all the rules composed by traversing a pure-tree
+# from root to its leaves.
+function list_rules(tree::DTree)
+    # tree(f) [where f is a Formula object] is used to
+    # retrieve the root FNode of the formula(syntax) tree
+    return [
+        list_rules(leftchild(root(tree)), tree(formula(root(tree)))),
+        list_rules(rightchild(root(tree)), tree(formula(root(tree))))
+    ]
+end
+
+function list_rules(node::DTInternal, conjuncts::FNode{L}) where {L<:AbstractLogic}
+    # (conjuncts retrieved until now) ∧ (formula in current node)
+    conj = FNode{L}(CONJUNCTION)
+    link_nodes(conj, conjuncts, tree(formula(node)))
+    return [list_rules(leftchild(node), conj), list_rules(rightchild(node), conj)]
+end
+
+function list_rules(
+    node::Union{DTLeaf, NSFTLeaf},
+    conjuncts::FNode{L}
+    ) where {L<:AbstractLogic}
+    conj = Fnode{L}(CONJUNCTION)
+    link_nodes(conj, conjuncts, tree(formula(node)))
+    formula = Formula{L}(conj)
+    return Rule{L,C}(formula, prediction(node))
+end
+
 """
+Previous idea to extract rules (code commented by Mauro, gio 20 oct)
+
 TODO document
-"""
+
 function list_rules(tree::DTree)
     list_rules(tree.root) # TODO what about world_types and init_conditions?
 end
@@ -115,6 +281,7 @@ end
 function is_left(lambda::Formula{L}) where {L}
     # TODO
 end
+"""
 
 # Evaluation for single decision
 # TODO
