@@ -127,79 +127,57 @@ logic = extract_logic
 ############################################################################################
 ############################################################################################
 
-# Extract decisions from rule
-function extract_decisions(formula::Formula{L}) where {L<:Logic}
-    # TODO remove in favor of operators_set = operators(L)
-    operators_set = operators(logic(antecedent(rule)))
-    function _extract_decisions(node::FNode, decs::AbstractVector{<:Decision})
-        # Leaf or internal node
-        if !isdefined(node, :leftchild) && !isdefined(node, :rightchild)
-            if token(node) in operators_set
-                return decs
-            else
-                return push!(decs, token(node))
+############################################################################################
+# path --> Rule
+############################################################################################
+
+# Convert path to rule
+function path2rule(path::AbstractVector{<:AbstractVector{<:DTNode}})
+    function _union_family(p_node::AbstractOperator,l_node::DTNode,r_node::Union{Fnode,DTNode})
+        p_node = FNode(p_node)
+        l_node = FNode(decision(l_node))
+        r_node = begin
+            if l_node <: DTNode
+                return Fnode(decision(r_node))
             end
+            l_node
+        end
+
+        leftchild!(p_node,l_node)
+        rightchild!(p_node,r_node)
+        parent!(l_node,p_node)
+        parent!(r_node,p_node)
+
+        return p_node
+    end
+
+    # Building antecedent
+    function _build_formula(conjuncts::AbstractVector{<:DTNode})
+        if length(conjuncts) > 2
+            _union_family(SoleLogics.CONJUNCTION,conjuncts[1],_build_formula(conjuncts[2:end]))
         else
-            isdefined(node, :leftchild)  && _extract_decisions(leftchild(node),  decs)
-            isdefined(node, :rightchild) && _extract_decisions(rightchild(node), decs)
-
-            if !(token(node) in operators_set)
-                return push!(decs, token(node))
-            end
-            decs
+            _union_family(SoleLogics.CONJUNCTION,conjuncts[1],conjuncts[2])
         end
     end
-    _extract_decisions(tree(formula), [])
-end
 
-############################################################################################
-# Formula Update
-############################################################################################
+    # Antecedent of the rule
+    ant = begin
+        root = begin
+            # Number of internal nodes in the path
+            n_internal = length(path) - 1
 
-function formula_update(formula::Formula{L},nodes_deleted::AbstractVector)
-    root = tree(formula)
-
-    function _transplant(u::FNode,v::FNode)
-        #u è radice
-        u == root ? root = v : nothing
-
-        #u è figlio sx
-        u == leftchild(parent(u)) ? leftchild!(parent(u),v) : nothing
-
-        #u è figlio dx
-        u == rightchild(parent(u)) ? rightchild!(parent(u),v) : nothing
-
-        #v definito
-        isdefined(v,:token) ? parent!(v,parent(u)) : nothing
-
-        return nothing
-    end
-
-    function _formula_update(node::FNode,node_deleted::FNode)
-
-        #è il nodo da eliminare
-        if node == node_deleted
-            if leftchild(parent(node)) == node
-                return _transplant(parent(node),rightchild(parent(node)))
-            else
-                return _transplant(parent(node),leftchild(parent(node)))
-            end
+            (n_internal == 0) && (return FNode(SoleLogics.True))
+            (n_internal == 1) && (return FNode(decision(path[1])))
+            _build_formula(path[1:(end-1)])
         end
 
-        #non è il nodo da eliminare
-
-        #se non sono in una foglia, passo ai rami
-        isdefined(node, :leftchild)  && _formula_update(leftchild(node), node_deleted)
-        isdefined(node, :rightchild) && _formula_update(rightchild(node), node_deleted)
-
-        return nothing
+        Formula(root)
     end
 
-    for node in nodes_deleted
-        _formula_update(root,node)
-    end
+    # Consequent of the rule
+    cons = prediction(path[end])
 
-    return Formula{L}(root)
+    Rule(ant,cons)
 end
 
 ############################################################################################
@@ -207,10 +185,6 @@ end
 ############################################################################################
 
 # Evaluation for an antecedent
-
-evaluate_antecedent(antecedent::Formula{L}, X::MultiFrameModalDataset) where {L<:Logic} =
-    evaluate_antecedent(extract_decisions(antecedent), X)
-
 function evaluate_antecedent(decs::AbstractVector{<:Decision}, X::MultiFrameModalDataset)
     D = hcat([evaluate_decision(d, X) for d in decs]...)
     # If all values in a row is true, then true (and logical)
@@ -218,30 +192,15 @@ function evaluate_antecedent(decs::AbstractVector{<:Decision}, X::MultiFrameModa
 end
 
 # Evaluation for a rule
-
-# From rule to antecedent and consequent
-evaluate_rule(rule::Rule, X::MultiFrameModalDataset, Y::AbstractVector{<:Consequent}) =
-    evaluate_rule(antecedent(rule), consequent(rule), X, Y)
-
-# From antecedent to decision
-evaluate_rule(
-    ant::Formula{L},
-    cons::Consequent,
-    X::MultiFrameModalDataset,
-    Y::AbstractVector{<:Consequent}
-) where {L<:Logic} = evaluate_rule(extract_decisions(ant),cons,X,Y)
-
-# Use decision and consequent
 function evaluate_rule(
-    decs::AbstractVector{<:Decision},
-    cons::Consequent,
+    path::AbstractVector{<:DTNode},
     X::MultiFrameModalDataset,
     Y::AbstractVector{<:Consequent}
 )
     # Antecedent satisfaction. For each instances in X:
     #  - `false` when not satisfiable,
     #  - `true` when satisfiable.
-    ant_sat = evaluate_antecedent(decs,X)
+    ant_sat = evaluate_antecedent(decision.(path[1:(end-1)]),X)
 
     # Indices of satisfiable instances
     idxs_sat = findall(ant_sat .== true)
@@ -253,20 +212,21 @@ function evaluate_rule(
     cons_sat = begin
         cons_sat = Vector{Union{Bool, Nothing}}(fill(nothing, length(Y)))
         idxs_true = begin
-            idx_cons = findall(cons .== Y)
+            idx_cons = findall(prediction(path[end]) .== Y)
             intersect(idxs_sat,idx_cons)
         end
         idxs_false = begin
-            idx_cons = findall(cons .!= Y)
+            idx_cons = findall(prediction(path[end]) .!= Y)
             intersect(idxs_sat,idx_cons)
         end
         cons_sat[idxs_true]  .= true
         cons_sat[idxs_false] .= false
+        cons_sat
     end
 
     y_pred = begin
         y_pred = Vector{Union{Consequent, Nothing}}(fill(nothing, length(Y)))
-        y_pred[idxs_sat] .= C
+        y_pred[idxs_sat] .= prediction(path[end])
         y_pred
     end
 
@@ -287,7 +247,7 @@ extract_rules(model::Any, X::ModalDataset, args...; kwargs...) =
     extract_rules(model, MultiFrameModalDataset(X), args...; kwargs...)
 
 # Extract rules from a forest, with respect to a dataset
-# TODO avoid Formula{L}()
+# TODO: SoleLogics.True
 function extract_rules(
         forest::DForest,
         X::MultiFrameModalDataset,
@@ -304,52 +264,13 @@ function extract_rules(
     isnothing(decay_threshold) && (decay_threshold = 0.05)
     isnothing(min_frequency) && (min_frequency = 0.01)
 
-    # """
-    #     length_rule(node::FNode, operators::Operators) -> Int
-
-    #     Computer the number of pairs in a rule (length of the rule)
-
-    # # Arguments
-    # - `node::FNode`: node on which you refer
-    # - `operators::Operators`: set of operators of the considered logic
-
-    # # Returns
-    # - `Int`: number of pairs
-    # """
-    # function length_rule(node::FNode, operators::Operators)
-    #     left_size = 0
-    #     right_size = 0
-
-    #     if !isdefined(node, :leftchild) && !isdefined(node, :rightchild)
-    #         # Leaf
-    #         if token(node) in operators
-    #             return 0
-    #         else
-    #             return 1
-    #         end
-    #     end
-
-    #     isdefined(node, :leftchild) && (left_size = length_rule(leftchild(node), operators))
-    #     isdefined(node, :rightchild) && (right_size = length_rule(rightchild(node), operators))
-
-    #     if token(node) in operators
-    #         return left_size + right_size
-    #     else
-    #         return 1 + left_size + right_size
-    #     end
-    # end
-
-    rule_metrics(rule::Rule{L,C}, X::MultiFrameModalDataset, Y::AbstractVector{<:Consequent}) =
-        rule_metrics(extract_decisions(antecedent(rule)),cons,X,Y)
-
     """
         rule_metrics(args...) -> AbstractVector
 
         Compute frequency, error and length of the rule
 
     # Arguments
-    - `decs::AbstractVector{<:Decision}`: vector of decisions
-    - `cons::Consequent`: rule's consequent
+    - `path::AbstractVector{<:DTNode}`: path of the rule
     - `X::MultiFrameModalDataset`: dataset
     - `Y::AbstractVector{<:Consequent}`: target values of X
 
@@ -357,12 +278,11 @@ function extract_rules(
     - `AbstractVector`: metrics values vector of the rule
     """
     function rule_metrics(
-        decs::AbstractVector{<:Decision},
-        cons::Consequent,
+        path::AbstractVector{<:DTNode},
         X::MultiFrameModalDataset,
         Y::AbstractVector{<:Consequent}
     )
-        eval_result = evaluate_rule(decs, cons, X, Y)
+        eval_result = evaluate_rule(path, X, Y)
         n_instances = size(X, 1)
         n_satisfy = sum(eval_result[:ant_sat])
 
@@ -371,10 +291,11 @@ function extract_rules(
 
         # Error of the rule
         rule_error = begin
+            cons = prediction(path[end])
             if typeof(cons) <: CLabel
                 # Number of incorrectly classified instances divided by number of instances
                 # satisfying the rule condition.
-                misclassified_instances = length(findall(eval_result[:y_pred] .== Y))
+                misclassified_instances = length(findall(eval_result[:y_pred] .!= Y))
                 misclassified_instances / n_satisfy
             elseif typeof(cons) <: RLabel
                 # Mean Squared Error (mse)
@@ -384,7 +305,7 @@ function extract_rules(
         end
 
         # Length of the rule
-        rule_length = length(decs)
+        rule_length = length(path)
 
         return (;
             support   = rule_support,
@@ -394,69 +315,57 @@ function extract_rules(
     end
 
     """
-        prune_ruleset(ruleset::AbstractVector{<:Rule}) -> RuleBasedModel
+        prune_pathset(pathset::AbstractVector{<:AbstractVector{<:DTNode}})
+            -> AbstractVector{<:AbstractVector{<:DTNode}}
 
-        Prune the rules in ruleset with error metric
-
-    If `s` and `decay_threshold` is unspecified, their values are set to nothing and the
-    first two rows of the function set s and decay_threshold with their default values
+        Prune the paths in pathset with error metric
 
     # Arguments
-    - `ruleset::AbstractVector{<:Rule}`: rules to prune
+    - `pathset::AbstractVector{<:AbstractVector{<:DTNode}}`: paths to prune
 
     # Returns
-    - `RuleBasedModel`: rules after the prune
+    - `AbstractVector{<:AbstractVector{<:DTNode}}`: paths after the prune
     """
-    function prune_ruleset(
-        ruleset::AbstractVector{<:Rule}
+    function prune_pathset(
+        pathset::AbstractVector{<:AbstractVector{<:DTNode}}
     )
         [begin
-            # Extract decisions from rule
-            decs = extract_decisions(antecedent(rule))
-            cons = consequent(rule)
+            E_zero = rule_metrics(path, X, Y)[:error]
 
-            E_zero = rule_metrics(decs, cons, X, Y)[:error]
-
-            for idx in length(decs):1
+            for idx in (length(path)-1):1
                 # Indices to be considered to evaluate the rule
-                other_idxs = vcat(1:(idx-1), (idx+1):length(decs))
+                other_idxs = vcat(1:(idx-1), (idx+1):length(path))
                 # Return error of the rule without idx-th pair
-                E_minus_i = rule_metrics(decs[other_idxs], cons, X, Y)[:error]
+                E_minus_i = rule_metrics(path[other_idxs], X, Y)[:error]
                 decay_i = (E_minus_i - E_zero) / max(E_zero, s)
                 if decay_i < decay_threshold
                     # Remove the idx-th pair in the vector of decisions
-                    deleteat!(decs, idx)
-                    E_zero = rule_metrics(decs, cons, X, Y)[:error]
+                    deleteat!(path, idx)
+                    E_zero = E_minus_i #rule_metrics(path, X, Y)[:error]
                 end
             end
-            # Assemble formula from vector of decisions (decs)
-            #TODO: formula_update(antecedent(rule),nodes_deleted)
-            antecedent = TODO
-            #TODO check if this works:
-            Rule(antecedent, cons)
-            # Rule{typeof(antecedent),typeof(cons)}(antecedent, cons)
-        end for rule in ruleset]
+        end for path in pathset]
     end
 
     ########################################################################################
     # Extract rules from each tree
     ########################################################################################
     # Obtain full ruleset
-    ruleset = begin
-        ruleset = []
-        for every tree in the forest
-            tree_rules = list_rules(tree) # TODO implement
-            append!(ruleset, tree_rules)
+    pathset = begin
+        pathset = []
+        for tree in forest
+            tree_paths = list_paths(tree) # TODO implement
+            append!(pathset, tree_paths)
         end
-        unique(ruleset) # TODO maybe also sort (which requires a definition of isless(formula1, formula2))
+        unique(pathset) # TODO maybe also sort (which requires a definition of isless(formula1, formula2))
     end
     ########################################################################################
 
     ########################################################################################
-    # Prune rules according to the confidence metric (with respect to a dataset)
-    #  (and similar metrics: support, confidence, and length)
+    # Prune rules according to the error metric (with respect to a dataset)
+    #  (and similar metrics: support, error, and length)
     if prune_rules
-        ruleset = prune_ruleset(ruleset)
+        pathset = prune_pathset(pathset)
     end
     ########################################################################################
 
@@ -465,13 +374,13 @@ function extract_rules(
     best_rules = begin
         if method == :CBC
             # Extract antecedents
-            antset = antecedent.(ruleset)
+            antset = [decision.(path) for path in pathset]
             # Build the binary satisfuction matrix (m × j, with m instances and j antecedents)
-            M = hcat([evaluate_antecedent(antecedent(rule), X) for rule in antset]...)
+            M = hcat([evaluate_antecedent(ant, X) for ant in antset]...)
             # correlation() -> function in SoleFeatures
             best_idxs = findcorrelation(M)
-            M = M[:, best_idxs]
-            ruleset[best_idxs]
+            #M = M[:, best_idxs]
+            pathset[best_idxs]
         else
             error("Unexpected method specified: $(method)")
         end
@@ -482,11 +391,12 @@ function extract_rules(
     # Construct a rule-based model from the set of best rules
 
     D = copy(X) # Copy of the original dataset
-    R = RuleBasedModel()  # Vector of ordered list
-    S = RuleBasedModel()  # Vector of rules left
-    append!(rules(S), best_rules)
-    #TODO: Formula{L}()
-    push!(rules(S), Rule{L}(Formula{L}(), majority_vote(Y)))
+    # Ordered rule list
+    R = RuleBasedModel([])
+    # Vector of rules left
+    S = copy(best_rules)
+    #TODO: SoleLogics.True
+    push!(S, [DTNode(SoleLogics.True), DTLeaf(majority_vote(Y))])
 
     # Rules with a frequency less than min_frequency
     S = begin
@@ -523,7 +433,7 @@ function extract_rules(
         end
 
         # Add at the end the best rule
-        push!(rules(R), S[idx_best])
+        push!(rules(R), path2rule(S[idx_best]))
 
         # Indices of the remaining instances
         idx_remaining = begin
@@ -534,18 +444,19 @@ function extract_rules(
         end
         D = D[idx_remaining,:]
 
-        if idx_best == length(rules(S))
+        if idx_best == length(S)
             return R
         elseif size(D, 1) == 0
-            push!(R, Rule{L}(Formula{L}(),majority_vote(Y)))
+            #TODO: SoleLogics.True
+            push!(rules(R), [DTNode(SoleLogics.True), DTLeaf(majority_vote(Y))])
             return R
         end
 
         # Delete the best rule from S
         deleteat!(S,idx_best)
         # Update of the default rule
-        # TODO: Formula{L}()
-        rules(S)[length(rules(S))] = Rule{L}(Formula{L}(), majority_vote(Y[idx_remaining]))
+        # TODO: SoleLogics.True
+        S[length(S)] = [DTNode(SoleLogics.True), DTLeaf(majority_vote(Y[idx_remaining]))]
     end
     ########################################################################################
 end
