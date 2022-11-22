@@ -1,4 +1,4 @@
-module SolePostHocAnalysis
+module SolePostHoc
 
 # Write your package code here!
 

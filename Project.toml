@@ -1,4 +1,4 @@
-name = "SolePostHocAnalysis"
+name = "SolePostHoc"
 uuid = "cf1aa0c3-12c9-4ebe-9bdc-bd6c2ca79b72"
 authors = ["Eduard I. STAN", "Giovanni PAGLIARINI"]
 version = "0.1.0"

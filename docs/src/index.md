@@ -1,14 +1,14 @@
 ```@meta
-CurrentModule = SolePostHocAnalysis
+CurrentModule = SolePostHoc
 ```
 
-# SolePostHocAnalysis
+# SolePostHoc
 
-Documentation for [SolePostHocAnalysis](https://github.com/aclai-lab/SolePostHocAnalysis.jl).
+Documentation for [SolePostHoc](https://github.com/aclai-lab/SolePostHoc.jl).
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [SolePostHocAnalysis]
+Modules = [SolePostHoc]
 ```
