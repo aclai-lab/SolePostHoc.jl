@@ -1,6 +1,6 @@
-using SolePostHocAnalysis
+using SolePostHoc
 using Test
 
-@testset "SolePostHocAnalysis.jl" begin
+@testset "SolePostHoc.jl" begin
     # Write your tests here.
 end
