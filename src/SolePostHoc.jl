@@ -1,4 +1,4 @@
-module SolePostHocAnalysis
+module SolePostHoc
 
 using Metrics: mse
 using SoleFeatures: findcorrelation

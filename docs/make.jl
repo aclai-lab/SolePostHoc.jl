@@ -1,16 +1,16 @@
-using SolePostHocAnalysis
+using SolePostHoc
 using Documenter
 
-DocMeta.setdocmeta!(SolePostHocAnalysis, :DocTestSetup, :(using SolePostHocAnalysis); recursive=true)
+DocMeta.setdocmeta!(SolePostHoc, :DocTestSetup, :(using SolePostHoc); recursive=true)
 
 makedocs(;
-    modules=[SolePostHocAnalysis],
+    modules=[SolePostHoc],
     authors="Eduard I. STAN, Giovanni PAGLIARINI",
-    repo="https://github.com/aclai-lab/SolePostHocAnalysis.jl/blob/{commit}{path}#{line}",
-    sitename="SolePostHocAnalysis.jl",
+    repo="https://github.com/aclai-lab/SolePostHoc.jl/blob/{commit}{path}#{line}",
+    sitename="SolePostHoc.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://aclai-lab.github.io/SolePostHocAnalysis.jl",
+        canonical="https://aclai-lab.github.io/SolePostHoc.jl",
         assets=String[],
     ),
     pages=[
@@ -19,5 +19,5 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/aclai-lab/SolePostHocAnalysis.jl",
+    repo="github.com/aclai-lab/SolePostHoc.jl",
 )
