@@ -5,7 +5,8 @@ version = "0.1.0"
 
 [deps]
 Metrics = "cb9f3049-315b-4f05-b90c-a8adaec4da78"
-SoleAlphabets = "bc461207-1577-452f-bfcc-57c11e9f51b7"
+ModalDecisionTrees = "e54bda2e-c571-11ec-9d64-0242ac120002"
+SoleBase = "142d03a6-36c4-4bac-9273-c7ed2abbbb4d"
 SoleFeatures = "3ceb4e54-d968-4e97-8c18-2deeb0d429fb"
 SoleLogics = "b002da8f-3cb3-4d91-bbe3-2953433912b5"
 SoleTraits = "f0cd7361-857b-4e5b-8aae-3a26fab9cfa9"
