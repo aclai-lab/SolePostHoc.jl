@@ -2,14 +2,15 @@
 using SoleLearning: Consequent,
     Rule, antecedent, consequent, rule_metrics,
     Branch,
-    AbstractDecisionTree, DecisionTreeNode, path_formula,
+    AbstractDecisionTree, DecisionTreeNode, path_rule,
     DecisionList, list_paths
 
 ############################################################################################
 # TODO move to SoleLearning
 # Convert path to formula
 #TODO: Fix the function
-function path_formula(path::AbstractVector{<:DecisionTreeNode})
+#TODO: Rename into convert(::Rule, Type{RuleNest}) ...
+function path_rule(path::AbstractVector{<:DecisionTreeNode})
 
     # Building antecedent
     function _build_formula(conjuncts::AbstractVector{<:DecisionTreeNode})
@@ -245,7 +246,7 @@ function extract_rules(
 
         # Add at the end the best rule
         # TODO: fix consequent of S[idx_best]
-        push!(rules(R), path_formula(S[idx_best]))
+        push!(rules(R), path_rule(S[idx_best]))
 
         # Indices of the remaining instances
         idx_remaining = begin
@@ -257,11 +258,9 @@ function extract_rules(
         D = D[idx_remaining,:]
 
         if idx_best == length(S)
-            #TODO: fix default field
+            #TODO: fix default field; majority_vote(Y)?
             return DecisionList(R[end-1],consequent(R[end]))
         elseif size(D, 1) == 0
-            #TODO: SoleLogics.True
-            #push!(R,Rule(Formula(SoleLogics.True),majority_vote(Y)))
             return DecisionList(R,majority_vote(Y))
         end
 
@@ -270,5 +269,6 @@ function extract_rules(
         # Update of the default rule
         S[end] = Rule(Formula(SoleLogics.True),majority_vote(Y[idx_remaining]))
     end
-    ########################################################################################
+    
+    return error("Unexpected error in extract_rules!")
 end
