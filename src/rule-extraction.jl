@@ -7,8 +7,9 @@ using SoleLearning: Consequent,
 
 ############################################################################################
 # TODO move to SoleLearning
-# Convert path to rule
-function pathformula(path::AbstractVector{<:DecisionTreeNode})
+# Convert path to formula
+#TODO: Fix the function
+function path_formula(path::AbstractVector{<:DecisionTreeNode})
 
     # Building antecedent
     function _build_formula(conjuncts::AbstractVector{<:DecisionTreeNode})
@@ -98,7 +99,6 @@ function evaluate_rule(
 end
 
 ############################################################################################
->>>>>>> c8ca66557b41119dc990dd06599414aa484f4ef4
 # Rule extraction from random forest
 ############################################################################################
 
@@ -124,81 +124,17 @@ function extract_rules(
     isnothing(decay_threshold) && (decay_threshold = 0.05)
     isnothing(min_frequency) && (min_frequency = 0.01)
 
-<<<<<<< HEAD
-    """
-        prune_ruleset(ruleset::AbstractVector{<:Rule}) -> DecisionList
-
-        Prune the rules in a ruleset according to the error metric
-
-    If `s` and `decay_threshold` is unspecified, their values are set to nothing and the
-    first two rows of the function set s and decay_threshold with their default values
-=======
-    """
-        rule_metrics(args...) -> AbstractVector
-
-        Compute frequency, error and length of the rule
-
-    # Arguments
-    - `path::AbstractVector{<:DecisionTreeNode}`: path of the rule
-    - `X::MultiFrameModalDataset`: dataset
-    - `Y::AbstractVector{<:Consequent}`: target values of X
-
-    # Returns
-    - `AbstractVector`: metrics values vector of the rule
-    """
-    function rule_metrics(
-        path::AbstractVector{<:DecisionTreeNode},
-        X::MultiFrameModalDataset,
-        Y::AbstractVector{<:Consequent}
-    )
-        eval_result = evaluate_rule(path, X, Y)
-        n_instances = size(X, 1)
-        n_satisfy = sum(eval_result[:ant_sat])
-
-        # Support of the rule
-        rule_support =  n_satisfy / n_instances
-
-        # Error of the rule
-        rule_error = begin
-            cons = prediction(path[end])
-            if typeof(cons) <: CLabel
-                # Number of incorrectly classified instances divided by number of instances
-                # satisfying the rule condition.
-                misclassified_instances = length(findall(eval_result[:y_pred] .!= Y))
-                misclassified_instances / n_satisfy
-            elseif typeof(cons) <: RLabel
-                # Mean Squared Error (mse)
-                idxs_sat = eval_result[:idxs_sat]
-                mse(eval_result[:y_pred][idxs_sat], Y[idxs_sat])
-            end
-        end
-
-        # Length of the rule
-        rule_length = length(path)
-
-        return (;
-            support   = rule_support,
-            error     = rule_error,
-            length    = rule_length,
-        )
-    end
-
     """
         prune_pathset(pathset::AbstractVector{<:AbstractVector{<:DecisionTreeNode}})
             -> AbstractVector{<:AbstractVector{<:DecisionTreeNode}}
 
         Prune the paths in pathset with error metric
->>>>>>> c8ca66557b41119dc990dd06599414aa484f4ef4
 
     # Arguments
     - `pathset::AbstractVector{<:AbstractVector{<:DecisionTreeNode}}`: paths to prune
 
     # Returns
-<<<<<<< HEAD
-    - `DecisionList`: rules after the prune
-=======
     - `AbstractVector{<:AbstractVector{<:DecisionTreeNode}}`: paths after the prune
->>>>>>> c8ca66557b41119dc990dd06599414aa484f4ef4
     """
     function prune_pathset(
         pathset::AbstractVector{<:AbstractVector{<:DecisionTreeNode}}
@@ -264,21 +200,14 @@ function extract_rules(
     # Construct a rule-based model from the set of best rules
 
     D = copy(X) # Copy of the original dataset
-<<<<<<< HEAD
     # TODO @Michele: R and S should be Vector{Rule}; only at the end, you return DecisionList(R)
-    R = DecisionList()  # Vector of ordered rules
-    S = DecisionList()  # Vector of rules left
-    append!(S, best_rules)
-    #TODO: remove Formula{L}()
-    push!(S, Rule{L}(Formula{L}(), majority_vote(Y)))
-=======
     # Ordered rule list
-    R = RuleBasedModel([])
+    R = Rule[]
     # Vector of rules left
     S = copy(best_rules)
     #TODO: SoleLogics.True
-    push!(S, [DecisionTreeNode(SoleLogics.True), DTLeaf(majority_vote(Y))])
->>>>>>> c8ca66557b41119dc990dd06599414aa484f4ef4
+    #TODO: Fix Default Rule
+    push!(S,Rule(Formula(SoleLogics.True),majority_vote(Y)))
 
     # Rules with a frequency less than min_frequency
     S = begin
@@ -315,11 +244,8 @@ function extract_rules(
         end
 
         # Add at the end the best rule
-<<<<<<< HEAD
-        push!(R, S[idx_best])
-=======
-        push!(rules(R), pathformula(S[idx_best]))
->>>>>>> c8ca66557b41119dc990dd06599414aa484f4ef4
+        # TODO: fix consequent of S[idx_best]
+        push!(rules(R), path_formula(S[idx_best]))
 
         # Indices of the remaining instances
         idx_remaining = begin
@@ -331,29 +257,18 @@ function extract_rules(
         D = D[idx_remaining,:]
 
         if idx_best == length(S)
-            return R
+            #TODO: fix default field
+            return DecisionList(R[end-1],consequent(R[end]))
         elseif size(D, 1) == 0
-<<<<<<< HEAD
-            # TODO: remove Formula{L}()
-            push!(R, Rule{L}(Formula{L}(),majority_vote(Y)))
-=======
             #TODO: SoleLogics.True
-            push!(rules(R), [DecisionTreeNode(SoleLogics.True), DTLeaf(majority_vote(Y))])
->>>>>>> c8ca66557b41119dc990dd06599414aa484f4ef4
-            return R
+            #push!(R,Rule(Formula(SoleLogics.True),majority_vote(Y)))
+            return DecisionList(R,majority_vote(Y))
         end
 
         # Delete the best rule from S
         deleteat!(S,idx_best)
         # Update of the default rule
-<<<<<<< HEAD
-        # TODO: remove Formula{L}()
-        # TODO fix S[length(S)] into into S[end] maybe?
-        S[length(S)] = Rule{L}(Formula{L}(), majority_vote(Y[idx_remaining]))
-=======
-        # TODO: SoleLogics.True
-        S[length(S)] = [DecisionTreeNode(SoleLogics.True), DTLeaf(majority_vote(Y[idx_remaining]))]
->>>>>>> c8ca66557b41119dc990dd06599414aa484f4ef4
+        S[end] = Rule(Formula(SoleLogics.True),majority_vote(Y[idx_remaining]))
     end
     ########################################################################################
 end
