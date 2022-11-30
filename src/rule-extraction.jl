@@ -6,18 +6,23 @@ using SoleModels: Consequent,
     DecisionList, list_paths
 
 ############################################################################################
+# Convert path to rule
+############################################################################################
 # TODO move to SoleModels
-# Convert path to formula
-#TODO: Fix the function
-#TODO: Rename into convert(::Rule, Type{RuleNest}) ...
+# Convert path to rule
+# TODO: Fix the function
+# TODO: Rename into convert(::Rule, Type{RuleNest}) ...
+"""
+    Convert a path in a rule
+"""
 function path_rule(path::AbstractVector{<:DecisionTreeNode})
 
     # Building antecedent
     function _build_formula(conjuncts::AbstractVector{<:DecisionTreeNode})
         if length(conjuncts) > 2
-            _union_family(SoleLogics.CONJUNCTION,conjuncts[1],_build_formula(conjuncts[2:end]))
+            SoleLogics.CONJUNCTION(tree(conjuncts[1]),_build_formula(conjuncts[2:end]))
         else
-            _union_family(SoleLogics.CONJUNCTION,conjuncts[1],conjuncts[2])
+            SoleLogics.CONJUNCTION(tree(conjuncts[1]),tree(conjuncts[2]))
         end
     end
 
@@ -27,18 +32,105 @@ function path_rule(path::AbstractVector{<:DecisionTreeNode})
             # Number of internal nodes in the path
             n_internal = length(path) - 1
 
-            (n_internal == 0) && (return FNode(SoleLogics.True))
-            (n_internal == 1) && (return FNode(decision(path[1])))
-            _build_formula(path[1:(end-1)])
+            if n_internal == 0
+                FNode(SoleLogics.TOP)
+            elseif n_internal == 1
+                tree(path[1])
+            else
+                _build_formula(path[1:(end-1)])
+            end
         end
 
         Formula(root)
     end
 
     # Consequent of the rule
-    cons = prediction(path[end])
+    cons = path[end]
 
-    Rule(ant, cons)
+    Rule{logic(ant),typeof(cons)}(ant, cons, (;))
+end
+
+############################################################################################
+# List paths that represent rules of DecisionTree
+############################################################################################
+# TODO: Move to SoleLoearning/SoleModels
+
+function negation_node(node::Branch)
+    antecedent = NEGATION(tree(antecedent(node)))
+    consequents = reverse(consequents(node))
+    info = info(node)
+
+    Branch{logic(antecedent), typeof(consequents[1])}(antecedent,consequents,info)
+end
+
+"""
+    List all paths of a decision tree by performing a tree traversal
+"""
+
+function list_paths(tree::DecisionTree)
+    # tree(f) [where f is a Formula object] is used to
+    # retrieve the root FNode of the formula(syntax) tree
+    return list_paths(root(tree))
+end
+
+function list_paths(node::Branch)
+    # NOTE: antecedent(node) or tree(antecedent(node)) to obtain a FNode?
+    left_path  = [node]
+    right_path = [negation_node(node)]
+    return [
+        list_paths(leftchild(node),  left_path)...,
+        list_paths(rightchild(node), right_path)...,
+    ]
+end
+
+function list_paths(node::F) where {F<:FinalOutcome}
+    return [node]
+end
+
+function list_paths(node::Branch, this_path::AbstractVector)
+    # NOTE: antecedent(node) or tree(antecedent(node)) to obtain a FNode?
+    left_path  = [this_path..., node]
+    right_path = [this_path..., negation_node(node)]
+    return [
+        list_paths(leftchild(node),  left_path)...,
+        list_paths(rightchild(node), right_path)...,
+    ]
+end
+
+function list_paths(node::F,this_path::AbstractVector) where {F<:FinalOutcome}
+    return [[this_path..., node], ]
+end
+
+
+############################################################################################
+######################## List rules cascade ################################################
+############################################################################################
+# TODO: Move to SoleLearning/SoleModels
+
+"""
+    List all rules of a decision tree by performing a tree traversal
+"""
+
+function list_rules_cascade(tree::DecisionTree)
+    # tree(f) [where f is a Formula object] is used to
+    # retrieve the root FNode of the formula(syntax) tree
+    return list_rules_cascade(root(tree))
+end
+
+function list_rules_cascade(node::Branch{L,O}) where {L<:Logic,O<:Outcome}
+
+    # cons_left + cons_right = all possible consequences
+    cons_left = list_rules_cascade(leftchild(node))
+    cons_right = list_rules_cascade(rightchild(node))
+
+    return [
+        [Rule{L,O}(antecedent(node),cons) for cons in cons_left]...,
+        [Rule{L,O}(NEGATION(antecedent(node)),cons) for cons in cons_right]...,
+    ]
+end
+
+function list_rules_cascade(node::F) where {F<:FinalOutcome}
+    return [prediction(node)]
 end
 
 ############################################################################################
@@ -208,7 +300,7 @@ function extract_rules(
     S = copy(best_rules)
     #TODO: SoleLogics.True
     #TODO: Fix Default Rule
-    push!(S,Rule(Formula(SoleLogics.True),majority_vote(Y)))
+    push!(S,Rule(Formula(FNode(SoleLogics.TOP)),majority_vote(Y)))
 
     # Rules with a frequency less than min_frequency
     S = begin
@@ -259,16 +351,16 @@ function extract_rules(
 
         if idx_best == length(S)
             #TODO: fix default field; majority_vote(Y)?
-            return DecisionList(R[end-1],consequent(R[end]))
+            return DecisionList(R[end-1],consequent(R[end]),(;))
         elseif size(D, 1) == 0
-            return DecisionList(R,majority_vote(Y))
+            return DecisionList(R,majority_vote(Y),(;))
         end
 
         # Delete the best rule from S
         deleteat!(S,idx_best)
         # Update of the default rule
-        S[end] = Rule(Formula(SoleLogics.True),majority_vote(Y[idx_remaining]))
+        S[end] = Rule(Formula(FNode(SoleLogics.TOP)),majority_vote(Y[idx_remaining]))
     end
-    
+
     return error("Unexpected error in extract_rules!")
 end
