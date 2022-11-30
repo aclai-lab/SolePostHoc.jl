@@ -56,9 +56,9 @@ end
 # TODO: Move to SoleLoearning/SoleModels
 
 function negation_node(node::Branch)
-    antecedent = antecedent(node)
-    consequents = consequents(node)
-    info = node.info
+    antecedent = NEGATION(tree(antecedent(node)))
+    consequents = reverse(consequents(node))
+    info = info(node)
 
     Branch{logic(antecedent), typeof(consequents[1])}(antecedent,consequents,info)
 end
