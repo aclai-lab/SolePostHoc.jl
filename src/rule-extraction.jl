@@ -55,6 +55,14 @@ end
 ############################################################################################
 # TODO: Move to SoleLoearning/SoleModels
 
+function negation_node(node::Branch)
+    antecedent = antecedent(node)
+    consequents = consequents(node)
+    info = node.info
+
+    Branch{logic(antecedent), typeof(consequents[1])}(antecedent,consequents,info)
+end
+
 """
     List all paths of a decision tree by performing a tree traversal
 """
@@ -67,8 +75,8 @@ end
 
 function list_paths(node::Branch)
     # NOTE: antecedent(node) or tree(antecedent(node)) to obtain a FNode?
-    left_path  = [antecedent(node)]
-    right_path = [NEGATION(antecedent(node))]
+    left_path  = [node]
+    right_path = [negation_node(node)]
     return [
         list_paths(leftchild(node),  left_path)...,
         list_paths(rightchild(node), right_path)...,
@@ -76,13 +84,13 @@ function list_paths(node::Branch)
 end
 
 function list_paths(node::F) where {F<:FinalOutcome}
-    return [prediction(node)]
+    return [node]
 end
 
 function list_paths(node::Branch, this_path::AbstractVector)
     # NOTE: antecedent(node) or tree(antecedent(node)) to obtain a FNode?
-    left_path  = [this_path..., antecedent(node)]
-    right_path = [this_path..., NEGATION(antecedent(node))]
+    left_path  = [this_path..., node]
+    right_path = [this_path..., negation_node(node)]
     return [
         list_paths(leftchild(node),  left_path)...,
         list_paths(rightchild(node), right_path)...,
@@ -90,7 +98,7 @@ function list_paths(node::Branch, this_path::AbstractVector)
 end
 
 function list_paths(node::F,this_path::AbstractVector) where {F<:FinalOutcome}
-    return [[this_path..., prediction(node)], ]
+    return [[this_path..., node], ]
 end
 
 
