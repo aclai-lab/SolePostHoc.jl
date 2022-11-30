@@ -5,6 +5,8 @@ using SoleModels: Consequent,
     AbstractDecisionTree, DecisionTreeNode, path_rule,
     DecisionList, list_paths
 
+abstract type AbstractDataset end
+
 ############################################################################################
 # Convert path to rule
 ############################################################################################
@@ -138,16 +140,34 @@ end
 ############################################################################################
 
 # Evaluation for an antecedent
-function evaluate_antecedent(decs::AbstractVector{<:Decision}, X::MultiFrameModalDataset)
-    D = hcat([evaluate_decision(d, X) for d in decs]...)
-    # If all values in a row is true, then true (and logical)
-    return map(all, eachrow(D))
+function evaluate_antecedent(rule::Rule..., X::AbstractDataset)
+    evaluate_antecedent(antecedent(rule), X)
 end
+
+function evaluate_antecedent(antecedent::Formula{L}, X::AbstractDataset)
+    check(antecedent, X)
+end
+
+# function evaluate_antecedent(decs::AbstractVector{<:Decision}, X::AbstractDataset)
+#     D = hcat([evaluate_decision(d, X) for d in decs]...)
+#     # If all values in a row is true, then true (and logical)
+#     return map(all, eachrow(D))
+# end
 
 # Evaluation for a rule
 function evaluate_rule(
     path::AbstractVector{<:DecisionTreeNode},
-    X::MultiFrameModalDataset,
+    X::AbstractLabelledDataset,
+)
+
+function evaluate_rule(
+    path::AbstractVector{<:DecisionTreeNode},
+    (X,Y)::Tuple{AbstractDataset,AbstractVector{<:Consequent}}
+)
+
+function evaluate_rule(
+    path::AbstractVector{<:DecisionTreeNode},
+    X::AbstractDataset,
     Y::AbstractVector{<:Consequent}
 )
     # Antecedent satisfaction. For each instances in X:
@@ -197,13 +217,13 @@ end
 
 # Patch single-frame _-> multi-frame
 extract_rules(model::Any, X::ModalDataset, args...; kwargs...) =
-    extract_rules(model, MultiFrameModalDataset(X), args...; kwargs...)
+    extract_rules(model, AbstractDataset(X), args...; kwargs...)
 
 # Extract rules from a forest, with respect to a dataset
 # TODO: SoleLogics.True
 function extract_rules(
         forest::DecisionForest,
-        X::MultiFrameModalDataset,
+        X::AbstractDataset,
         Y::AbstractVector{<:Consequent};
         prune_rules = false,
         s = nothing,
@@ -271,14 +291,16 @@ function extract_rules(
     end
     ########################################################################################
 
+    Vector{Union{Branch,FinalOutcome}} -> Vector{Union{Condition,FinalOutcome}} -> RuleNest -> Rule
+    ruleset = convert(pathset)
+
     ########################################################################################
     # Obtain the best rules
     best_rules = begin
         if method == :CBC
-            # Extract antecedents
-            antset = [decision.(path) for path in pathset]
-            # Build the binary satisfuction matrix (m × j, with m instances and j antecedents)
-            M = hcat([evaluate_antecedent(ant, X) for ant in antset]...)
+            
+            M = hcat([evaluate_antecedent(rule, X) for rule in ruleset]...)
+
             # correlation() -> function in SoleFeatures
             best_idxs = findcorrelation(M)
             #M = M[:, best_idxs]
