@@ -1,5 +1,5 @@
 
-using SoleLearning: Consequent,
+using SoleModels: Consequent,
     Rule, antecedent, consequent, rule_metrics,
     Branch,
     AbstractDecisionTree, DecisionTreeNode, path_rule,
@@ -8,7 +8,7 @@ using SoleLearning: Consequent,
 ############################################################################################
 # Convert path to rule
 ############################################################################################
-# TODO move to SoleLearning
+# TODO move to SoleModels
 # Convert path to rule
 # TODO: Fix the function
 # TODO: Rename into convert(::Rule, Type{RuleNest}) ...
