@@ -2,7 +2,7 @@
 using SoleModels: Consequent,
     Rule, antecedent, consequent, rule_metrics,
     Branch,
-    AbstractDecisionTree, DecisionTreeNode, path_rule,
+    AbstractDecisionTree, DecisionTreeNode, convert_path_rule,
     DecisionList, list_paths
 
 abstract type AbstractDataset end
@@ -17,14 +17,16 @@ abstract type AbstractDataset end
 """
     Convert a path in a rule
 """
-function path_rule(path::AbstractVector{<:DecisionTreeNode})
+function convert_path_rule(
+    path::AbstractVector{<:Union{F,Formula{L}}}
+) where {F<:FinalOutcome,L<:Logic}
 
     # Building antecedent
-    function _build_formula(conjuncts::AbstractVector{<:DecisionTreeNode})
+    function _build_formula(conjuncts::AbstractVector{<:Formula{L}}) where {L<:Logic}
         if length(conjuncts) > 2
-            SoleLogics.CONJUNCTION(tree(conjuncts[1]),_build_formula(conjuncts[2:end]))
+            SoleLogics.CONJUNCTION(conjuncts[1],_build_formula(conjuncts[2:end]))
         else
-            SoleLogics.CONJUNCTION(tree(conjuncts[1]),tree(conjuncts[2]))
+            SoleLogics.CONJUNCTION(conjuncts[1],conjuncts[2])
         end
     end
 
@@ -49,7 +51,44 @@ function path_rule(path::AbstractVector{<:DecisionTreeNode})
     # Consequent of the rule
     cons = path[end]
 
-    Rule{logic(ant),typeof(cons)}(ant, cons, (;))
+    Rule(ant, cons)
+end
+
+############################################################################################
+# Convert path to RuleNest
+############################################################################################
+
+convert_path_rulenest(path::FinalOutcome) = path
+
+function convert_path_rulenest(
+    path::AbstractVector{<:Union{F,Formula{L}}}
+) where {F<:FinalOutcome,L<:Logic}
+
+    Rule(path[1],convert_path_rulenest(path[2:end]))
+end
+
+############################################################################################
+# Convert RuleNest to Rule
+############################################################################################
+
+# TODO: fix type of rules
+function convert_rulenest_rule(rulenest::RuleNest)
+    antecedent, consequent = convert_rulenest_rule(root(rulenest))
+
+    Rule(antecedent,consequent)
+end
+
+function convert_rulenest_rule(rulenest::RuleNest)
+    antecedent = antecedent(rulenest)
+    consequent = consequent(rulenest)
+
+    if typeof(consequent) <: Rule
+        antecedent_current, consequent_current = convert_rulenest_rule(consequent)
+
+        return SoleLogics.CONJUNCTION(antecedent,antecedent_current), consequent_current
+    else
+        return antecedent, consequent
+    end
 end
 
 ############################################################################################
@@ -57,6 +96,7 @@ end
 ############################################################################################
 # TODO: Move to SoleLoearning/SoleModels
 
+#=
 function negation_node(node::Branch)
     antecedent = NEGATION(tree(antecedent(node)))
     consequents = reverse(consequents(node))
@@ -64,6 +104,7 @@ function negation_node(node::Branch)
 
     Branch{logic(antecedent), typeof(consequents[1])}(antecedent,consequents,info)
 end
+=#
 
 """
     List all paths of a decision tree by performing a tree traversal
@@ -77,8 +118,8 @@ end
 
 function list_paths(node::Branch)
     # NOTE: antecedent(node) or tree(antecedent(node)) to obtain a FNode?
-    left_path  = [node]
-    right_path = [negation_node(node)]
+    left_path  = [antecedent(node)]
+    right_path = [NEGATION(antecedent(node))]
     return [
         list_paths(leftchild(node),  left_path)...,
         list_paths(rightchild(node), right_path)...,
@@ -86,13 +127,13 @@ function list_paths(node::Branch)
 end
 
 function list_paths(node::F) where {F<:FinalOutcome}
-    return [node]
+    return [prediction(node)]
 end
 
 function list_paths(node::Branch, this_path::AbstractVector)
     # NOTE: antecedent(node) or tree(antecedent(node)) to obtain a FNode?
-    left_path  = [this_path..., node]
-    right_path = [this_path..., negation_node(node)]
+    left_path  = [this_path..., antecedent(node)]
+    right_path = [this_path..., NEGATION(antecedent(node))]
     return [
         list_paths(leftchild(node),  left_path)...,
         list_paths(rightchild(node), right_path)...,
@@ -100,7 +141,7 @@ function list_paths(node::Branch, this_path::AbstractVector)
 end
 
 function list_paths(node::F,this_path::AbstractVector) where {F<:FinalOutcome}
-    return [[this_path..., node], ]
+    return [[this_path..., prediction(node)], ]
 end
 
 
@@ -139,21 +180,13 @@ end
 # Rule evaluation
 ############################################################################################
 
-# Evaluation for an antecedent
-function evaluate_antecedent(rule::Rule..., X::AbstractDataset)
-    evaluate_antecedent(antecedent(rule), X)
-end
-
-function evaluate_antecedent(antecedent::Formula{L}, X::AbstractDataset)
-    check(antecedent, X)
-end
-
 # function evaluate_antecedent(decs::AbstractVector{<:Decision}, X::AbstractDataset)
 #     D = hcat([evaluate_decision(d, X) for d in decs]...)
 #     # If all values in a row is true, then true (and logical)
 #     return map(all, eachrow(D))
 # end
 
+#=
 # Evaluation for a rule
 function evaluate_rule(
     path::AbstractVector{<:DecisionTreeNode},
@@ -164,16 +197,26 @@ function evaluate_rule(
     path::AbstractVector{<:DecisionTreeNode},
     (X,Y)::Tuple{AbstractDataset,AbstractVector{<:Consequent}}
 )
+=#
+
+# Evaluation for an antecedent
+function evaluate_antecedent(rule::Rule, X::AbstractDataset)
+    evaluate_antecedent(antecedent(rule), X)
+end
+
+function evaluate_antecedent(antecedent::Formula{L}, X::AbstractDataset)
+    check(antecedent, X)
+end
 
 function evaluate_rule(
-    path::AbstractVector{<:DecisionTreeNode},
+    rule::Rule,
     X::AbstractDataset,
     Y::AbstractVector{<:Consequent}
 )
     # Antecedent satisfaction. For each instances in X:
     #  - `false` when not satisfiable,
     #  - `true` when satisfiable.
-    ant_sat = evaluate_antecedent(decision.(path[1:(end-1)]),X)
+    ant_sat = evaluate_antecedent(antecedent(rule),X)
 
     # Indices of satisfiable instances
     idxs_sat = findall(ant_sat .== true)
@@ -185,11 +228,11 @@ function evaluate_rule(
     cons_sat = begin
         cons_sat = Vector{Union{Bool, Nothing}}(fill(nothing, length(Y)))
         idxs_true = begin
-            idx_cons = findall(prediction(path[end]) .== Y)
+            idx_cons = findall(consequent(rule) .== Y)
             intersect(idxs_sat,idx_cons)
         end
         idxs_false = begin
-            idx_cons = findall(prediction(path[end]) .!= Y)
+            idx_cons = findall(consequent(rule) .!= Y)
             intersect(idxs_sat,idx_cons)
         end
         cons_sat[idxs_true]  .= true
@@ -199,7 +242,7 @@ function evaluate_rule(
 
     y_pred = begin
         y_pred = Vector{Union{Consequent, Nothing}}(fill(nothing, length(Y)))
-        y_pred[idxs_sat] .= prediction(path[end])
+        y_pred[idxs_sat] .= consequent(rule)
         y_pred
     end
 
@@ -250,23 +293,29 @@ function extract_rules(
     - `AbstractVector{<:AbstractVector{<:DecisionTreeNode}}`: paths after the prune
     """
     function prune_pathset(
-        pathset::AbstractVector{<:AbstractVector{<:DecisionTreeNode}}
-    )
+        pathset::AbstractVector{<:AbstractVector{<:Union{F,Formula{L}}}}
+    ) where {F<:FinalOutcome,L<:Logic}
         [begin
-            E_zero = rule_metrics(path, X, Y)[:error]
+            E_zero = rule_metrics(convert_path_rule(path), X, Y)[:error]
+            valid_idxs = collect(length(path):-1:1)
 
-            for idx in (length(path)-1):1
+            for idx in reverse(valid_indeces[1:end-1])
                 # Indices to be considered to evaluate the rule
-                other_idxs = vcat(1:(idx-1), (idx+1):length(path))
+                other_idxs = intersect!(vcat(1:(idx-1),(idx+1):length(path)),valid_idxs)
+
                 # Return error of the rule without idx-th pair
-                E_minus_i = rule_metrics(path[other_idxs], X, Y)[:error]
+                E_minus_i = rule_metrics(convert_path_rule(path[other_idxs]), X, Y)[:error]
+
                 decay_i = (E_minus_i - E_zero) / max(E_zero, s)
+
                 if decay_i < decay_threshold
                     # Remove the idx-th pair in the vector of decisions
-                    deleteat!(path, idx)
+                    deleteat!(valid_idxs, idx)
                     E_zero = E_minus_i #rule_metrics(path, X, Y)[:error]
                 end
             end
+
+            path[valid_idxs]
         end for path in pathset]
     end
 
@@ -291,20 +340,20 @@ function extract_rules(
     end
     ########################################################################################
 
-    Vector{Union{Branch,FinalOutcome}} -> Vector{Union{Condition,FinalOutcome}} -> RuleNest -> Rule
-    ruleset = convert(pathset)
+    #Vector{Union{Branch,FinalOutcome}} -> Vector{Union{Condition,FinalOutcome}} -> RuleNest -> Rule
+    ruleset = convert_path_rule.(pathset)
 
     ########################################################################################
     # Obtain the best rules
     best_rules = begin
         if method == :CBC
-            
+
             M = hcat([evaluate_antecedent(rule, X) for rule in ruleset]...)
 
             # correlation() -> function in SoleFeatures
             best_idxs = findcorrelation(M)
             #M = M[:, best_idxs]
-            pathset[best_idxs]
+            ruleset[best_idxs]
         else
             error("Unexpected method specified: $(method)")
         end
@@ -360,7 +409,7 @@ function extract_rules(
 
         # Add at the end the best rule
         # TODO: fix consequent of S[idx_best]
-        push!(rules(R), path_rule(S[idx_best]))
+        push!(rules(R), convert_path_rule(S[idx_best]))
 
         # Indices of the remaining instances
         idx_remaining = begin
