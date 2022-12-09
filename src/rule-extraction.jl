@@ -1,215 +1,11 @@
-
+using SoleLogics
 using SoleModels: Consequent,
     Rule, antecedent, consequent, rule_metrics,
     Branch,
-    AbstractDecisionTree, DecisionTreeNode, path_rule,
+    AbstractDecisionTree, DecisionTreeNode, convert,
     DecisionList, list_paths
 
 abstract type AbstractDataset end
-
-############################################################################################
-# Convert path to rule
-############################################################################################
-# TODO move to SoleModels
-# Convert path to rule
-# TODO: Fix the function
-# TODO: Rename into convert(::Rule, Type{RuleNest}) ...
-"""
-    Convert a path in a rule
-"""
-function path_rule(path::AbstractVector{<:DecisionTreeNode})
-
-    # Building antecedent
-    function _build_formula(conjuncts::AbstractVector{<:DecisionTreeNode})
-        if length(conjuncts) > 2
-            SoleLogics.CONJUNCTION(tree(conjuncts[1]),_build_formula(conjuncts[2:end]))
-        else
-            SoleLogics.CONJUNCTION(tree(conjuncts[1]),tree(conjuncts[2]))
-        end
-    end
-
-    # Antecedent of the rule
-    ant = begin
-        root = begin
-            # Number of internal nodes in the path
-            n_internal = length(path) - 1
-
-            if n_internal == 0
-                FNode(SoleLogics.TOP)
-            elseif n_internal == 1
-                tree(path[1])
-            else
-                _build_formula(path[1:(end-1)])
-            end
-        end
-
-        Formula(root)
-    end
-
-    # Consequent of the rule
-    cons = path[end]
-
-    Rule{logic(ant),typeof(cons)}(ant, cons, (;))
-end
-
-############################################################################################
-# List paths that represent rules of DecisionTree
-############################################################################################
-# TODO: Move to SoleLoearning/SoleModels
-
-function negation_node(node::Branch)
-    antecedent = NEGATION(tree(antecedent(node)))
-    consequents = reverse(consequents(node))
-    info = info(node)
-
-    Branch{logic(antecedent), typeof(consequents[1])}(antecedent,consequents,info)
-end
-
-"""
-    List all paths of a decision tree by performing a tree traversal
-"""
-
-function list_paths(tree::DecisionTree)
-    # tree(f) [where f is a Formula object] is used to
-    # retrieve the root FNode of the formula(syntax) tree
-    return list_paths(root(tree))
-end
-
-function list_paths(node::Branch)
-    # NOTE: antecedent(node) or tree(antecedent(node)) to obtain a FNode?
-    left_path  = [node]
-    right_path = [negation_node(node)]
-    return [
-        list_paths(leftchild(node),  left_path)...,
-        list_paths(rightchild(node), right_path)...,
-    ]
-end
-
-function list_paths(node::F) where {F<:FinalOutcome}
-    return [node]
-end
-
-function list_paths(node::Branch, this_path::AbstractVector)
-    # NOTE: antecedent(node) or tree(antecedent(node)) to obtain a FNode?
-    left_path  = [this_path..., node]
-    right_path = [this_path..., negation_node(node)]
-    return [
-        list_paths(leftchild(node),  left_path)...,
-        list_paths(rightchild(node), right_path)...,
-    ]
-end
-
-function list_paths(node::F,this_path::AbstractVector) where {F<:FinalOutcome}
-    return [[this_path..., node], ]
-end
-
-
-############################################################################################
-######################## List rules cascade ################################################
-############################################################################################
-# TODO: Move to SoleLearning/SoleModels
-
-"""
-    List all rules of a decision tree by performing a tree traversal
-"""
-
-function list_rules_cascade(tree::DecisionTree)
-    # tree(f) [where f is a Formula object] is used to
-    # retrieve the root FNode of the formula(syntax) tree
-    return list_rules_cascade(root(tree))
-end
-
-function list_rules_cascade(node::Branch{L,O}) where {L<:Logic,O<:Outcome}
-
-    # cons_left + cons_right = all possible consequences
-    cons_left = list_rules_cascade(leftchild(node))
-    cons_right = list_rules_cascade(rightchild(node))
-
-    return [
-        [Rule{L,O}(antecedent(node),cons) for cons in cons_left]...,
-        [Rule{L,O}(NEGATION(antecedent(node)),cons) for cons in cons_right]...,
-    ]
-end
-
-function list_rules_cascade(node::F) where {F<:FinalOutcome}
-    return [prediction(node)]
-end
-
-############################################################################################
-# Rule evaluation
-############################################################################################
-
-# Evaluation for an antecedent
-function evaluate_antecedent(rule::Rule..., X::AbstractDataset)
-    evaluate_antecedent(antecedent(rule), X)
-end
-
-function evaluate_antecedent(antecedent::Formula{L}, X::AbstractDataset)
-    check(antecedent, X)
-end
-
-# function evaluate_antecedent(decs::AbstractVector{<:Decision}, X::AbstractDataset)
-#     D = hcat([evaluate_decision(d, X) for d in decs]...)
-#     # If all values in a row is true, then true (and logical)
-#     return map(all, eachrow(D))
-# end
-
-# Evaluation for a rule
-function evaluate_rule(
-    path::AbstractVector{<:DecisionTreeNode},
-    X::AbstractLabelledDataset,
-)
-
-function evaluate_rule(
-    path::AbstractVector{<:DecisionTreeNode},
-    (X,Y)::Tuple{AbstractDataset,AbstractVector{<:Consequent}}
-)
-
-function evaluate_rule(
-    path::AbstractVector{<:DecisionTreeNode},
-    X::AbstractDataset,
-    Y::AbstractVector{<:Consequent}
-)
-    # Antecedent satisfaction. For each instances in X:
-    #  - `false` when not satisfiable,
-    #  - `true` when satisfiable.
-    ant_sat = evaluate_antecedent(decision.(path[1:(end-1)]),X)
-
-    # Indices of satisfiable instances
-    idxs_sat = findall(ant_sat .== true)
-
-    # Consequent satisfaction. For each instances in X:
-    #  - `false` when not satisfiable,
-    #  - `true` when satisfiable,
-    #  - `nothing` when antecedent does not hold.
-    cons_sat = begin
-        cons_sat = Vector{Union{Bool, Nothing}}(fill(nothing, length(Y)))
-        idxs_true = begin
-            idx_cons = findall(prediction(path[end]) .== Y)
-            intersect(idxs_sat,idx_cons)
-        end
-        idxs_false = begin
-            idx_cons = findall(prediction(path[end]) .!= Y)
-            intersect(idxs_sat,idx_cons)
-        end
-        cons_sat[idxs_true]  .= true
-        cons_sat[idxs_false] .= false
-        cons_sat
-    end
-
-    y_pred = begin
-        y_pred = Vector{Union{Consequent, Nothing}}(fill(nothing, length(Y)))
-        y_pred[idxs_sat] .= prediction(path[end])
-        y_pred
-    end
-
-    return (;
-        ant_sat   = ant_sat,
-        idxs_sat  = idxs_sat,
-        cons_sat  = cons_sat,
-        y_pred    = y_pred,
-    )
-end
 
 ############################################################################################
 # Rule extraction from random forest
@@ -249,24 +45,31 @@ function extract_rules(
     # Returns
     - `AbstractVector{<:AbstractVector{<:DecisionTreeNode}}`: paths after the prune
     """
-    function prune_pathset(
-        pathset::AbstractVector{<:AbstractVector{<:DecisionTreeNode}}
-    )
+    function prune_pathset(pathset::AbstractVector{<:RuleCascade})
         [begin
-            E_zero = rule_metrics(path, X, Y)[:error]
+            ant = antecedent(path)
+            cons = consequents(path)
 
-            for idx in (length(path)-1):1
+            E_zero = rule_metrics(convert(Rule,ant,cons), X, Y)[:error]
+            valid_idxs = collect(length(ant):-1:1)
+
+            for idx in reverse(valid_idxs)
                 # Indices to be considered to evaluate the rule
-                other_idxs = vcat(1:(idx-1), (idx+1):length(path))
+                other_idxs = intersect!(vcat(1:(idx-1),(idx+1):length(ant)),valid_idxs)
+
                 # Return error of the rule without idx-th pair
-                E_minus_i = rule_metrics(path[other_idxs], X, Y)[:error]
+                E_minus_i = rule_metrics(convert(Rule,ant[other_idxs],cons), X, Y)[:error]
+
                 decay_i = (E_minus_i - E_zero) / max(E_zero, s)
+
                 if decay_i < decay_threshold
                     # Remove the idx-th pair in the vector of decisions
-                    deleteat!(path, idx)
-                    E_zero = E_minus_i #rule_metrics(path, X, Y)[:error]
+                    deleteat!(valid_idxs, idx)
+                    E_zero = E_minus_i
                 end
             end
+
+            RuleCascade(ant[valid_idxs],cons)
         end for path in pathset]
     end
 
@@ -291,20 +94,20 @@ function extract_rules(
     end
     ########################################################################################
 
-    Vector{Union{Branch,FinalOutcome}} -> Vector{Union{Condition,FinalOutcome}} -> RuleNest -> Rule
-    ruleset = convert(pathset)
+    #Vector{Union{Branch,FinalOutcome}} -> Vector{Union{Condition,FinalOutcome}} -> RuleNest -> Rule
+    ruleset = convert.(Rule,pathset)
 
     ########################################################################################
     # Obtain the best rules
     best_rules = begin
         if method == :CBC
-            
+
             M = hcat([evaluate_antecedent(rule, X) for rule in ruleset]...)
 
             # correlation() -> function in SoleFeatures
             best_idxs = findcorrelation(M)
             #M = M[:, best_idxs]
-            pathset[best_idxs]
+            ruleset[best_idxs]
         else
             error("Unexpected method specified: $(method)")
         end
@@ -314,13 +117,14 @@ function extract_rules(
     ########################################################################################
     # Construct a rule-based model from the set of best rules
 
+    #TODO: fix majority_vote
+
     D = copy(X) # Copy of the original dataset
-    # TODO @Michele: R and S should be Vector{Rule}; only at the end, you return DecisionList(R)
     # Ordered rule list
     R = Rule[]
     # Vector of rules left
     S = copy(best_rules)
-    #TODO: SoleLogics.True
+    #TODO: SoleLogics.TOP
     #TODO: Fix Default Rule
     push!(S,Rule(Formula(FNode(SoleLogics.TOP)),majority_vote(Y)))
 
@@ -359,8 +163,7 @@ function extract_rules(
         end
 
         # Add at the end the best rule
-        # TODO: fix consequent of S[idx_best]
-        push!(rules(R), path_rule(S[idx_best]))
+        push!(R, S[idx_best])
 
         # Indices of the remaining instances
         idx_remaining = begin
@@ -373,9 +176,9 @@ function extract_rules(
 
         if idx_best == length(S)
             #TODO: fix default field; majority_vote(Y)?
-            return DecisionList(R[end-1],consequent(R[end]),(;))
+            return DecisionList(R[end-1],consequent(R[end]))
         elseif size(D, 1) == 0
-            return DecisionList(R,majority_vote(Y),(;))
+            return DecisionList(R,majority_vote(Y))
         end
 
         # Delete the best rule from S
