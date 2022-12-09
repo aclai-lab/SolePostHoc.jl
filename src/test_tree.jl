@@ -9,15 +9,16 @@
 ##################################################
 
 using SoleLogics
+using SoleModels
 
-formula_p = Formula(FNode(Letter("p")))
-formula_q = Formula(FNode(Letter("q")))
-formula_r = Formula(FNode(Letter("r")))
-formula_s = Formula(FNode(Letter("s")))
+formula_p = SoleLogics.build_tree("p")
+formula_q = SoleLogics.build_tree("q")
+formula_r = SoleLogics.build_tree("r")
+formula_s = SoleLogics.build_tree("s")
 
 branch_q = Branch(formula_q,("yes","no"),(;))
 branch_s = Branch(formula_s,("yes","no"),(;))
-#branch_r = Branch(formula_r,(branch_s,"yes"),(;))
+branch_r = Branch(formula_r,(branch_s,"yes"),(;))
 
 #dt_q = DecisionTree(branch_r,(;))
 
