@@ -94,7 +94,7 @@ function extract_rules(
     end
     ########################################################################################
 
-    #Vector{Union{Branch,FinalOutcome}} -> Vector{Union{Condition,FinalOutcome}} -> RuleNest -> Rule
+    #Vector{Union{Branch,Any}} -> Vector{Union{Condition,Any}} -> RuleNest -> Rule
     ruleset = convert.(Rule,pathset)
 
     ########################################################################################

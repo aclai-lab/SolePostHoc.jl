@@ -11,10 +11,10 @@
 using SoleLogics
 using SoleModels
 
-formula_p = SoleLogics.build_tree("p")
-formula_q = SoleLogics.build_tree("q")
-formula_r = SoleLogics.build_tree("r")
-formula_s = SoleLogics.build_tree("s")
+formula_p = SoleLogics.parseformula("p")
+formula_q = SoleLogics.parseformula("q")
+formula_r = SoleLogics.parseformula("r")
+formula_s = SoleLogics.parseformula("s")
 
 branch_q = Branch(formula_q,("yes","no"),(;))
 branch_s = Branch(formula_s,("yes","no"),(;))
