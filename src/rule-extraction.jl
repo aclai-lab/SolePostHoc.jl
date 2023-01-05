@@ -1,9 +1,11 @@
 using SoleLogics
+using SoleLogics: ⊤
+using SoleFeatures: findcorrelation
 using SoleModels: Consequent,
     Rule, antecedent, consequent, rule_metrics,
-    Branch,
+    Branch, RuleCascade, antecedents
     AbstractDecisionTree, DecisionTreeNode, convert,
-    DecisionList, list_paths
+    DecisionList, unroll_rules_cascade, majority_vote
 
 abstract type AbstractDataset end
 
@@ -47,10 +49,10 @@ function extract_rules(
     """
     function prune_pathset(pathset::AbstractVector{<:RuleCascade})
         [begin
-            ant = antecedent(path)
-            cons = consequents(path)
+            ant = antecedents(path)
+            cons = consequent(path)
 
-            E_zero = rule_metrics(convert(Rule,ant,cons), X, Y)[:error]
+            E_zero = rule_metrics(SoleModels.convert(Rule,ant,cons),X,Y)[:error]
             valid_idxs = collect(length(ant):-1:1)
 
             for idx in reverse(valid_idxs)
@@ -58,7 +60,8 @@ function extract_rules(
                 other_idxs = intersect!(vcat(1:(idx-1),(idx+1):length(ant)),valid_idxs)
 
                 # Return error of the rule without idx-th pair
-                E_minus_i = rule_metrics(convert(Rule,ant[other_idxs],cons), X, Y)[:error]
+                E_minus_i =
+                    rule_metrics(SoleModels.convert(Rule,ant[other_idxs],cons),X,Y)[:error]
 
                 decay_i = (E_minus_i - E_zero) / max(E_zero, s)
 
@@ -79,8 +82,8 @@ function extract_rules(
     # Obtain full ruleset
     pathset = begin
         pathset = []
-        for tree in forest
-            tree_paths = list_paths(tree)
+        for tree in trees(forest)
+            tree_paths = unroll_rules_cascade(tree) #list_paths(tree)
             append!(pathset, tree_paths)
         end
         unique(pathset) # TODO maybe also sort (which requires a definition of isless(formula1, formula2))
@@ -126,11 +129,11 @@ function extract_rules(
     S = copy(best_rules)
     #TODO: SoleLogics.TOP
     #TODO: Fix Default Rule
-    push!(S,Rule(Formula(FNode(SoleLogics.TOP)),majority_vote(Y)))
+    push!(S,Rule(LogicalTruthCondition(SyntaxTree(⊤)),majority_vote(Y)))
 
     # Rules with a frequency less than min_frequency
     S = begin
-        metrics = rule_metrics.(S, X, Y)
+        metrics = rule_metrics.(S,X,Y)
         rules_support = [metrics[i][:support] for i in eachindex(metrics)]
         idxs_undeleted = findall(rules_support .>= min_frequency) # Undeleted rule indexes
         S[idxs_undeleted]
@@ -138,7 +141,7 @@ function extract_rules(
 
     while true
         # Metrics update based on remaining instances
-        metrics = rule_metrics.(S, D, Y)
+        metrics = rule_metrics.(S,D,Y)
         rules_support = [metrics[i][:support] for i in eachindex(metrics)]
         rules_error = [metrics[i][:error] for i in eachindex(metrics)]
         rules_length = [metrics[i][:length] for i in eachindex(metrics)]
@@ -175,16 +178,15 @@ function extract_rules(
         D = D[idx_remaining,:]
 
         if idx_best == length(S)
-            #TODO: fix default field; majority_vote(Y)?
             return DecisionList(R[end-1],consequent(R[end]))
-        elseif size(D, 1) == 0
+        elseif size(D,1) == 0
             return DecisionList(R,majority_vote(Y))
         end
 
         # Delete the best rule from S
         deleteat!(S,idx_best)
         # Update of the default rule
-        S[end] = Rule(Formula(FNode(SoleLogics.TOP)),majority_vote(Y[idx_remaining]))
+        S[end] = Rule(LogicalTruthCondition(SyntaxTree(⊤)),majority_vote(Y[idx_remaining]))
     end
 
     return error("Unexpected error in extract_rules!")
