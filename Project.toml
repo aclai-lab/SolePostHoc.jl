@@ -5,8 +5,10 @@ version = "0.1.0"
 
 [deps]
 Metrics = "cb9f3049-315b-4f05-b90c-a8adaec4da78"
-SoleBase = "142d03a6-36c4-4bac-9273-c7ed2abbbb4d"
-SoleFeatures = "3ceb4e54-d968-4e97-8c18-2deeb0d429fb"
+SoleBase = "4475fa32-7023-44a0-aa70-4813b230e492"
+SoleData = "123f1ae1-6307-4526-ab5b-aab3a92a2b8c"
+SoleLogics = "b002da8f-3cb3-4d91-bbe3-2953433912b5"
+SoleModels = "4249d9c7-3290-4ddd-961c-e1d3ec2467f8"
 
 [compat]
 julia = "1"

@@ -1,6 +1,6 @@
 using SoleLogics
 using SoleLogics: ⊤
-using SoleFeatures: findcorrelation
+# TODO using SoleFeatures: findcorrelation
 using SoleModels: Consequent,
     Rule, antecedent, consequent, rule_metrics,
     Branch, RuleCascade, antecedents
@@ -20,7 +20,7 @@ extract_rules(model::Any, X::ModalDataset, args...; kwargs...) =
 # Extract rules from a forest, with respect to a dataset
 # TODO: SoleLogics.True
 function extract_rules(
-        forest::DecisionForest,
+        model::Union{AbstractModel,DecisionForest},
         X::AbstractDataset,
         Y::AbstractVector{<:Consequent};
         prune_rules = false,
@@ -30,38 +30,37 @@ function extract_rules(
         method = :CBC,
         min_frequency = nothing,
 )
-
+    
     isnothing(s) && (s = 1.0e-6)
     isnothing(decay_threshold) && (decay_threshold = 0.05)
     isnothing(min_frequency) && (min_frequency = 0.01)
 
+    @assert model isa DecisionForest || issymbolic(model) "Cannot extract rules for model of type $(typeof(model))."
+
     """
-        prune_pathset(pathset::AbstractVector{<:AbstractVector{<:DecisionTreeNode}})
+        prune_rcset(rcset::AbstractVector{<:AbstractVector{<:DecisionTreeNode}})
             -> AbstractVector{<:AbstractVector{<:DecisionTreeNode}}
 
-        Prune the paths in pathset with error metric
+        Prune the paths in rcset with error metric
 
     # Arguments
-    - `pathset::AbstractVector{<:AbstractVector{<:DecisionTreeNode}}`: paths to prune
+    - `rcset::AbstractVector{<:AbstractVector{<:DecisionTreeNode}}`: paths to prune
 
     # Returns
     - `AbstractVector{<:AbstractVector{<:DecisionTreeNode}}`: paths after the prune
     """
-    function prune_pathset(pathset::AbstractVector{<:RuleCascade})
+    function prune_rcset(rcset::AbstractVector{<:RuleCascade})
         [begin
-            ant = antecedents(path)
-            cons = consequent(path)
-
-            E_zero = rule_metrics(SoleModels.convert(Rule,ant,cons),X,Y)[:error]
-            valid_idxs = collect(length(ant):-1:1)
+            E_zero = rule_metrics(SoleModels.convert(Rule,cascade),X,Y)[:error]
+            valid_idxs = collect(length(cascade):-1:1)
 
             for idx in reverse(valid_idxs)
                 # Indices to be considered to evaluate the rule
-                other_idxs = intersect!(vcat(1:(idx-1),(idx+1):length(ant)),valid_idxs)
+                other_idxs = intersect!(vcat(1:(idx-1),(idx+1):length(cascade)),valid_idxs)
 
                 # Return error of the rule without idx-th pair
                 E_minus_i =
-                    rule_metrics(SoleModels.convert(Rule,ant[other_idxs],cons),X,Y)[:error]
+                    rule_metrics(SoleModels.convert(Rule,cascade[other_idxs]),X,Y)[:error]
 
                 decay_i = (E_minus_i - E_zero) / max(E_zero, s)
 
@@ -72,33 +71,37 @@ function extract_rules(
                 end
             end
 
-            RuleCascade(ant[valid_idxs],cons)
-        end for path in pathset]
+            cascade[valid_idxs]
+        end for cascade in rcset]
     end
 
     ########################################################################################
     # Extract rules from each tree
     ########################################################################################
     # Obtain full ruleset
-    pathset = begin
-        pathset = []
-        for tree in trees(forest)
-            tree_paths = unroll_rules_cascade(tree) #list_paths(tree)
-            append!(pathset, tree_paths)
+    rcset = begin
+        if model isa DecisionForest
+            rcset = []
+            for tree in trees(model)
+                tree_paths = unroll_rules_cascade(tree) #list_paths(tree)
+                append!(rcset, tree_paths)
+            end
+            unique(rcset) # TODO maybe also sort (which requires a definition of isless(formula1, formula2))
+        else model
+            unroll_rules_cascade(model)
         end
-        unique(pathset) # TODO maybe also sort (which requires a definition of isless(formula1, formula2))
     end
     ########################################################################################
 
     ########################################################################################
     # Prune rules with respect to a dataset
     if prune_rules
-        pathset = prune_pathset(pathset)
+        rcset = prune_rcset(rcset)
     end
     ########################################################################################
 
     #Vector{Union{Branch,FinalOutcome}} -> Vector{Union{Condition,FinalOutcome}} -> RuleNest -> Rule
-    ruleset = convert.(Rule,pathset)
+    ruleset = convert.(Rule,rcset)
 
     ########################################################################################
     # Obtain the best rules
@@ -108,7 +111,7 @@ function extract_rules(
             M = hcat([evaluate_antecedent(rule, X) for rule in ruleset]...)
 
             # correlation() -> function in SoleFeatures
-            best_idxs = findcorrelation(M)
+            best_idxs = 1:5 # TODO findcorrelation(M; parameters...)
             #M = M[:, best_idxs]
             ruleset[best_idxs]
         else
