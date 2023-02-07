@@ -1,7 +1,7 @@
 using SoleLogics
 using SoleLogics: ⊤
 # TODO using SoleFeatures: findcorrelation
-using SoleModels: Consequent,
+using SoleModels:
     Rule, antecedent, consequent, rule_metrics,
     Branch, RuleCascade, antecedents
     AbstractDecisionTree, DecisionTreeNode, convert,
@@ -22,7 +22,7 @@ extract_rules(model::Any, X::ModalDataset, args...; kwargs...) =
 function extract_rules(
         model::Union{AbstractModel,DecisionForest},
         X::AbstractDataset,
-        Y::AbstractVector{<:Consequent};
+        Y::AbstractVector{<:Label};
         prune_rules = false,
         s = nothing,
         decay_threshold = nothing,
