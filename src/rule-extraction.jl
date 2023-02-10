@@ -1,28 +1,22 @@
 using SoleLogics
 using SoleLogics: ⊤
 # TODO using SoleFeatures: findcorrelation
-using SoleModels: Consequent,
+using SoleModels:
     Rule, antecedent, consequent, rule_metrics,
     Branch, RuleCascade, antecedents
     AbstractDecisionTree, DecisionTreeNode, convert,
     DecisionList, unroll_rules_cascade, majority_vote
 
-abstract type AbstractDataset end
-
 ############################################################################################
 # Rule extraction from random forest
 ############################################################################################
-
-# Patch single-frame _-> multi-frame
-extract_rules(model::Any, X::ModalDataset, args...; kwargs...) =
-    extract_rules(model, AbstractDataset(X), args...; kwargs...)
 
 # Extract rules from a forest, with respect to a dataset
 # TODO: SoleLogics.True
 function extract_rules(
         model::Union{AbstractModel,DecisionForest},
-        X::AbstractDataset,
-        Y::AbstractVector{<:Consequent};
+        X::Union{AbstractInterpretationSet,MultiFrameModalDataset},
+        Y::AbstractVector{<:Label};
         prune_rules = false,
         s = nothing,
         decay_threshold = nothing,
