@@ -1,11 +1,11 @@
 using SoleLogics
-using SoleLogics: ⊤
+using SoleLogics: ⊤, AbstractInterpretationSet
 # TODO using SoleFeatures: findcorrelation
 using SoleModels:
     Rule, antecedent, consequent, rule_metrics,
-    Branch, RuleCascade, antecedents
-    AbstractDecisionTree, DecisionTreeNode, convert,
-    DecisionList, unroll_rules_cascade, majority_vote
+    Branch, DecisionForest, RuleCascade, antecedents, convert,
+    DecisionList, unroll_rules_cascade, majority_vote, Label
+using ModalDecisionTrees: MultiFrameModalDataset
 
 ############################################################################################
 # Rule extraction from random forest
@@ -24,7 +24,7 @@ function extract_rules(
         method = :CBC,
         min_frequency = nothing,
 )
-    
+
     isnothing(s) && (s = 1.0e-6)
     isnothing(decay_threshold) && (decay_threshold = 0.05)
     isnothing(min_frequency) && (min_frequency = 0.01)
@@ -32,41 +32,39 @@ function extract_rules(
     @assert model isa DecisionForest || issymbolic(model) "Cannot extract rules for model of type $(typeof(model))."
 
     """
-        prune_rcset(rcset::AbstractVector{<:AbstractVector{<:DecisionTreeNode}})
-            -> AbstractVector{<:AbstractVector{<:DecisionTreeNode}}
+        prune_rc(rc::RuleCascade)
+            -> RuleCascade
 
-        Prune the paths in rcset with error metric
+        Prune the paths in rc with error metric
 
     # Arguments
-    - `rcset::AbstractVector{<:AbstractVector{<:DecisionTreeNode}}`: paths to prune
+    - `rc::RuleCascade`: rule to prune
 
     # Returns
-    - `AbstractVector{<:AbstractVector{<:DecisionTreeNode}}`: paths after the prune
+    - `RuleCascade`: rule after the prune
     """
-    function prune_rcset(rcset::AbstractVector{<:RuleCascade})
-        [begin
-            E_zero = rule_metrics(SoleModels.convert(Rule,cascade),X,Y)[:error]
-            valid_idxs = collect(length(cascade):-1:1)
+    function prune_rc(rc::RuleCascade)
+        E_zero = rule_metrics(SoleModels.convert(Rule,rc),X,Y)[:error]
+        valid_idxs = collect(length(rc):-1:1)
 
-            for idx in reverse(valid_idxs)
-                # Indices to be considered to evaluate the rule
-                other_idxs = intersect!(vcat(1:(idx-1),(idx+1):length(cascade)),valid_idxs)
+        for idx in reverse(valid_idxs)
+            # Indices to be considered to evaluate the rule
+            other_idxs = intersect!(vcat(1:(idx-1),(idx+1):length(rc)),valid_idxs)
 
-                # Return error of the rule without idx-th pair
-                E_minus_i =
-                    rule_metrics(SoleModels.convert(Rule,cascade[other_idxs]),X,Y)[:error]
+            # Return error of the rule without idx-th pair
+            E_minus_i =
+                rule_metrics(SoleModels.convert(Rule,rc[other_idxs]),X,Y)[:error]
 
-                decay_i = (E_minus_i - E_zero) / max(E_zero, s)
+            decay_i = (E_minus_i - E_zero) / max(E_zero, s)
 
-                if decay_i < decay_threshold
-                    # Remove the idx-th pair in the vector of decisions
-                    deleteat!(valid_idxs, idx)
-                    E_zero = E_minus_i
-                end
+            if decay_i < decay_threshold
+                # Remove the idx-th pair in the vector of decisions
+                deleteat!(valid_idxs, idx)
+                E_zero = E_minus_i
             end
+        end
 
-            cascade[valid_idxs]
-        end for cascade in rcset]
+        rc[valid_idxs]
     end
 
     ########################################################################################
@@ -90,7 +88,7 @@ function extract_rules(
     ########################################################################################
     # Prune rules with respect to a dataset
     if prune_rules
-        rcset = prune_rcset(rcset)
+        rcset = prune_rc.(rcset)
     end
     ########################################################################################
 
