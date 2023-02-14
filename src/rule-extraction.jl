@@ -5,7 +5,7 @@ using SoleModels:
     Rule, antecedent, consequent, rule_metrics,
     Branch, DecisionForest, RuleCascade, antecedents, convert,
     DecisionList, unroll_rules_cascade, majority_vote, Label
-using ModalDecisionTrees: MultiFrameModalDataset
+# using ModalDecisionTrees: MultiFrameModalDataset
 
 ############################################################################################
 # Rule extraction from random forest
@@ -14,22 +14,24 @@ using ModalDecisionTrees: MultiFrameModalDataset
 # Extract rules from a forest, with respect to a dataset
 # TODO: SoleLogics.True
 function extract_rules(
-        model::Union{AbstractModel,DecisionForest},
-        X::Union{AbstractInterpretationSet,MultiFrameModalDataset},
-        Y::AbstractVector{<:Label};
-        prune_rules = false,
-        s = nothing,
-        decay_threshold = nothing,
-        #
-        method = :CBC,
-        min_frequency = nothing,
+    model::Union{AbstractModel,DecisionForest},
+    # X::Union{AbstractInterpretationSet,MultiFrameModalDataset}, # TODO
+    X::Any,
+    Y::AbstractVector{<:Label};
+    # 
+    prune_rules = true,
+    pruning_s = nothing,
+    pruning_decay_threshold = nothing,
+    #
+    method = :CBC,
+    min_frequency = nothing,
 )
-
-    isnothing(s) && (s = 1.0e-6)
-    isnothing(decay_threshold) && (decay_threshold = 0.05)
+    
+    isnothing(pruning_s) && (pruning_s = 1.0e-6)
+    isnothing(pruning_decay_threshold) && (pruning_decay_threshold = 0.05)
     isnothing(min_frequency) && (min_frequency = 0.01)
 
-    @assert model isa DecisionForest || issymbolic(model) "Cannot extract rules for model of type $(typeof(model))."
+    @assert model isa DecisionForest || SoleModels.issymbolic(model) "Cannot extract rules for model of type $(typeof(model))."
 
     """
         prune_rc(rc::RuleCascade)
@@ -55,9 +57,9 @@ function extract_rules(
             E_minus_i =
                 rule_metrics(SoleModels.convert(Rule,rc[other_idxs]),X,Y)[:error]
 
-            decay_i = (E_minus_i - E_zero) / max(E_zero, s)
+            decay_i = (E_minus_i - E_zero) / max(E_zero, pruning_s)
 
-            if decay_i < decay_threshold
+            if decay_i < pruning_decay_threshold
                 # Remove the idx-th pair in the vector of decisions
                 deleteat!(valid_idxs, idx)
                 E_zero = E_minus_i
@@ -167,7 +169,7 @@ function extract_rules(
         idx_remaining = begin
             eval_result = evaluate_rule(S[idx_best], D, Y)
             sat_unsat = eval_result[:ant_sat]
-            # Remain in D the rule that not satisfying the best rule's condition
+            # Remain in D the rule that not satisfying the best rule'pruning_s condition
             findall(sat_unsat .== false)
         end
         D = D[idx_remaining,:]
