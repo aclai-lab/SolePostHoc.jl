@@ -1,101 +1,101 @@
 using SoleLogics
-using SoleModels: Consequent,
+using SoleLogics: ⊤, AbstractInterpretationSet
+# TODO using SoleFeatures: findcorrelation
+using SoleModels:
     Rule, antecedent, consequent, rule_metrics,
-    Branch,
-    AbstractDecisionTree, DecisionTreeNode, convert,
-    DecisionList, list_paths
-
-abstract type AbstractDataset end
+    Branch, DecisionForest, RuleCascade, antecedents, convert,
+    DecisionList, unroll_rules_cascade, majority_vote, Label
+# using ModalDecisionTrees: MultiFrameModalDataset
 
 ############################################################################################
 # Rule extraction from random forest
 ############################################################################################
 
-# Patch single-frame _-> multi-frame
-extract_rules(model::Any, X::ModalDataset, args...; kwargs...) =
-    extract_rules(model, AbstractDataset(X), args...; kwargs...)
-
 # Extract rules from a forest, with respect to a dataset
 # TODO: SoleLogics.True
 function extract_rules(
-        forest::DecisionForest,
-        X::AbstractDataset,
-        Y::AbstractVector{<:Consequent};
-        prune_rules = false,
-        s = nothing,
-        decay_threshold = nothing,
-        #
-        method = :CBC,
-        min_frequency = nothing,
+    model::Union{AbstractModel,DecisionForest},
+    # X::Union{AbstractInterpretationSet,MultiFrameModalDataset}, # TODO
+    X::Any,
+    Y::AbstractVector{<:Label};
+    # 
+    prune_rules = true,
+    pruning_s = nothing,
+    pruning_decay_threshold = nothing,
+    #
+    method = :CBC,
+    min_frequency = nothing,
 )
-
-    isnothing(s) && (s = 1.0e-6)
-    isnothing(decay_threshold) && (decay_threshold = 0.05)
+    
+    isnothing(pruning_s) && (pruning_s = 1.0e-6)
+    isnothing(pruning_decay_threshold) && (pruning_decay_threshold = 0.05)
     isnothing(min_frequency) && (min_frequency = 0.01)
 
-    """
-        prune_pathset(pathset::AbstractVector{<:AbstractVector{<:DecisionTreeNode}})
-            -> AbstractVector{<:AbstractVector{<:DecisionTreeNode}}
+    @assert model isa DecisionForest || SoleModels.issymbolic(model) "Cannot extract rules for model of type $(typeof(model))."
 
-        Prune the paths in pathset with error metric
+    """
+        prune_rc(rc::RuleCascade)
+            -> RuleCascade
+
+        Prune the paths in rc with error metric
 
     # Arguments
-    - `pathset::AbstractVector{<:AbstractVector{<:DecisionTreeNode}}`: paths to prune
+    - `rc::RuleCascade`: rule to prune
 
     # Returns
-    - `AbstractVector{<:AbstractVector{<:DecisionTreeNode}}`: paths after the prune
+    - `RuleCascade`: rule after the prune
     """
-    function prune_pathset(pathset::AbstractVector{<:RuleCascade})
-        [begin
-            ant = antecedent(path)
-            cons = consequents(path)
+    function prune_rc(rc::RuleCascade)
+        E_zero = rule_metrics(SoleModels.convert(Rule,rc),X,Y)[:error]
+        valid_idxs = collect(length(rc):-1:1)
 
-            E_zero = rule_metrics(convert(Rule,ant,cons), X, Y)[:error]
-            valid_idxs = collect(length(ant):-1:1)
+        for idx in reverse(valid_idxs)
+            # Indices to be considered to evaluate the rule
+            other_idxs = intersect!(vcat(1:(idx-1),(idx+1):length(rc)),valid_idxs)
 
-            for idx in reverse(valid_idxs)
-                # Indices to be considered to evaluate the rule
-                other_idxs = intersect!(vcat(1:(idx-1),(idx+1):length(ant)),valid_idxs)
+            # Return error of the rule without idx-th pair
+            E_minus_i =
+                rule_metrics(SoleModels.convert(Rule,rc[other_idxs]),X,Y)[:error]
 
-                # Return error of the rule without idx-th pair
-                E_minus_i = rule_metrics(convert(Rule,ant[other_idxs],cons), X, Y)[:error]
+            decay_i = (E_minus_i - E_zero) / max(E_zero, pruning_s)
 
-                decay_i = (E_minus_i - E_zero) / max(E_zero, s)
-
-                if decay_i < decay_threshold
-                    # Remove the idx-th pair in the vector of decisions
-                    deleteat!(valid_idxs, idx)
-                    E_zero = E_minus_i
-                end
+            if decay_i < pruning_decay_threshold
+                # Remove the idx-th pair in the vector of decisions
+                deleteat!(valid_idxs, idx)
+                E_zero = E_minus_i
             end
+        end
 
-            RuleCascade(ant[valid_idxs],cons)
-        end for path in pathset]
+        rc[valid_idxs]
     end
 
     ########################################################################################
     # Extract rules from each tree
     ########################################################################################
     # Obtain full ruleset
-    pathset = begin
-        pathset = []
-        for tree in forest
-            tree_paths = list_paths(tree)
-            append!(pathset, tree_paths)
+    rcset = begin
+        if model isa DecisionForest
+            rcset = []
+            for tree in trees(model)
+                tree_paths = unroll_rules_cascade(tree) #list_paths(tree)
+                append!(rcset, tree_paths)
+            end
+            unique(rcset) # TODO maybe also sort (which requires a definition of isless(formula1, formula2))
+        else model
+            unroll_rules_cascade(model)
         end
-        unique(pathset) # TODO maybe also sort (which requires a definition of isless(formula1, formula2))
     end
     ########################################################################################
 
     ########################################################################################
     # Prune rules with respect to a dataset
     if prune_rules
-        pathset = prune_pathset(pathset)
+        rcset = prune_rc.(rcset)
     end
     ########################################################################################
 
-    #Vector{Union{Branch,Any}} -> Vector{Union{Condition,Any}} -> RuleNest -> Rule
-    ruleset = convert.(Rule,pathset)
+    #Vector{Union{Branch,FinalOutcome}} -> Vector{Union{Condition,FinalOutcome}} -> RuleNest -> Rule
+    ruleset = convert.(Rule,rcset)
 
     ########################################################################################
     # Obtain the best rules
@@ -105,7 +105,7 @@ function extract_rules(
             M = hcat([evaluate_antecedent(rule, X) for rule in ruleset]...)
 
             # correlation() -> function in SoleFeatures
-            best_idxs = findcorrelation(M)
+            best_idxs = 1:5 # TODO findcorrelation(M; parameters...)
             #M = M[:, best_idxs]
             ruleset[best_idxs]
         else
@@ -126,11 +126,11 @@ function extract_rules(
     S = copy(best_rules)
     #TODO: SoleLogics.TOP
     #TODO: Fix Default Rule
-    push!(S,Rule(Formula(FNode(SoleLogics.TOP)),majority_vote(Y)))
+    push!(S,Rule(LogicalTruthCondition(SyntaxTree(⊤)),majority_vote(Y)))
 
     # Rules with a frequency less than min_frequency
     S = begin
-        metrics = rule_metrics.(S, X, Y)
+        metrics = rule_metrics.(S,X,Y)
         rules_support = [metrics[i][:support] for i in eachindex(metrics)]
         idxs_undeleted = findall(rules_support .>= min_frequency) # Undeleted rule indexes
         S[idxs_undeleted]
@@ -138,7 +138,7 @@ function extract_rules(
 
     while true
         # Metrics update based on remaining instances
-        metrics = rule_metrics.(S, D, Y)
+        metrics = rule_metrics.(S,D,Y)
         rules_support = [metrics[i][:support] for i in eachindex(metrics)]
         rules_error = [metrics[i][:error] for i in eachindex(metrics)]
         rules_length = [metrics[i][:length] for i in eachindex(metrics)]
@@ -169,22 +169,21 @@ function extract_rules(
         idx_remaining = begin
             eval_result = evaluate_rule(S[idx_best], D, Y)
             sat_unsat = eval_result[:ant_sat]
-            # Remain in D the rule that not satisfying the best rule's condition
+            # Remain in D the rule that not satisfying the best rule'pruning_s condition
             findall(sat_unsat .== false)
         end
         D = D[idx_remaining,:]
 
         if idx_best == length(S)
-            #TODO: fix default field; majority_vote(Y)?
             return DecisionList(R[end-1],consequent(R[end]))
-        elseif size(D, 1) == 0
+        elseif size(D,1) == 0
             return DecisionList(R,majority_vote(Y))
         end
 
         # Delete the best rule from S
         deleteat!(S,idx_best)
         # Update of the default rule
-        S[end] = Rule(Formula(FNode(SoleLogics.TOP)),majority_vote(Y[idx_remaining]))
+        S[end] = Rule(LogicalTruthCondition(SyntaxTree(⊤)),majority_vote(Y[idx_remaining]))
     end
 
     return error("Unexpected error in extract_rules!")
