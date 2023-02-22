@@ -18,15 +18,17 @@ function extract_rules(
     # X::Union{AbstractInterpretationSet,MultiFrameModalDataset}, # TODO
     X::Any,
     Y::AbstractVector{<:Label};
-    # 
+    #
     prune_rules = true,
     pruning_s = nothing,
     pruning_decay_threshold = nothing,
     #
-    method = :CBC,
+    method_rule_selection = :CBC,
     min_frequency = nothing,
 )
-    
+
+    isnothing(pruning_s) && !isnothing(pruning_decay_threshold) && (prune_rules = false)
+    isnothing(pruning_decay_threshold) && !isnothing(pruning_s) && (prune_rules = false)
     isnothing(pruning_s) && (pruning_s = 1.0e-6)
     isnothing(pruning_decay_threshold) && (pruning_decay_threshold = 0.05)
     isnothing(min_frequency) && (min_frequency = 0.01)
@@ -100,7 +102,7 @@ function extract_rules(
     ########################################################################################
     # Obtain the best rules
     best_rules = begin
-        if method == :CBC
+        if method_rule_selection == :CBC
 
             M = hcat([evaluate_antecedent(rule, X) for rule in ruleset]...)
 
