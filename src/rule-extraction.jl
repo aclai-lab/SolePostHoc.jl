@@ -121,14 +121,13 @@ function extract_rules(
 
     #TODO: fix majority_vote
 
-    D = copy(X) # Copy of the original dataset
+    D = deepcopy(X) # Copy of the original dataset
     # Ordered rule list
     R = Rule[]
     # Vector of rules left
-    S = copy(best_rules)
-    #TODO: SoleLogics.TOP
+    S = deepcopy(best_rules)
     #TODO: Fix Default Rule
-    push!(S,Rule(LogicalTruthCondition(SyntaxTree(⊤)),majority_vote(Y)))
+    push!(S,Rule(majority_vote(Y)))
 
     # Rules with a frequency less than min_frequency
     S = begin
@@ -185,7 +184,7 @@ function extract_rules(
         # Delete the best rule from S
         deleteat!(S,idx_best)
         # Update of the default rule
-        S[end] = Rule(LogicalTruthCondition(SyntaxTree(⊤)),majority_vote(Y[idx_remaining]))
+        S[end] = Rule(majority_vote(Y[idx_remaining]))
     end
 
     return error("Unexpected error in extract_rules!")
