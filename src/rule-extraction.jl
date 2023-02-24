@@ -1,10 +1,13 @@
 using SoleLogics
 using SoleLogics: ⊤, AbstractInterpretationSet
-# TODO using SoleFeatures: findcorrelation
-using SoleModels:
-    Rule, antecedent, consequent, rule_metrics,
-    Branch, DecisionForest, RuleCascade, antecedents, convert,
-    DecisionList, unroll_rules_cascade, majority_vote, Label
+using SoleFeatures: findcorrelation
+using SoleModels
+using SoleModels: Rule, antecedent, consequent, rule_metrics
+using SoleModels: FinalModel, Branch, DecisionForest, DecisionList
+using SoleModels: RuleCascade, antecedents, convert, unroll_rules_cascade
+using SoleModels: majority_vote, Label
+using SoleModels.ModalLogic: _slice_dataset
+using Statistics: cor
 # using ModalDecisionTrees: MultiFrameModalDataset
 
 ############################################################################################
@@ -12,7 +15,6 @@ using SoleModels:
 ############################################################################################
 
 # Extract rules from a forest, with respect to a dataset
-# TODO: SoleLogics.True
 function extract_rules(
     model::Union{AbstractModel,DecisionForest},
     # X::Union{AbstractInterpretationSet,MultiFrameModalDataset}, # TODO
@@ -24,6 +26,7 @@ function extract_rules(
     pruning_decay_threshold = nothing,
     #
     method_rule_selection = :CBC,
+    accuracy_rule_selection = nothing,
     min_frequency = nothing,
 )
 
@@ -31,6 +34,7 @@ function extract_rules(
     isnothing(pruning_decay_threshold) && !isnothing(pruning_s) && (prune_rules = false)
     isnothing(pruning_s) && (pruning_s = 1.0e-6)
     isnothing(pruning_decay_threshold) && (pruning_decay_threshold = 0.05)
+    isnothing(accuracy_rule_selection) && (accuracy_rule_selection = 0.0)
     isnothing(min_frequency) && (min_frequency = 0.01)
 
     @assert model isa DecisionForest || SoleModels.issymbolic(model) "Cannot extract rules for model of type $(typeof(model))."
@@ -49,9 +53,11 @@ function extract_rules(
     """
     function prune_rc(rc::RuleCascade)
         E_zero = rule_metrics(SoleModels.convert(Rule,rc),X,Y)[:error]
-        valid_idxs = collect(length(rc):-1:1)
+        valid_idxs = collect(1:length(rc))
 
         for idx in reverse(valid_idxs)
+            (length(valid_idxs) < 2) && break #TODO: check
+
             # Indices to be considered to evaluate the rule
             other_idxs = intersect!(vcat(1:(idx-1),(idx+1):length(rc)),valid_idxs)
 
@@ -99,6 +105,7 @@ function extract_rules(
     #Vector{Union{Branch,FinalOutcome}} -> Vector{Union{Condition,FinalOutcome}} -> RuleNest -> Rule
     ruleset = convert.(Rule,rcset)
 
+    println("Numero di regole: $(length(ruleset))")
     ########################################################################################
     # Obtain the best rules
     best_rules = begin
@@ -107,7 +114,8 @@ function extract_rules(
             M = hcat([evaluate_antecedent(rule, X) for rule in ruleset]...)
 
             # correlation() -> function in SoleFeatures
-            best_idxs = 1:5 # TODO findcorrelation(M; parameters...)
+            #best_idxs = 1:5
+            best_idxs = findcorrelation(cor(M), threshold = accuracy_rule_selection)
             #M = M[:, best_idxs]
             ruleset[best_idxs]
         else
@@ -119,19 +127,17 @@ function extract_rules(
     ########################################################################################
     # Construct a rule-based model from the set of best rules
 
-    #TODO: fix majority_vote
-
     D = deepcopy(X) # Copy of the original dataset
     # Ordered rule list
     R = Rule[]
     # Vector of rules left
-    S = deepcopy(best_rules)
-    #TODO: Fix Default Rule
-    push!(S,Rule(majority_vote(Y)))
+    #S = deepcopy(best_rules)
+    #push!(S,Rule(majority_vote(Y)))
+    S = [deepcopy(best_rules)..., Rule(majority_vote(Y))]
 
     # Rules with a frequency less than min_frequency
     S = begin
-        metrics = rule_metrics.(S,X,Y)
+        metrics = [rule_metrics(s,X,Y) for s in S]
         rules_support = [metrics[i][:support] for i in eachindex(metrics)]
         idxs_undeleted = findall(rules_support .>= min_frequency) # Undeleted rule indexes
         S[idxs_undeleted]
@@ -139,28 +145,32 @@ function extract_rules(
 
     while true
         # Metrics update based on remaining instances
-        metrics = rule_metrics.(S,D,Y)
+        metrics = [rule_metrics(s,D,Y) for s in S]
         rules_support = [metrics[i][:support] for i in eachindex(metrics)]
         rules_error = [metrics[i][:error] for i in eachindex(metrics)]
         rules_length = [metrics[i][:length] for i in eachindex(metrics)]
 
         # Best rule index
         idx_best = begin
+            idx_best = nothing
             # First: find the rule with minimum error
             idx = findall(rules_error .== min(rules_error...))
-            (length(idx) == 1) && (return idx)
+            (length(idx) == 1) && (idx_best = idx)
 
             # If not one, find the rule with maximum frequency
             idx_support = findall(rules_support .== max(rules_support[idx]...))
-            (length(intersect!(idx, idx_support)) == 1) && (return idx)
+            (length(intersect!(idx, idx_support)) == 1) && (idx_best = idx)
 
             # If not one, find the rule with minimum length
             idx_length = findall(rules_length .== min(rules_length[idx]...))
-            (length(intersect!(idx, idx_length)) == 1) && (return idx)
+            (length(intersect!(idx, idx_length)) == 1) && (idx_best = idx)
 
             # Final case: more than one rule with minimum length
             # Randomly choose a rule
-            rand(idx)
+            isnothing(idx_best) && (idx_best = rand(idx))
+
+            length(idx_best) > 1 && error("More than one best indexes")
+            idx_best[1]
         end
 
         # Add at the end the best rule
@@ -173,11 +183,11 @@ function extract_rules(
             # Remain in D the rule that not satisfying the best rule'pruning_s condition
             findall(sat_unsat .== false)
         end
-        D = D[idx_remaining,:]
+        D = _slice_dataset(D,idx_remaining)
 
         if idx_best == length(S)
-            return DecisionList(R[end-1],consequent(R[end]))
-        elseif size(D,1) == 0
+            return DecisionList(R[1:end-1],consequent(R[end]))
+        elseif nsamples(D) == 0
             return DecisionList(R,majority_vote(Y))
         end
 
