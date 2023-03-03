@@ -105,7 +105,6 @@ function extract_rules(
     #Vector{Union{Branch,FinalOutcome}} -> Vector{Union{Condition,FinalOutcome}} -> RuleNest -> Rule
     ruleset = convert.(Rule,rcset)
 
-    println("Numero di regole: $(length(ruleset))")
     ########################################################################################
     # Obtain the best rules
     best_rules = begin
