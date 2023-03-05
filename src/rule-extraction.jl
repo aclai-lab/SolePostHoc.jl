@@ -2,10 +2,11 @@ using SoleLogics
 using SoleLogics: ⊤, AbstractInterpretationSet
 using SoleFeatures: findcorrelation
 using SoleModels
-using SoleModels: Rule, antecedent, consequent, rule_metrics
+using SoleModels: Rule, antecedent, consequent, rule_metrics, evaluate_rule
 using SoleModels: FinalModel, Branch, DecisionForest, DecisionList
 using SoleModels: RuleCascade, antecedents, convert, unroll_rules_cascade
 using SoleModels: majority_vote, Label
+using SoleModels: AbstractModel
 using SoleModels.ModalLogic: _slice_dataset
 using Statistics: cor
 # using ModalDecisionTrees: MultiFrameModalDataset
@@ -85,7 +86,7 @@ function extract_rules(
         if model isa DecisionForest
             rcset = []
             for tree in trees(model)
-                tree_paths = unroll_rules_cascade(tree) #list_paths(tree)
+                tree_paths = unroll_rules_cascade(tree)
                 append!(rcset, tree_paths)
             end
             unique(rcset) # TODO maybe also sort (which requires a definition of isless(formula1, formula2))
@@ -110,7 +111,7 @@ function extract_rules(
     best_rules = begin
         if method_rule_selection == :CBC
 
-            M = hcat([evaluate_antecedent(rule, X) for rule in ruleset]...)
+            M = hcat([check_antecedent(rule, X) for rule in ruleset]...)
 
             # correlation() -> function in SoleFeatures
             #best_idxs = 1:5
