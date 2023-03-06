@@ -6,7 +6,7 @@ using SoleModels: Rule, antecedent, consequent, rule_metrics
 using SoleModels: FinalModel, Branch, DecisionForest, DecisionList
 using SoleModels: RuleCascade, antecedents, convert, unroll_rules_cascade
 using SoleModels: majority_vote, Label
-using SoleModels.ModalLogic: _slice_dataset
+using SoleData: slice_dataset
 using Statistics: cor
 # using ModalDecisionTrees: MultiFrameModalDataset
 
@@ -14,6 +14,29 @@ using Statistics: cor
 # Rule extraction from random forest
 ############################################################################################
 
+"""
+    extract_rules(args...; kwargs...) -> DecisionList
+
+    Extracts rules from a model, reduces the length of each rule (number of variable value
+    pairs), and applies a sequential coverage approach to obtain a set of relevant and
+    non-redundant rules
+
+# Arguments
+- `model::Union{AbstractModel,DecisionForest}`: input model
+- `X::Any`: dataset
+- `Y::AbstractVector{<:Label}`: label vector
+
+# Keywords
+- `prune_rules::Bool=true`: access to prune or not
+- `pruning_s::Float=nothing`: parameter that limits the denominator in the pruning metric calculation
+- `pruning_decay_threshold::Float=nothing`: threshold used in pruning to remove or not a joint from the rule
+- `method_rule_selection::Symbol=:CBC`: method of rule selection
+- `accuracy_rule_selection::Float=nothing`: percentage of rules that rule selection must follow
+- `min_frequency::Float=nothing`: minimum frequency that the rules must have at the beginning of the definition of the learner
+
+# Returns
+- `DecisionList`: decision list that represent a new learner
+"""
 # Extract rules from a forest, with respect to a dataset
 function extract_rules(
     model::Union{AbstractModel,DecisionForest},
@@ -56,14 +79,14 @@ function extract_rules(
         valid_idxs = collect(1:length(rc))
 
         for idx in reverse(valid_idxs)
-            (length(valid_idxs) < 2) && break #TODO: check
+            (length(valid_idxs) < 2) && break
 
             # Indices to be considered to evaluate the rule
             other_idxs = intersect!(vcat(1:(idx-1),(idx+1):length(rc)),valid_idxs)
+            rule = SoleModels.convert(Rule,rc[other_idxs])
 
             # Return error of the rule without idx-th pair
-            E_minus_i =
-                rule_metrics(SoleModels.convert(Rule,rc[other_idxs]),X,Y)[:error]
+            E_minus_i = rule_metrics(rule,X,Y)[:error]
 
             decay_i = (E_minus_i - E_zero) / max(E_zero, pruning_s)
 
@@ -74,7 +97,7 @@ function extract_rules(
             end
         end
 
-        rc[valid_idxs]
+        return rc[valid_idxs]
     end
 
     ########################################################################################
@@ -89,7 +112,7 @@ function extract_rules(
                 append!(rcset, tree_paths)
             end
             unique(rcset) # TODO maybe also sort (which requires a definition of isless(formula1, formula2))
-        else model
+        else
             unroll_rules_cascade(model)
         end
     end
@@ -125,19 +148,13 @@ function extract_rules(
 
     ########################################################################################
     # Construct a rule-based model from the set of best rules
-
     D = deepcopy(X) # Copy of the original dataset
-    # Ordered rule list
-    R = Rule[]
-    # Vector of rules left
-    #S = deepcopy(best_rules)
-    #push!(S,Rule(majority_vote(Y)))
-    S = [deepcopy(best_rules)..., Rule(majority_vote(Y))]
+    R = Rule[]      # Ordered rule list
+    S = [deepcopy(best_rules)..., Rule(majority_vote(Y))] # Vector of rules left
 
     # Rules with a frequency less than min_frequency
     S = begin
-        metrics = [rule_metrics(s,X,Y) for s in S]
-        rules_support = [metrics[i][:support] for i in eachindex(metrics)]
+        rules_support = [rule_metrics(s,X,Y)[:support] for s in S]
         idxs_undeleted = findall(rules_support .>= min_frequency) # Undeleted rule indexes
         S[idxs_undeleted]
     end
@@ -182,11 +199,11 @@ function extract_rules(
             # Remain in D the rule that not satisfying the best rule'pruning_s condition
             findall(sat_unsat .== false)
         end
-        D = _slice_dataset(D,idx_remaining)
+        D = length(idx_remaining) > 0 ? slice_dataset(D,idx_remaining) : nothing
 
         if idx_best == length(S)
             return DecisionList(R[1:end-1],consequent(R[end]))
-        elseif nsamples(D) == 0
+        elseif isnothing(D) || nsamples(D) == 0
             return DecisionList(R,majority_vote(Y))
         end
 
