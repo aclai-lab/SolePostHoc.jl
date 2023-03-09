@@ -2,10 +2,11 @@ using SoleLogics
 using SoleLogics: ⊤, AbstractInterpretationSet
 using SoleFeatures: findcorrelation
 using SoleModels
+using SoleModels: AbstractModel
 using SoleModels: Rule, antecedent, consequent, rule_metrics
 using SoleModels: FinalModel, Branch, DecisionForest, DecisionList
 using SoleModels: RuleCascade, antecedents, convert, unroll_rules_cascade
-using SoleModels: majority_vote, Label
+using SoleModels: best_guess, Label
 using SoleData: slice_dataset
 using Statistics: cor
 # using ModalDecisionTrees: MultiFrameModalDataset
@@ -15,11 +16,11 @@ using Statistics: cor
 ############################################################################################
 
 """
-    extract_rules(args...; kwargs...) -> DecisionList
+    extract_rules(args...; kwargs...)::DecisionList
 
-    Extracts rules from a model, reduces the length of each rule (number of variable value
-    pairs), and applies a sequential coverage approach to obtain a set of relevant and
-    non-redundant rules
+Extracts rules from a model, reduces the length of each rule (number of variable value
+pairs), and applies a sequential coverage approach to obtain a set of relevant and
+non-redundant rules
 
 # Arguments
 - `model::Union{AbstractModel,DecisionForest}`: input model
@@ -36,6 +37,13 @@ using Statistics: cor
 
 # Returns
 - `DecisionList`: decision list that represent a new learner
+
+See also
+[`AbstractModel`](@ref),
+[`DecisionForest`](@ref),
+[`DecisionList`](@ref),
+[`unroll_rules_cascade`](@ref),
+[`rule_metrics`](@ref).
 """
 # Extract rules from a forest, with respect to a dataset
 function extract_rules(
@@ -63,16 +71,14 @@ function extract_rules(
     @assert model isa DecisionForest || SoleModels.issymbolic(model) "Cannot extract rules for model of type $(typeof(model))."
 
     """
-        prune_rc(rc::RuleCascade)
-            -> RuleCascade
+        prune_rc(rc::RuleCascade)::RuleCascade
 
-        Prune the paths in rc with error metric
+    Prunes redundant or irrelevant conjuncts of the antecedent of the input rule cascade
+    considering the error metric
 
-    # Arguments
-    - `rc::RuleCascade`: rule to prune
-
-    # Returns
-    - `RuleCascade`: rule after the prune
+    See also
+    [`RuleCascade`](@ref),
+    [`rule_metrics`](@ref).
     """
     function prune_rc(rc::RuleCascade)
         E_zero = rule_metrics(SoleModels.convert(Rule,rc),X,Y)[:error]
@@ -101,15 +107,14 @@ function extract_rules(
     end
 
     ########################################################################################
-    # Extract rules from each tree
+    # Extract rules from each tree, obtain full ruleset
     ########################################################################################
-    # Obtain full ruleset
     rcset = begin
         if model isa DecisionForest
             rcset = []
             for tree in trees(model)
-                tree_paths = unroll_rules_cascade(tree) #list_paths(tree)
-                append!(rcset, tree_paths)
+                tree_rcs = unroll_rules_cascade(tree)
+                append!(rcset, tree_rcs)
             end
             unique(rcset) # TODO maybe also sort (which requires a definition of isless(formula1, formula2))
         else
@@ -120,25 +125,22 @@ function extract_rules(
 
     ########################################################################################
     # Prune rules with respect to a dataset
+    ########################################################################################
     if prune_rules
         rcset = prune_rc.(rcset)
     end
     ########################################################################################
-
-    #Vector{Union{Branch,FinalOutcome}} -> Vector{Union{Condition,FinalOutcome}} -> RuleNest -> Rule
+    # Convert set of rules cascade in a set of rules
+    ########################################################################################
     ruleset = convert.(Rule,rcset)
 
     ########################################################################################
-    # Obtain the best rules
+    # Rule selection to obtain the best rules
+    ########################################################################################
     best_rules = begin
         if method_rule_selection == :CBC
-
             M = hcat([evaluate_antecedent(rule, X) for rule in ruleset]...)
-
-            # correlation() -> function in SoleFeatures
-            #best_idxs = 1:5
             best_idxs = findcorrelation(cor(M), threshold = accuracy_rule_selection)
-            #M = M[:, best_idxs]
             ruleset[best_idxs]
         else
             error("Unexpected method specified: $(method)")
@@ -148,20 +150,23 @@ function extract_rules(
 
     ########################################################################################
     # Construct a rule-based model from the set of best rules
+    ########################################################################################
+
     D = deepcopy(X) # Copy of the original dataset
     R = Rule[]      # Ordered rule list
-    S = [deepcopy(best_rules)..., Rule(majority_vote(Y))] # Vector of rules left
+    S = [deepcopy(best_rules)..., Rule(best_guess(Y))] # Vector of rules left
 
     # Rules with a frequency less than min_frequency
     S = begin
         rules_support = [rule_metrics(s,X,Y)[:support] for s in S]
-        idxs_undeleted = findall(rules_support .>= min_frequency) # Undeleted rule indexes
+        idxs_undeleted = findall(rules_support .>= min_frequency)
         S[idxs_undeleted]
     end
 
     while true
         # Metrics update based on remaining instances
         metrics = [rule_metrics(s,D,Y) for s in S]
+        println(metrics[1])
         rules_support = [metrics[i][:support] for i in eachindex(metrics)]
         rules_error = [metrics[i][:error] for i in eachindex(metrics)]
         rules_length = [metrics[i][:length] for i in eachindex(metrics)]
@@ -204,13 +209,13 @@ function extract_rules(
         if idx_best == length(S)
             return DecisionList(R[1:end-1],consequent(R[end]))
         elseif isnothing(D) || nsamples(D) == 0
-            return DecisionList(R,majority_vote(Y))
+            return DecisionList(R,best_guess(Y))
         end
 
         # Delete the best rule from S
         deleteat!(S,idx_best)
         # Update of the default rule
-        S[end] = Rule(majority_vote(Y[idx_remaining]))
+        S[end] = Rule(best_guess(Y[idx_remaining]))
     end
 
     return error("Unexpected error in extract_rules!")
