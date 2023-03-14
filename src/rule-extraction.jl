@@ -5,7 +5,7 @@ using SoleModels
 using SoleModels: Rule, antecedent, consequent, rule_metrics, evaluate_rule
 using SoleModels: FinalModel, Branch, DecisionForest, DecisionList
 using SoleModels: RuleCascade, antecedents, convert, unroll_rules_cascade
-using SoleModels: majority_vote, Label
+using SoleModels: best_guess, Label
 using SoleModels: AbstractModel
 using SoleModels.ModalLogic: _slice_dataset
 using Statistics: cor
@@ -132,8 +132,8 @@ function extract_rules(
     R = Rule[]
     # Vector of rules left
     #S = deepcopy(best_rules)
-    #push!(S,Rule(majority_vote(Y)))
-    S = [deepcopy(best_rules)..., Rule(majority_vote(Y))]
+    #push!(S,Rule(best_guess(Y)))
+    S = [deepcopy(best_rules)..., Rule(best_guess(Y))]
 
     # Rules with a frequency less than min_frequency
     S = begin
@@ -188,13 +188,13 @@ function extract_rules(
         if idx_best == length(S)
             return DecisionList(R[1:end-1],consequent(R[end]))
         elseif nsamples(D) == 0
-            return DecisionList(R,majority_vote(Y))
+            return DecisionList(R,best_guess(Y))
         end
 
         # Delete the best rule from S
         deleteat!(S,idx_best)
         # Update of the default rule
-        S[end] = Rule(majority_vote(Y[idx_remaining]))
+        S[end] = Rule(best_guess(Y[idx_remaining]))
     end
 
     return error("Unexpected error in extract_rules!")
