@@ -6,7 +6,7 @@ using SoleModels: AbstractModel
 using SoleModels: Rule, antecedent, consequent, rule_metrics
 using SoleModels: FinalModel, Branch, DecisionForest, DecisionList
 using SoleModels: RuleCascade, antecedents, convert, unroll_rules_cascade
-using SoleModels: best_guess, Label
+using SoleModels: best_guess, Label, evaluate_rule
 using SoleData: slice_dataset
 using Statistics: cor
 # using ModalDecisionTrees: MultiFrameModalDataset
@@ -139,7 +139,7 @@ function extract_rules(
     ########################################################################################
     best_rules = begin
         if method_rule_selection == :CBC
-            M = hcat([evaluate_antecedent(rule, X) for rule in ruleset]...)
+            M = hcat([evaluate_rule(rule, X, Y)[:ant_sat] for rule in ruleset]...)
             best_idxs = findcorrelation(cor(M), threshold = accuracy_rule_selection)
             ruleset[best_idxs]
         else
