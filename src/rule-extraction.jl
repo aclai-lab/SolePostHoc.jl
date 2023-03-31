@@ -1,3 +1,7 @@
+module RuleExtraction
+
+export intrees
+
 using SoleLogics
 using SoleLogics: ⊤, AbstractInterpretationSet
 using SoleFeatures: findcorrelation
@@ -16,7 +20,7 @@ using Statistics: cor
 ############################################################################################
 
 """
-    extract_rules(args...; kwargs...)::DecisionList
+    intrees(args...; kwargs...)::DecisionList
 
 Extracts rules from a model, reduces the length of each rule (number of variable value
 pairs), and applies a sequential coverage approach to obtain a set of relevant and
@@ -38,6 +42,8 @@ non-redundant rules
 # Returns
 - `DecisionList`: decision list that represent a new learner
 
+TODO cite paper
+
 See also
 [`AbstractModel`](@ref),
 [`DecisionForest`](@ref),
@@ -46,7 +52,7 @@ See also
 [`rule_metrics`](@ref).
 """
 # Extract rules from a forest, with respect to a dataset
-function extract_rules(
+function intrees(
     model::Union{AbstractModel,DecisionForest},
     # X::Union{AbstractInterpretationSet,MultiFrameModalDataset}, # TODO
     X::Any,
@@ -111,12 +117,8 @@ function extract_rules(
     ########################################################################################
     rcset = begin
         if model isa DecisionForest
-            rcset = []
-            for tree in trees(model)
-                tree_rcs = unroll_rules_cascade(tree)
-                append!(rcset, tree_rcs)
-            end
-            unique(rcset) # TODO maybe also sort (which requires a definition of isless(formula1, formula2))
+            unique([unroll_rules_cascade(tree) for tree in trees(model)])
+            # TODO maybe also sort?
         else
             unroll_rules_cascade(model)
         end
@@ -218,5 +220,5 @@ function extract_rules(
         S[end] = Rule(best_guess(Y[idx_remaining]))
     end
 
-    return error("Unexpected error in extract_rules!")
+    return error("Unexpected error in intrees!")
 end
