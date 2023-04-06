@@ -222,3 +222,5 @@ function intrees(
 
     return error("Unexpected error in intrees!")
 end
+
+end
