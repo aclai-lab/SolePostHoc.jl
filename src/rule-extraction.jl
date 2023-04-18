@@ -9,7 +9,7 @@ using SoleModels
 using SoleModels: AbstractModel
 using SoleModels: Rule, antecedent, consequent, rule_metrics
 using SoleModels: FinalModel, Branch, DecisionForest, DecisionList
-using SoleModels: RuleCascade, antecedents, convert, unroll_rules_cascade
+using SoleModels: unroll_rules
 using SoleModels: best_guess, Label, evaluate_rule
 using SoleData: slice_dataset
 using Statistics: cor
@@ -77,25 +77,25 @@ function intrees(
     @assert model isa DecisionForest || SoleModels.issymbolic(model) "Cannot extract rules for model of type $(typeof(model))."
 
     """
-        prune_rc(rc::RuleCascade)::RuleCascade
+        prune_rule(rc::Rule)::Rule
 
     Prunes redundant or irrelevant conjuncts of the antecedent of the input rule cascade
     considering the error metric
 
     See also
-    [`RuleCascade`](@ref),
+    [`Rule`](@ref),
     [`rule_metrics`](@ref).
     """
-    function prune_rc(rc::RuleCascade)
-        E_zero = rule_metrics(SoleModels.convert(Rule,rc),X,Y)[:error]
-        valid_idxs = collect(1:length(rc))
+    function prune_rule(r::Rule)
+        E_zero = rule_metrics(r,X,Y)[:error]
+        valid_idxs = collect(1:length(r))
 
         for idx in reverse(valid_idxs)
             (length(valid_idxs) < 2) && break
 
             # Indices to be considered to evaluate the rule
-            other_idxs = intersect!(vcat(1:(idx-1),(idx+1):length(rc)),valid_idxs)
-            rule = SoleModels.convert(Rule,rc[other_idxs])
+            other_idxs = intersect!(vcat(1:(idx-1),(idx+1):length(r)),valid_idxs)
+            rule = r[other_idxs]
 
             # Return error of the rule without idx-th pair
             E_minus_i = rule_metrics(rule,X,Y)[:error]
@@ -109,18 +109,18 @@ function intrees(
             end
         end
 
-        return rc[valid_idxs]
+        return r[valid_idxs]
     end
 
     ########################################################################################
     # Extract rules from each tree, obtain full ruleset
     ########################################################################################
-    rcset = begin
+    ruleset = begin
         if model isa DecisionForest
-            unique([unroll_rules_cascade(tree) for tree in trees(model)])
+            unique([unroll_rules(tree) for tree in trees(model)])
             # TODO maybe also sort?
         else
-            unroll_rules_cascade(model)
+            unroll_rules(model)
         end
     end
     ########################################################################################
@@ -129,12 +129,8 @@ function intrees(
     # Prune rules with respect to a dataset
     ########################################################################################
     if prune_rules
-        rcset = prune_rc.(rcset)
+        ruleset = prune_rule.(ruleset)
     end
-    ########################################################################################
-    # Convert set of rules cascade in a set of rules
-    ########################################################################################
-    ruleset = convert.(Rule,rcset)
 
     ########################################################################################
     # Rule selection to obtain the best rules
