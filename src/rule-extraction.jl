@@ -42,7 +42,7 @@ non-redundant rules
 # Returns
 - `DecisionList`: decision list that represent a new learner
 
-TODO cite paper
+TODO cite paper and specify that the method is for forests, but was extended to work with any other model
 
 See also
 [`AbstractModel`](@ref),
@@ -87,7 +87,7 @@ function intrees(
     [`rule_metrics`](@ref).
     """
     function prune_rule(
-        r::Rule{O,<:LogicalTruthCondition{<:LeftmostConjunctiveForm}}
+        r::Rule{O,<:LogicalTruthCondition{<:LeftmostConjunctiveForm}} # TODO add TrueCondition and nchildren
     ) where {O}
         E_zero = rule_metrics(r,X,Y)[:error]
         valid_idxs = collect(1:nconjuncts(r))
