@@ -3,13 +3,13 @@ module RuleExtraction
 export intrees
 
 using SoleLogics
-using SoleLogics: ⊤, AbstractInterpretationSet
+using SoleLogics: ⊤, AbstractInterpretationSet, nconjuncts
 using SoleFeatures: findcorrelation
 using SoleModels
 using SoleModels: AbstractModel
 using SoleModels: Rule, antecedent, consequent, rule_metrics
 using SoleModels: FinalModel, Branch, DecisionForest, DecisionList
-using SoleModels: unroll_rules
+using SoleModels: unrollrules
 using SoleModels: best_guess, Label, evaluate_rule
 using SoleData: slice_dataset
 using Statistics: cor
@@ -48,7 +48,7 @@ See also
 [`AbstractModel`](@ref),
 [`DecisionForest`](@ref),
 [`DecisionList`](@ref),
-[`unroll_rules_cascade`](@ref),
+[`unrollrules`](@ref),
 [`rule_metrics`](@ref).
 """
 # Extract rules from a forest, with respect to a dataset
@@ -86,15 +86,17 @@ function intrees(
     [`Rule`](@ref),
     [`rule_metrics`](@ref).
     """
-    function prune_rule(r::Rule)
+    function prune_rule(
+        r::Rule{O,<:LogicalTruthCondition{<:LeftmostConjunctiveForm}}
+    ) where {O}
         E_zero = rule_metrics(r,X,Y)[:error]
-        valid_idxs = collect(1:length(r))
+        valid_idxs = collect(1:nconjuncts(r))
 
         for idx in reverse(valid_idxs)
             (length(valid_idxs) < 2) && break
 
             # Indices to be considered to evaluate the rule
-            other_idxs = intersect!(vcat(1:(idx-1),(idx+1):length(r)),valid_idxs)
+            other_idxs = intersect!(vcat(1:(idx-1),(idx+1):nconjuncts(r)),valid_idxs)
             rule = r[other_idxs]
 
             # Return error of the rule without idx-th pair
@@ -117,10 +119,10 @@ function intrees(
     ########################################################################################
     ruleset = begin
         if model isa DecisionForest
-            unique([unroll_rules(tree) for tree in trees(model)])
+            unique([unrollrules(tree) for tree in trees(model)])
             # TODO maybe also sort?
         else
-            unroll_rules(model)
+            unrollrules(model)
         end
     end
     ########################################################################################
