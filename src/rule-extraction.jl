@@ -3,13 +3,13 @@ module RuleExtraction
 export intrees
 
 using SoleLogics
-using SoleLogics: ⊤, AbstractInterpretationSet, nconjuncts
+using SoleLogics: ⊤, AbstractInterpretationSet, nconjuncts, LeftmostConjunctiveForm
 using SoleFeatures: findcorrelation
 using SoleModels
 using SoleModels: AbstractModel
 using SoleModels: Rule, antecedent, consequent, rule_metrics
 using SoleModels: FinalModel, Branch, DecisionForest, DecisionList
-using SoleModels: unrollrules
+using SoleModels: unrollrules, LogicalTruthCondition
 using SoleModels: best_guess, Label, evaluate_rule
 using SoleData: slice_dataset
 using Statistics: cor
