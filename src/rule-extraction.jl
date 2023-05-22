@@ -7,10 +7,10 @@ using SoleLogics: ⊤, AbstractInterpretationSet, nconjuncts, LeftmostConjunctiv
 using SoleFeatures: findcorrelation
 using SoleModels
 using SoleModels: AbstractModel
-using SoleModels: Rule, antecedent, consequent, rule_metrics
+using SoleModels: Rule, antecedent, consequent, rulemetrics
 using SoleModels: FinalModel, Branch, DecisionForest, DecisionList
-using SoleModels: unrollrules, LogicalTruthCondition
-using SoleModels: best_guess, Label, evaluate_rule
+using SoleModels: listrules, LogicalTruthCondition
+using SoleModels: bestguess, Label, evaluaterule
 using SoleData: slice_dataset
 using Statistics: cor
 # using ModalDecisionTrees: MultiFrameModalDataset
@@ -22,7 +22,7 @@ using Statistics: cor
 """
     intrees(args...; kwargs...)::DecisionList
 
-Extracts rules from a model, reduces the length of each rule (number of variable value
+Extract rules from a model, reduces the length of each rule (number of variable value
 pairs), and applies a sequential coverage approach to obtain a set of relevant and
 non-redundant rules
 
@@ -48,8 +48,8 @@ See also
 [`AbstractModel`](@ref),
 [`DecisionForest`](@ref),
 [`DecisionList`](@ref),
-[`unrollrules`](@ref),
-[`rule_metrics`](@ref).
+[`listrules`](@ref),
+[`rulemetrics`](@ref).
 """
 # Extract rules from a forest, with respect to a dataset
 function intrees(
@@ -84,12 +84,12 @@ function intrees(
 
     See also
     [`Rule`](@ref),
-    [`rule_metrics`](@ref).
+    [`rulemetrics`](@ref).
     """
     function prune_rule(
         r::Rule{O,<:LogicalTruthCondition{<:LeftmostConjunctiveForm}} # TODO add TrueCondition and nchildren
     ) where {O}
-        E_zero = rule_metrics(r,X,Y)[:error]
+        E_zero = rulemetrics(r,X,Y)[:error]
         valid_idxs = collect(1:nconjuncts(r))
 
         for idx in reverse(valid_idxs)
@@ -100,7 +100,7 @@ function intrees(
             rule = r[other_idxs]
 
             # Return error of the rule without idx-th pair
-            E_minus_i = rule_metrics(rule,X,Y)[:error]
+            E_minus_i = rulemetrics(rule,X,Y)[:error]
 
             decay_i = (E_minus_i - E_zero) / max(E_zero, pruning_s)
 
@@ -119,10 +119,10 @@ function intrees(
     ########################################################################################
     ruleset = begin
         if model isa DecisionForest
-            unique([unrollrules(tree) for tree in trees(model)])
+            unique([listrules(tree) for tree in trees(model)])
             # TODO maybe also sort?
         else
-            unrollrules(model)
+            listrules(model)
         end
     end
     ########################################################################################
@@ -139,7 +139,7 @@ function intrees(
     ########################################################################################
     best_rules = begin
         if method_rule_selection == :CBC
-            M = hcat([evaluate_rule(rule, X, Y)[:ant_sat] for rule in ruleset]...)
+            M = hcat([evaluaterule(rule, X, Y)[:antsat] for rule in ruleset]...)
             best_idxs = findcorrelation(cor(M), threshold = accuracy_rule_selection)
             ruleset[best_idxs]
         else
@@ -154,18 +154,18 @@ function intrees(
 
     D = deepcopy(X) # Copy of the original dataset
     R = Rule[]      # Ordered rule list
-    S = [deepcopy(best_rules)..., Rule(best_guess(Y))] # Vector of rules left
+    S = [deepcopy(best_rules)..., Rule(bestguess(Y))] # Vector of rules left
 
     # Rules with a frequency less than min_frequency
     S = begin
-        rules_support = [rule_metrics(s,X,Y)[:support] for s in S]
+        rules_support = [rulemetrics(s,X,Y)[:support] for s in S]
         idxs_undeleted = findall(rules_support .>= min_frequency)
         S[idxs_undeleted]
     end
 
     while true
         # Metrics update based on remaining instances
-        metrics = [rule_metrics(s,D,Y) for s in S]
+        metrics = [rulemetrics(s,D,Y) for s in S]
         println(metrics[1])
         rules_support = [metrics[i][:support] for i in eachindex(metrics)]
         rules_error = [metrics[i][:error] for i in eachindex(metrics)]
@@ -199,8 +199,7 @@ function intrees(
 
         # Indices of the remaining instances
         idx_remaining = begin
-            eval_result = evaluate_rule(S[idx_best], D, Y)
-            sat_unsat = eval_result[:ant_sat]
+            sat_unsat = evaluaterule(S[idx_best], D, Y)[:antsat]
             # Remain in D the rule that not satisfying the best rule'pruning_s condition
             findall(sat_unsat .== false)
         end
@@ -209,13 +208,13 @@ function intrees(
         if idx_best == length(S)
             return DecisionList(R[1:end-1],consequent(R[end]))
         elseif isnothing(D) || nsamples(D) == 0
-            return DecisionList(R,best_guess(Y))
+            return DecisionList(R,bestguess(Y))
         end
 
         # Delete the best rule from S
         deleteat!(S,idx_best)
         # Update of the default rule
-        S[end] = Rule(best_guess(Y[idx_remaining]))
+        S[end] = Rule(bestguess(Y[idx_remaining]))
     end
 
     return error("Unexpected error in intrees!")
