@@ -13,7 +13,7 @@ using SoleModels: listrules, LogicalTruthCondition
 using SoleModels: bestguess, Label, evaluaterule
 using SoleData: slice_dataset
 using Statistics: cor
-# using ModalDecisionTrees: MultiFrameModalDataset
+# using ModalDecisionTrees: MultiFrameConditionalDataset
 
 ############################################################################################
 # Rule extraction from random forest
@@ -54,7 +54,7 @@ See also
 # Extract rules from a forest, with respect to a dataset
 function intrees(
     model::Union{AbstractModel,DecisionForest},
-    # X::Union{AbstractInterpretationSet,MultiFrameModalDataset}, # TODO
+    # X::Union{AbstractInterpretationSet,MultiFrameConditionalDataset}, # TODO
     X::Any,
     Y::AbstractVector{<:Label};
     #
