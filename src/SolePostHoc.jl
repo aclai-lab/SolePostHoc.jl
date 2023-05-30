@@ -8,6 +8,5 @@ using SoleModels
 # TODO using SoleFeatures: findcorrelation
 
 include("rule-extraction.jl")
-# Write your package code here!
 
 end
