@@ -207,7 +207,7 @@ function intrees(
 
         if idx_best == length(S)
             return DecisionList(R[1:end-1],consequent(R[end]))
-        elseif isnothing(D) || nsamples(D) == 0
+        elseif isnothing(D) || ninstances(D) == 0
             return DecisionList(R,bestguess(Y))
         end
 
