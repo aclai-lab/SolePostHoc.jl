@@ -11,9 +11,8 @@ using SoleModels: Rule, antecedent, consequent, rulemetrics
 using SoleModels: FinalModel, Branch, DecisionForest, DecisionList
 using SoleModels: listrules, LogicalTruthCondition
 using SoleModels: bestguess, Label, evaluaterule
-using SoleData: slice_dataset
+using SoleData: slicedataset
 using Statistics: cor
-# using ModalDecisionTrees: MultiFrameLogiset
 
 ############################################################################################
 # Rule extraction from random forest
@@ -54,7 +53,6 @@ See also
 # Extract rules from a forest, with respect to a dataset
 function intrees(
     model::Union{AbstractModel,DecisionForest},
-    # X::Union{AbstractInterpretationSet,MultiFrameLogiset}, # TODO
     X::Any,
     Y::AbstractVector{<:Label};
     #
@@ -203,7 +201,7 @@ function intrees(
             # Remain in D the rule that not satisfying the best rule'pruning_s condition
             findall(sat_unsat .== false)
         end
-        D = length(idx_remaining) > 0 ? slice_dataset(D,idx_remaining) : nothing
+        D = length(idx_remaining) > 0 ? slicedataset(D,idx_remaining) : nothing
 
         if idx_best == length(S)
             return DecisionList(R[1:end-1],consequent(R[end]))

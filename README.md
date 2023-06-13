@@ -1,4 +1,6 @@
-# *SolePostHoc.jl*
+<div align="center"><a href="https://github.com/aclai-lab/Sole.jl"><img src="logo.png" alt="" title="This package is part of Sole.jl" width="200"></a></div>
+
+# SolePostHoc.jl
 
 <!--
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://aclai-lab.github.io/SolePostHoc.jl/stable)
