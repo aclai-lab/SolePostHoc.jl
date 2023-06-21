@@ -8,7 +8,7 @@ using SoleFeatures: findcorrelation
 using SoleModels
 using SoleModels: AbstractModel
 using SoleModels: Rule, antecedent, consequent, rulemetrics
-using SoleModels: FinalModel, Branch, DecisionForest, DecisionList
+using SoleModels: LeafModel, Branch, DecisionForest, DecisionList
 using SoleModels: listrules, LogicalTruthCondition
 using SoleModels: bestguess, Label, evaluaterule
 using SoleData: slicedataset
