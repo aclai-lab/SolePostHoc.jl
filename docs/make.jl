@@ -5,7 +5,7 @@ DocMeta.setdocmeta!(SolePostHoc, :DocTestSetup, :(using SolePostHoc); recursive=
 
 makedocs(;
     modules=[SolePostHoc],
-    authors="Eduard I. STAN, Giovanni PAGLIARINI",
+    authors="Michele Ghiotti, Giovanni Pagliarini, Eduard I. Stan",
     repo="https://github.com/aclai-lab/SolePostHoc.jl/blob/{commit}{path}#{line}",
     sitename="SolePostHoc.jl",
     format=Documenter.HTML(;
@@ -20,4 +20,7 @@ makedocs(;
 
 deploydocs(;
     repo="github.com/aclai-lab/SolePostHoc.jl",
+    target = "build",
+    branch = "gh-pages",
+    versions = ["main" => "main", "stable" => "v^", "v#.#", "dev" => "dev"],
 )

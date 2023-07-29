@@ -9,7 +9,7 @@ using SoleModels
 using SoleModels: AbstractModel
 using SoleModels: Rule, antecedent, consequent, rulemetrics
 using SoleModels: LeafModel, Branch, DecisionForest, DecisionList
-using SoleModels: listrules, LogicalTruthCondition
+using SoleModels: listrules
 using SoleModels: bestguess, Label, evaluaterule
 using SoleData: slicedataset
 using Statistics: cor
@@ -85,7 +85,7 @@ function intrees(
     [`rulemetrics`](@ref).
     """
     function prune_rule(
-        r::Rule{O,<:LogicalTruthCondition{<:LeftmostConjunctiveForm}} # TODO add TrueCondition and nchildren
+        r::Rule{O,<:LeftmostConjunctiveForm} # TODO add TopFormula? and nchildren
     ) where {O}
         E_zero = rulemetrics(r,X,Y)[:error]
         valid_idxs = collect(1:nconjuncts(r))
