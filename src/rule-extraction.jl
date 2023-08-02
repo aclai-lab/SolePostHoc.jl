@@ -53,7 +53,7 @@ See also
 # Extract rules from a forest, with respect to a dataset
 function intrees(
     model::Union{AbstractModel,DecisionForest},
-    X::Any,
+    X,
     Y::AbstractVector{<:Label};
     #
     prune_rules = true,
@@ -64,7 +64,6 @@ function intrees(
     accuracy_rule_selection = nothing,
     min_frequency = nothing,
 )
-
     isnothing(pruning_s) && !isnothing(pruning_decay_threshold) && (prune_rules = false)
     isnothing(pruning_decay_threshold) && !isnothing(pruning_s) && (prune_rules = false)
     isnothing(pruning_s) && (pruning_s = 1.0e-6)
@@ -201,7 +200,7 @@ function intrees(
             # Remain in D the rule that not satisfying the best rule'pruning_s condition
             findall(sat_unsat .== false)
         end
-        D = length(idx_remaining) > 0 ? slicedataset(D,idx_remaining) : nothing
+        D = length(idx_remaining) > 0 ? slicedataset(D, idx_remaining) : nothing
 
         if idx_best == length(S)
             return DecisionList(R[1:end-1],consequent(R[end]))
