@@ -4,7 +4,10 @@ authors = ["Michele Ghiotti", "Giovanni Pagliarini", "Eduard I. Stan"]
 version = "0.1.0"
 
 [deps]
-Metrics = "cb9f3049-315b-4f05-b90c-a8adaec4da78"
+Clustering = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MultivariateStats = "6f286f6a-111f-5878-ab1e-185364afe411"
+NearestNeighbors = "b8a86587-4115-5ab1-83bc-aa920d37bbce"
 SoleBase = "4475fa32-7023-44a0-aa70-4813b230e492"
 SoleData = "123f1ae1-6307-4526-ab5b-aab3a92a2b8c"
 SoleFeatures = "3ceb4e54-d968-4e97-8c18-2deeb0d429fb"
