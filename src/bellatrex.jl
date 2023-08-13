@@ -4,14 +4,15 @@ using Clustering
 using NearestNeighbors
 using LinearAlgebra: norm
 using Random
+using ModalDecisionTrees: DForest
 
 # hyperparameter: ntrees, nclusters
 
 function concordingtrees(
-    m::Vector{<:DecisionTree},
+    m::Vector{<:Rule},
     X::AbstractLogiset,
     y::Label;
-    ntrees::Union{Nothing,Integer}=nothing,
+    nrules::Union{Nothing,Integer}=nothing,
     kwargs...,
 )
     y_preds = [apply(t,X) for t in m]
@@ -26,14 +27,14 @@ function concordingtrees(
         end
     end
 
-    preselectionidxs = sortperm(treesloss)[1:ntrees]
+    preselectionidxs = sortperm(treesloss)[1:nrules]
 
     #return m[y_preds .== y]
     return (m[preselectionidxs], preselectionidxs)
 end
 
 # To see: tree_splits_to_vector() in Bellatrex/code_scripts/TreeRepresentation_utils.py
-function tree2vector(
+function rule2vector(
     m::DecisionTree
 )
 end
@@ -78,21 +79,33 @@ end
 # Repository web path: https://github.com/Klest94/Bellatrex
 # Bellatrex is a a
 function bellatrex(
-    m::DecisionForest,
+    m::Union{AbstractModel,DecisionForest,DForest},
     X::AbstractLogiset, # testing dataset
     Y::AbstractVector{<:Label};
     rng::AbstractRNG = MersenneTwister(1),
     kwargs...,
 )
+    ########################################################################################
+    # Extract rules from each tree, obtain full ruleset
+    ########################################################################################
+    ruleset = begin
+        if model isa DecisionForest
+            unique([listrules(tree) for tree in trees(model)])
+            # TODO maybe also sort?
+        else
+            listrules(model)
+        end
+    end
+
     # 1) For each instance in X, we would extract the most adaptive rules for it
     for idx in 1:ninstances(X)
 
         # 2) Only trees that correctly predict the considered instance are considered
         ctrees, idxsctrees =
-            concordingtrees(trees(m), slicedataset(X,[idx]; return_view=true), y[idx])
+            concordingtrees(ruleset, slicedataset(X,[idx]; return_view=true), y[idx])
 
         # 3) Representing trees as a vector
-        vtrees = tree2vector.(ctrees)
+        vtrees = rule2vector.(ctrees)
 
         # https://juliastats.org/MultivariateStats.jl/dev/pca/
         # 4) Vector projection (one of them):

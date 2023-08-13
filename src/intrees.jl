@@ -100,10 +100,11 @@ function intrees(
     ########################################################################################
     ruleset = begin
         if model isa DecisionForest
-            unique([listrules(tree) for tree in trees(model)])
+            rs = unique([listrules(tree; use_shortforms=false, use_leftmostlinearform=true) for tree in trees(model)])
             # TODO maybe also sort?
+            rs isa Vector{<:Vector{<:Any}} ? reduce(vcat,rs) : rs
         else
-            listrules(model)
+            listrules(model; use_shortforms=false, use_leftmostlinearform=true)
         end
     end
     ########################################################################################

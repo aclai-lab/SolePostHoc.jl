@@ -10,7 +10,7 @@ using SoleLogics: ⊤, AbstractInterpretationSet, nconjuncts, LeftmostConjunctiv
 
 using SoleModels
 using SoleModels: AbstractModel, AbstractLogiset
-using SoleModels: Rule, antecedent, consequent, rulemetrics
+using SoleModels: Rule, antecedent, consequent, rulemetrics, trees
 using SoleModels: LeafModel, Branch, DecisionForest, DecisionList
 using SoleModels: listrules
 using SoleModels: CLabel, RLabel, Label
