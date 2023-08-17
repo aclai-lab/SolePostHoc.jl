@@ -9,10 +9,10 @@ using ModalDecisionTrees: DForest
 # hyperparameter: ntrees, nclusters
 
 function concordingtrees(
-    m::Vector{<:Rule},
+    m::Vector{<:DecisionTree},
     X::AbstractLogiset,
     y::Label;
-    nrules::Union{Nothing,Integer}=nothing,
+    nrules::Integer=20,
     kwargs...,
 )
     y_preds = [apply(t,X) for t in m]
@@ -20,7 +20,7 @@ function concordingtrees(
     treesloss = begin
         if y isa CLabel
             # Classification problem: find an alternative of euclidean norm
-            y_preds
+            y_preds .== y
         else
             # Regression problem: euclidean norm
             [norm(y-y_preds[k]) for k in eachindex(y_preds)]
@@ -35,26 +35,56 @@ end
 
 # To see: tree_splits_to_vector() in Bellatrex/code_scripts/TreeRepresentation_utils.py
 function rule2vector(
-    m::DecisionTree
-)
+    m::Rule{O,<:LeftmostConjunctiveForm},
+    X::AbstractLogiset;
+    maxconjuncts,
+    kwargs...,
+) where {O}
+    infos = info(m)
+    sumweighted = 0
+    cons = consequent(m)
+    nodes = conjuncts(m)
+    nnodes = nconjuncts(m)
+    totinstances = ninstances(X)
+    fallinstances = collect(1:totinstances)
+
+    transvector = Vector{AbstractFloat}(undef,maxconjuncts)
+    for inode in 1:nnodes
+        rnode = inode == 1 ?
+                    Rule(nodes[inode],cons,infos) :
+                    Rule(LeftmostConjunctiveForm(nodes[1:inode]),cons,infos)
+
+        truthvalues = antecedenttops(rnode,slicedataset(X,fallinstances; return_view=true))
+        idxstrues = findall(truthvalues .== true)
+
+        setdiff!(fallinstances,idxstrues)
+        sumweighted += (length(idxstrues)/totinstances)
+        transvector[inode] = sumweighted * inode
+    end
+    transvector[
+        filter(idx-> isassigned(transvector,idx) == false,1:length(transvector))
+    ] .= 0
+
+    return transvector
 end
 
 function projectionvectors(
-    matrixtrees::Array{Number, 2};
+    matrixrules::Array{<:Number, 2},
+    X::AbstractLogiset,
+    Y::AbstractVector{<:Label};
     projection_method::Symbol = :MDS,
     kwargs...,
 )
-    Xtrees = hcat(vtrees...)
-    maxoutdim = min(size(Xtrees)...)
+    maxoutdim = min(size(matrixrules)...,length(unique(Y)))
 
     space = begin
         if projection_method == :MDS
             # Xtr is adjoint training dataset because each column is an observation
             # Maybe maxoutdims is the number of classes in Y
-            M = fit(PCA, Xtrees; maxoutdim=maxoutdim)
+            M = fit(PCA, matrixrules; maxoutdim=maxoutdim)
             predict(M, X)
         elseif projection_method == :PCA
-            M = fit(MDS, Xtrees; maxoutdim=maxoutdim, distances=false)
+            M = fit(MDS, matrixrules; maxoutdim=maxoutdim, distances=false)
             predict(M)
         else
             error("$(projection_method) is not in possible methods")
@@ -65,7 +95,7 @@ function projectionvectors(
 end
 
 function clusteringvectors(
-    matrixtrees::Array{Number, 2};
+    matrixtrees::Array{<:Number, 2};
     rng::AbstractRNG = MersenneTwister(1),
     nclusters::Integer = 2,
     kwargs...,
@@ -88,10 +118,10 @@ function bellatrex(
     ########################################################################################
     # Extract rules from each tree, obtain full ruleset
     ########################################################################################
+    ftrees = trees(m)
     ruleset = begin
-        if model isa DecisionForest
-            unique([listrules(tree) for tree in trees(model)])
-            # TODO maybe also sort?
+        if m isa DecisionForest
+            unique([listrules(tree; use_shortforms=false, use_leftmostlinearform=true) for tree in ftrees])
         else
             listrules(model)
         end
@@ -100,30 +130,42 @@ function bellatrex(
     # 1) For each instance in X, we would extract the most adaptive rules for it
     for idx in 1:ninstances(X)
 
+        println("Concording phase")
         # 2) Only trees that correctly predict the considered instance are considered
         ctrees, idxsctrees =
-            concordingtrees(ruleset, slicedataset(X,[idx]; return_view=true), y[idx])
+            concordingtrees(ftrees, slicedataset(X,[idx]; return_view=true), Y[idx])
 
+        # Translate trees into rules
+        rtrees = begin
+            rs = ruleset[idxsctrees]
+            rs isa Vector{<:Vector{<:Any}} ? reduce(vcat,rs) : rs
+        end
+
+        println("Rule to vector phase")
         # 3) Representing trees as a vector
-        vtrees = rule2vector.(ctrees)
+        maxconjuncts = max(nconjuncts.(rtrees)...)
+        vrules = [rule2vector(t,X; maxconjuncts=maxconjuncts) for t in rtrees]
 
         # https://juliastats.org/MultivariateStats.jl/dev/pca/
         # 4) Vector projection (one of them):
         #     - Principal Component Analysis (PCA)
         #     - Multidimensional Scaling (MDS)
-        ptrees = projectionvectors(vtrees; kwargs...)
+        println("Projection phase")
+        prules = projectionvectors(hcat(vrules...),X,Y; kwargs...)
 
         # https://juliastats.org/Clustering.jl/dev/kmeans.html
         # 5) Clustering using k-means++ method
-        ktrees = clusteringvectors(ptrees; rng=rng, kwargs...)
+        println("Clustering phase")
+        krules = clusteringvectors(prules; rng=rng, kwargs...)
 
         # 6) Surrogate model: combination between rules and instance
         # KDTree construction: https://github.com/KristofferC/NearestNeighbors.jl
-        kdtrees = KDTree(ptrees, Minkowski(3.5); leafsize = 40)
-        knn_idxs, _ = knn(kdtrees, ktrees, 1, sortres = true)
-        flatten_knn_idxs = vcat(knn_idxs)
-        final_trees_idx = [idxsctrees[k] for k in flatten_knn_idxs]
+        println("Final phase")
+        kdrules = KDTree(prules, Minkowski(3.5); leafsize = 40)
+        knn_idxs, _ = knn(kdrules, krules, 1, sortres = true)
+        final_rules_idx = vcat(knn_idxs)
 
         # https://github.com/Klest94/Bellatrex/blob/main/code_scripts/LocalMethod_class.py row 241
+        @show final_rules_idx
     end
 end

@@ -112,17 +112,28 @@ function intrees(
     ########################################################################################
     # Prune rules with respect to a dataset
     ########################################################################################
-    if prune_rules
-        ruleset = prune_rule.(ruleset)
+    ruleset = begin
+        if prune_rules
+            println("Pruning phase...")
+            afterpruningruleset = Vector{Rule}(undef, length(ruleset))
+            Threads.@threads for (i,r) in collect(enumerate(ruleset))
+                afterpruningruleset[i] = prune_rule(r)
+            end
+            #ruleset = @time prune_rule.(ruleset)
+            afterpruningruleset
+        else
+            ruleset
+        end
     end
 
     ########################################################################################
     # Rule selection to obtain the best rules
     ########################################################################################
     best_rules = begin
+        println("Selection phase in...")
         if method_rule_selection == :CBC
             M = hcat([evaluaterule(rule, X, Y)[:antsat] for rule in ruleset]...)
-            best_idxs = findcorrelation(cor(M), threshold = accuracy_rule_selection)
+            best_idxs = @time findcorrelation(cor(M), threshold = accuracy_rule_selection)
             ruleset[best_idxs]
         else
             error("Unexpected method specified: $(method)")
@@ -133,6 +144,7 @@ function intrees(
     ########################################################################################
     # Construct a rule-based model from the set of best rules
     ########################################################################################
+    println("STEL phase, end soon")
 
     D = deepcopy(X) # Copy of the original dataset
     R = Rule[]      # Ordered rule list
