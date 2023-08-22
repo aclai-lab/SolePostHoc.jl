@@ -70,14 +70,15 @@ function intrees(
     function prune_rule(
         r::Rule{O,<:LeftmostConjunctiveForm} # TODO add TopFormula? and nchildren
     ) where {O}
+        nruleconjuncts = nconjuncts(r)
         E_zero = rulemetrics(r,X,Y)[:error]
-        valid_idxs = collect(1:nconjuncts(r))
+        valid_idxs = collect(1:nruleconjuncts)
 
         for idx in reverse(valid_idxs)
             (length(valid_idxs) < 2) && break
 
             # Indices to be considered to evaluate the rule
-            other_idxs = intersect!(vcat(1:(idx-1),(idx+1):nconjuncts(r)),valid_idxs)
+            other_idxs = intersect!(vcat(1:(idx-1),(idx+1):nruleconjuncts),valid_idxs)
             rule = r[other_idxs]
 
             # Return error of the rule without idx-th pair
@@ -95,16 +96,30 @@ function intrees(
         return r[valid_idxs]
     end
 
+    function prune_rule(
+        r::Rule{O,<:MultiFormula}
+    ) where {O}
+        children = [
+            MultiFormula(i_modality,modant)
+            for (i_modality,modant) in modforms(antecedent(r))
+        ]
+
+        return length(children) < 2 ?
+            r :
+            prune_rule(Rule(LeftmostConjunctiveForm(children),consequent(r),info(r)))
+    end
+
     ########################################################################################
     # Extract rules from each tree, obtain full ruleset
     ########################################################################################
-    ruleset = begin
+    println("Rule extraction in...")
+    ruleset = @time begin
         if model isa DecisionForest
-            rs = unique([listrules(tree; use_shortforms=false, use_leftmostlinearform=true) for tree in trees(model)])
+            rs = unique([listrules(tree; use_shortforms=true) for tree in trees(model)])
             # TODO maybe also sort?
             rs isa Vector{<:Vector{<:Any}} ? reduce(vcat,rs) : rs
         else
-            listrules(model; use_shortforms=false, use_leftmostlinearform=true)
+            listrules(model; use_shortforms=true)
         end
     end
     ########################################################################################
@@ -112,9 +127,9 @@ function intrees(
     ########################################################################################
     # Prune rules with respect to a dataset
     ########################################################################################
-    ruleset = begin
+    prune_rules ? (println("Pruning phase in...")) : (println("Skipped pruning in..."))
+    ruleset = @time begin
         if prune_rules
-            println("Pruning phase...")
             afterpruningruleset = Vector{Rule}(undef, length(ruleset))
             Threads.@threads for (i,r) in collect(enumerate(ruleset))
                 afterpruningruleset[i] = prune_rule(r)
@@ -129,11 +144,11 @@ function intrees(
     ########################################################################################
     # Rule selection to obtain the best rules
     ########################################################################################
-    best_rules = begin
-        println("Selection phase in...")
+    println("Selection phase with $(method_rule_selection) in...")
+    best_rules = @time begin
         if method_rule_selection == :CBC
             M = hcat([evaluaterule(rule, X, Y)[:antsat] for rule in ruleset]...)
-            best_idxs = @time findcorrelation(cor(M), threshold = accuracy_rule_selection)
+            best_idxs = findcorrelation(cor(M), threshold = accuracy_rule_selection)
             ruleset[best_idxs]
         else
             error("Unexpected method specified: $(method)")
@@ -144,11 +159,12 @@ function intrees(
     ########################################################################################
     # Construct a rule-based model from the set of best rules
     ########################################################################################
-    println("STEL phase, end soon")
+    println("STEL phase starting, end soon")
 
     D = deepcopy(X) # Copy of the original dataset
     R = Rule[]      # Ordered rule list
-    S = [deepcopy(best_rules)..., Rule(bestguess(Y))] # Vector of rules left
+    # S is the vector of rules left
+    S = [deepcopy(best_rules)..., Rule(bestguess(Y; suppress_parity_warning = true))]
 
     # Rules with a frequency less than min_frequency
     S = begin
@@ -197,18 +213,19 @@ function intrees(
             # Remain in D the rule that not satisfying the best rule'pruning_s condition
             findall(sat_unsat .== false)
         end
-        D = length(idx_remaining) > 0 ? slicedataset(D, idx_remaining) : nothing
+        D = length(idx_remaining) > 0 ?
+                slicedataset(D, idx_remaining; return_view=true) : nothing
 
         if idx_best == length(S)
             return DecisionList(R[1:end-1],consequent(R[end]))
         elseif isnothing(D) || ninstances(D) == 0
-            return DecisionList(R,bestguess(Y))
+            return DecisionList(R,bestguess(Y; suppress_parity_warning = true))
         end
 
         # Delete the best rule from S
         deleteat!(S,idx_best)
         # Update of the default rule
-        S[end] = Rule(bestguess(Y[idx_remaining]))
+        S[end] = Rule(bestguess(Y[idx_remaining]; suppress_parity_warning = true))
     end
 
     return error("Unexpected error in intrees!")

@@ -8,11 +8,88 @@ using ModalDecisionTrees: DForest
 
 # hyperparameter: ntrees, nclusters
 
+# Repository web path: https://github.com/Klest94/Bellatrex
+# Bellatrex is a a
+function bellatrex(
+    m::Union{AbstractModel,DecisionForest,DForest},
+    X::AbstractLogiset, # testing dataset
+    Y::AbstractVector{<:Label};
+    rng::AbstractRNG = MersenneTwister(1),
+    kwargs...,
+)
+    ########################################################################################
+    # Extract rules from each tree, obtain full ruleset
+    ########################################################################################
+    ftrees = trees(m)
+    ndatasetinstances = ninstances(X)
+    ruleset = begin
+        if m isa DecisionForest
+            unique([listrules(tree; use_shortforms=true)for tree in ftrees])
+        else
+            listrules(model)
+        end
+    end
+
+    # 1) For each instance in X, we would extract the most adaptive rules for it
+    for idx in 1:ndatasetinstances
+
+        println("Running instances $(idx)/$(ndatasetinstances)")
+        currentinstance = slicedataset(X,[idx]; return_view=true)
+
+        # 2) Only trees that correctly predict the considered instance are considered
+        println("Concording phase in...")
+        ctrees, idxsctrees = @time
+            concordingtrees(ftrees, currentinstance, Y[idx])
+
+        # 3) Representing rules as a vector
+        println("Rule to vector phase in...")
+        vrules = @time begin
+            rtrees = begin
+                rs = ruleset[idxsctrees]
+                rs = rs isa Vector{<:Vector{<:Any}} ? reduce(vcat,rs) : rs
+                rs[antecedenttops(antnode,currentinstance)]
+            end
+
+            [rule2vector(t,X) for t in rtrees]
+        end
+
+        # https://juliastats.org/MultivariateStats.jl/dev/pca/
+        # 4) Vector projection (one of them):
+        #     - Principal Component Analysis (PCA)
+        #     - Multidimensional Scaling (MDS)
+        println("Projection phase in...")
+        prules = @time projectionvectors(hcat(vrules...),X,Y; kwargs...)
+
+        # https://juliastats.org/Clustering.jl/dev/kmeans.html
+        # 5) Clustering using k-means++ method
+        println("Clustering phase in...")
+        krules, cluster_sizes = @time clusteringvectors(prules; rng=rng, kwargs...)
+
+        # 6) Surrogate model: combination between rules and instance
+        # KDTree construction: https://github.com/KristofferC/NearestNeighbors.jl
+        println("Final phase: k-nearest neighbors in...")
+        final_rules_idx = @time begin
+            kdrules = KDTree(prules, Minkowski(3.5); leafsize = 40)
+            knn_idxs, _ = knn(kdrules, krules, 1, sortres = true)
+
+            vcat(knn_idxs)
+        end
+
+        # https://github.com/Klest94/Bellatrex/blob/main/code_scripts/LocalMethod_class.py row 241
+        final_trees_idx = [idxsctrees[k] for k in final_rules_idx]
+        #localprediction(final_rules_idx,cluster_sizes)
+    end
+end
+
+############################################################################################
+########################### Supporting functions of BELLATREX ##############################
+############################################################################################
+
 function concordingtrees(
     m::Vector{<:DecisionTree},
     X::AbstractLogiset,
     y::Label;
-    nrules::Integer=20,
+    ntrees::Integer=20,
     kwargs...,
 )
     y_preds = [apply(t,X) for t in m]
@@ -27,46 +104,65 @@ function concordingtrees(
         end
     end
 
-    preselectionidxs = sortperm(treesloss)[1:nrules]
+    preselectionidxs = sortperm(treesloss)[1:ntrees]
 
     #return m[y_preds .== y]
     return (m[preselectionidxs], preselectionidxs)
 end
 
-# To see: tree_splits_to_vector() in Bellatrex/code_scripts/TreeRepresentation_utils.py
-function rule2vector(
-    m::Rule{O,<:LeftmostConjunctiveForm},
-    X::AbstractLogiset;
-    maxconjuncts,
-    kwargs...,
-) where {O}
-    infos = info(m)
-    sumweighted = 0
-    cons = consequent(m)
-    nodes = conjuncts(m)
-    nnodes = nconjuncts(m)
-    totinstances = ninstances(X)
-    fallinstances = collect(1:totinstances)
+                    #############################################
+                    #############################################
 
-    transvector = Vector{AbstractFloat}(undef,maxconjuncts)
-    for inode in 1:nnodes
-        rnode = inode == 1 ?
-                    Rule(nodes[inode],cons,infos) :
-                    Rule(LeftmostConjunctiveForm(nodes[1:inode]),cons,infos)
+# Features extraction: returns all the features in the SyntaxTree
+featuresextract(m::MultiFormula) =
+    reduce(vcat,[featuresextract(modant) for (_,modant) in modforms(m)])
+featuresextract(m::SyntaxTree) = i_variable.(feature.(atom.(propositions(m))))
 
-        truthvalues = antecedenttops(rnode,slicedataset(X,fallinstances; return_view=true))
-        idxstrues = findall(truthvalues .== true)
+function rule2vector(m::Rule,X::AbstractLogiset)
+    rulevector = zeros(nfeatures(X))
+    datanextnodes = rule2vector(antecedent(m),X)
 
-        setdiff!(fallinstances,idxstrues)
-        sumweighted += (length(idxstrues)/totinstances)
-        transvector[inode] = sumweighted * inode
-    end
-    transvector[
-        filter(idx-> isassigned(transvector,idx) == false,1:length(transvector))
-    ] .= 0
+    icovariate = countmap(
+                    datanextnodes[:featuresnodes],
+                    datanextnodes[:nfallinstances]/ninstances(X)
+                )
 
-    return transvector
+    return rulevector[1:length(icovariate)] += icovariate
 end
+
+function rule2vector(
+    m::M,
+    X::AbstractLogiset,
+) where {M<:Union{MultiFormula,LeftmostConjunctiveForm}}
+    featuresnodes = []
+    nfallinstances = []
+    idxsremaininstances = collect(1:ninstances(X))
+
+    conjs = begin
+        if m isa MultiFormula
+            [modant for (_,modant) in modforms(m)]
+        elseif m isa LeftmostConjunctiveForm
+            children(m)
+        end
+    end
+
+    for conj in conjs
+        truthvalues = antecedenttops(conj,X)
+
+        # features and ninstances fall in the current node
+        push!(featuresnodes,featuresextract(conj))
+        idxsfallinstances = intersect(findall(truthvalues .== true),idxsremaininstances)
+        push!(nfallinstances,length(idxsfallinstances))
+
+        # updating remain instances
+        idxsremaininstances = idxsfallinstances
+    end
+
+    return (; featuresnodes=featuresnodes, nfallinstances=nfallinstances)
+end
+
+                    #############################################
+                    #############################################
 
 function projectionvectors(
     matrixrules::Array{<:Number, 2},
@@ -75,17 +171,17 @@ function projectionvectors(
     projection_method::Symbol = :MDS,
     kwargs...,
 )
-    maxoutdim = min(size(matrixrules)...,length(unique(Y)))
+    maxoutdim = min(size(matrixrules)...)
 
     space = begin
         if projection_method == :MDS
+            M = fit(MDS, matrixrules; maxoutdim=maxoutdim, distances=false)
+            predict(M)
+        elseif projection_method == :PCA
             # Xtr is adjoint training dataset because each column is an observation
             # Maybe maxoutdims is the number of classes in Y
             M = fit(PCA, matrixrules; maxoutdim=maxoutdim)
             predict(M, X)
-        elseif projection_method == :PCA
-            M = fit(MDS, matrixrules; maxoutdim=maxoutdim, distances=false)
-            predict(M)
         else
             error("$(projection_method) is not in possible methods")
         end
@@ -93,6 +189,9 @@ function projectionvectors(
 
     return space
 end
+
+                    #############################################
+                    #############################################
 
 function clusteringvectors(
     matrixtrees::Array{<:Number, 2};
@@ -103,69 +202,19 @@ function clusteringvectors(
     R = kmeans(matrixtrees, nclusters; maxiter=5000, display=:iter, rng=rng)
 
     # .centers gets the cluster centers
-    return R.centers
+    return R.centers, counts(R)
 end
 
-# Repository web path: https://github.com/Klest94/Bellatrex
-# Bellatrex is a a
-function bellatrex(
-    m::Union{AbstractModel,DecisionForest,DForest},
-    X::AbstractLogiset, # testing dataset
-    Y::AbstractVector{<:Label};
-    rng::AbstractRNG = MersenneTwister(1),
-    kwargs...,
+                    #############################################
+                    #############################################
+#=
+function localprediction(
+    final_trees_idx::Vector{Integer},
+    cluster_sizes::Vector{Integer},
 )
-    ########################################################################################
-    # Extract rules from each tree, obtain full ruleset
-    ########################################################################################
-    ftrees = trees(m)
-    ruleset = begin
-        if m isa DecisionForest
-            unique([listrules(tree; use_shortforms=false, use_leftmostlinearform=true) for tree in ftrees])
-        else
-            listrules(model)
-        end
-    end
+    @assert length(final_trees_idx) == length(cluster_sizes) "$(final_trees_idx) !=" *
+        " $(cluster_sizes)"
 
-    # 1) For each instance in X, we would extract the most adaptive rules for it
-    for idx in 1:ninstances(X)
-
-        println("Concording phase")
-        # 2) Only trees that correctly predict the considered instance are considered
-        ctrees, idxsctrees =
-            concordingtrees(ftrees, slicedataset(X,[idx]; return_view=true), Y[idx])
-
-        # Translate trees into rules
-        rtrees = begin
-            rs = ruleset[idxsctrees]
-            rs isa Vector{<:Vector{<:Any}} ? reduce(vcat,rs) : rs
-        end
-
-        println("Rule to vector phase")
-        # 3) Representing trees as a vector
-        maxconjuncts = max(nconjuncts.(rtrees)...)
-        vrules = [rule2vector(t,X; maxconjuncts=maxconjuncts) for t in rtrees]
-
-        # https://juliastats.org/MultivariateStats.jl/dev/pca/
-        # 4) Vector projection (one of them):
-        #     - Principal Component Analysis (PCA)
-        #     - Multidimensional Scaling (MDS)
-        println("Projection phase")
-        prules = projectionvectors(hcat(vrules...),X,Y; kwargs...)
-
-        # https://juliastats.org/Clustering.jl/dev/kmeans.html
-        # 5) Clustering using k-means++ method
-        println("Clustering phase")
-        krules = clusteringvectors(prules; rng=rng, kwargs...)
-
-        # 6) Surrogate model: combination between rules and instance
-        # KDTree construction: https://github.com/KristofferC/NearestNeighbors.jl
-        println("Final phase")
-        kdrules = KDTree(prules, Minkowski(3.5); leafsize = 40)
-        knn_idxs, _ = knn(kdrules, krules, 1, sortres = true)
-        final_rules_idx = vcat(knn_idxs)
-
-        # https://github.com/Klest94/Bellatrex/blob/main/code_scripts/LocalMethod_class.py row 241
-        @show final_rules_idx
-    end
+    bestguess
 end
+=#
