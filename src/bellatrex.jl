@@ -24,7 +24,7 @@ function bellatrex(
     ndatasetinstances = ninstances(X)
     ruleset = begin
         if m isa DecisionForest
-            unique([listrules(tree; use_shortforms=true)for tree in ftrees])
+            unique([listrules(tree; use_shortforms=true) for tree in ftrees])
         else
             listrules(model)
         end
@@ -38,8 +38,7 @@ function bellatrex(
 
         # 2) Only trees that correctly predict the considered instance are considered
         println("Concording phase in...")
-        ctrees, idxsctrees = @time
-            concordingtrees(ftrees, currentinstance, Y[idx])
+        ctrees, idxsctrees = @time concordingtrees(ftrees, currentinstance, Y[idx])
 
         # 3) Representing rules as a vector
         println("Rule to vector phase in...")

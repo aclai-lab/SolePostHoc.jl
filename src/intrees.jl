@@ -47,6 +47,9 @@ function intrees(
     method_rule_selection = :CBC,
     accuracy_rule_selection = nothing,
     min_frequency = nothing,
+    #
+    rng::AbstractRNG = MersenneTwister(1),
+    kwargs...,
 )
     isnothing(pruning_s) && !isnothing(pruning_decay_threshold) && (prune_rules = false)
     isnothing(pruning_decay_threshold) && !isnothing(pruning_s) && (prune_rules = false)
@@ -141,13 +144,21 @@ function intrees(
         end
     end
 
+    println("# Rules to checking: $(length(ruleset))")
+
     ########################################################################################
     # Rule selection to obtain the best rules
     ########################################################################################
     println("Selection phase with $(method_rule_selection) in...")
     best_rules = @time begin
         if method_rule_selection == :CBC
-            M = hcat([evaluaterule(rule, X, Y)[:antsat] for rule in ruleset]...)
+            afterselectionruleset = Vector{BitVector}(undef, length(ruleset))
+            Threads.@threads for (i,rule) in collect(enumerate(ruleset))
+                afterselectionruleset[i] = evaluaterule(rule, X, Y)[:antsat]
+            end
+
+            #M = hcat([evaluaterule(rule, X, Y)[:antsat] for rule in ruleset]...)
+            M = hcat(afterselectionruleset...)
             best_idxs = findcorrelation(cor(M), threshold = accuracy_rule_selection)
             ruleset[best_idxs]
         else
@@ -156,30 +167,54 @@ function intrees(
     end
     ########################################################################################
 
+    println("# Rules to checking: $(length(best_rules))")
     ########################################################################################
     # Construct a rule-based model from the set of best rules
     ########################################################################################
     println("STEL phase starting, end soon")
 
     D = deepcopy(X) # Copy of the original dataset
+    L = deepcopy(Y)
     R = Rule[]      # Ordered rule list
     # S is the vector of rules left
     S = [deepcopy(best_rules)..., Rule(bestguess(Y; suppress_parity_warning = true))]
 
     # Rules with a frequency less than min_frequency
     S = begin
-        rules_support = [rulemetrics(s,X,Y)[:support] for s in S]
+        rules_support = Vector{AbstractFloat}(undef,length(S))
+        Threads.@threads for (i,s) in collect(enumerate(S))
+            rules_support[i] = rulemetrics(s,X,Y)[:support]
+        end
+
         idxs_undeleted = findall(rules_support .>= min_frequency)
         S[idxs_undeleted]
     end
 
+    println("# rules in S: $(length(S))")
+    println("# rules in R: $(length(R))")
+
     while true
         # Metrics update based on remaining instances
-        metrics = [rulemetrics(s,D,Y) for s in S]
-        println(metrics[1])
-        rules_support = [metrics[i][:support] for i in eachindex(metrics)]
-        rules_error = [metrics[i][:error] for i in eachindex(metrics)]
-        rules_length = [metrics[i][:length] for i in eachindex(metrics)]
+        rules_support = Vector{AbstractFloat}(undef,length(S))
+        rules_error = Vector{AbstractFloat}(undef,length(S))
+        rules_length = Vector{Integer}(undef,length(S))
+
+        Threads.@threads for (i,s) in collect(enumerate(S))
+            metrics = rulemetrics(s,D,L)
+            rules_support[i] = metrics[:support]
+            rules_error[i] = metrics[:error]
+            rules_length[i] = metrics[:length]
+        end
+
+        println("Rules error:")
+        println(rules_error)
+        println("Minimo: $(min(rules_error...))")
+
+        #metrics = [rulemetrics(s,D,Y) for s in S]
+        #println(metrics[1])
+        #rules_support = [metrics[i][:support] for i in eachindex(metrics)]
+        #rules_error = [metrics[i][:error] for i in eachindex(metrics)]
+        #rules_length = [metrics[i][:length] for i in eachindex(metrics)]
 
         # Best rule index
         idx_best = begin
@@ -187,34 +222,45 @@ function intrees(
             # First: find the rule with minimum error
             idx = findall(rules_error .== min(rules_error...))
             (length(idx) == 1) && (idx_best = idx)
+            println("Idxs min error: $(idx)")
 
             # If not one, find the rule with maximum frequency
-            idx_support = findall(rules_support .== max(rules_support[idx]...))
-            (length(intersect!(idx, idx_support)) == 1) && (idx_best = idx)
+            if isnothing(idx_best)
+                idx_support = findall(rules_support .== max(rules_support[idx]...))
+                (length(intersect!(idx, idx_support)) == 1) && (idx_best = idx)
+            end
+            println("Idxs min support: $(idx)")
 
             # If not one, find the rule with minimum length
-            idx_length = findall(rules_length .== min(rules_length[idx]...))
-            (length(intersect!(idx, idx_length)) == 1) && (idx_best = idx)
+            if isnothing(idx_best)
+                idx_length = findall(rules_length .== min(rules_length[idx]...))
+                (length(intersect!(idx, idx_length)) == 1) && (idx_best = idx)
+            end
+            println("Idxs min length: $(idx)")
 
             # Final case: more than one rule with minimum length
             # Randomly choose a rule
-            isnothing(idx_best) && (idx_best = rand(idx))
+            isnothing(idx_best) && (idx_best = rand(rng,idx))
 
             length(idx_best) > 1 && error("More than one best indexes")
+            println("Idx best: $(idx_best)")
             idx_best[1]
         end
+        println("Idx best: $(idx_best)")
 
         # Add at the end the best rule
         push!(R, S[idx_best])
+        println("# rules in R: $(length(R))")
 
         # Indices of the remaining instances
         idx_remaining = begin
-            sat_unsat = evaluaterule(S[idx_best], D, Y)[:antsat]
+            sat_unsat = evaluaterule(S[idx_best], D, L)[:antsat]
             # Remain in D the rule that not satisfying the best rule'pruning_s condition
             findall(sat_unsat .== false)
         end
         D = length(idx_remaining) > 0 ?
                 slicedataset(D, idx_remaining; return_view=true) : nothing
+        L = L[idx_remaining]
 
         if idx_best == length(S)
             return DecisionList(R[1:end-1],consequent(R[end]))
@@ -225,7 +271,7 @@ function intrees(
         # Delete the best rule from S
         deleteat!(S,idx_best)
         # Update of the default rule
-        S[end] = Rule(bestguess(Y[idx_remaining]; suppress_parity_warning = true))
+        S[end] = Rule(bestguess(L; suppress_parity_warning = true))
     end
 
     return error("Unexpected error in intrees!")

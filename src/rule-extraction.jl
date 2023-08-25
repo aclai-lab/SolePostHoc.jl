@@ -3,6 +3,7 @@ module RuleExtraction
 using SoleBase
 using Test
 using ThreadsX
+using Random
 
 using SoleData
 using SoleData: slicedataset
