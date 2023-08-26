@@ -22,6 +22,7 @@ function bellatrex(
     ########################################################################################
     ftrees = trees(m)
     ndatasetinstances = ninstances(X)
+    final_predictions = []
     ruleset = begin
         if m isa DecisionForest
             unique([listrules(tree; use_shortforms=true) for tree in ftrees])
@@ -42,14 +43,14 @@ function bellatrex(
 
         # 3) Representing rules as a vector
         println("Rule to vector phase in...")
-        vrules = @time begin
+        rtrees, vrules = @time begin
             rtrees = begin
                 rs = ruleset[idxsctrees]
                 rs = rs isa Vector{<:Vector{<:Any}} ? reduce(vcat,rs) : rs
-                rs[antecedenttops(antnode,currentinstance)]
+                filter(r -> first(antecedenttops(r,currentinstance)) == true, rs)
             end
 
-            [rule2vector(t,X) for t in rtrees]
+            (rtrees,[rule2vector(t,X) for t in rtrees])
         end
 
         # https://juliastats.org/MultivariateStats.jl/dev/pca/
@@ -69,15 +70,23 @@ function bellatrex(
         println("Final phase: k-nearest neighbors in...")
         final_rules_idx = @time begin
             kdrules = KDTree(prules, Minkowski(3.5); leafsize = 40)
-            knn_idxs, _ = knn(kdrules, krules, 1, sortres = true)
+            knn_idxs, _ = knn(kdrules, krules, 1, true)
 
             vcat(knn_idxs)
         end
 
         # https://github.com/Klest94/Bellatrex/blob/main/code_scripts/LocalMethod_class.py row 241
-        final_trees_idx = [idxsctrees[k] for k in final_rules_idx]
+        #final_trees_idx = [idxsctrees[k] for k in final_rules_idx]
         #localprediction(final_rules_idx,cluster_sizes)
+        local_predictions = [first(apply(r,currentinstance)) for r in rtrees[reduce(vcat,final_rules_idx)]]
+        final_prediction = bestguess(local_predictions,cluster_sizes; suppress_parity_warning=true)
+        push!(final_predictions,final_prediction)
+
+        @show rtrees[reduce(vcat,final_rules_idx)]
+        @show final_prediction
     end
+
+    return final_predictions
 end
 
 ############################################################################################
@@ -126,7 +135,7 @@ function rule2vector(m::Rule,X::AbstractLogiset)
                     datanextnodes[:nfallinstances]/ninstances(X)
                 )
 
-    return rulevector[1:length(icovariate)] += icovariate
+    return rulevector[1:length(icovariate)] .+= values(icovariate)
 end
 
 function rule2vector(
@@ -146,7 +155,7 @@ function rule2vector(
     end
 
     for conj in conjs
-        truthvalues = antecedenttops(conj,X)
+        truthvalues = check(conj,X)
 
         # features and ninstances fall in the current node
         push!(featuresnodes,featuresextract(conj))

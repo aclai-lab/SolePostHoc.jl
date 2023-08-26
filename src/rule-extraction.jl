@@ -4,6 +4,7 @@ using SoleBase
 using Test
 using ThreadsX
 using Random
+using StatsBase
 
 using SoleData
 using SoleData: slicedataset
@@ -15,6 +16,7 @@ using SoleLogics: conjuncts, nconjuncts
 using SoleModels
 using SoleModels: AbstractModel, AbstractLogiset
 using SoleModels: Rule, antecedent, consequent, rulemetrics, trees, info
+using SoleModels: feature, i_variable
 using SoleModels: LeafModel, Branch, DecisionForest, DecisionList
 using SoleModels: listrules, antecedenttops
 using SoleModels: CLabel, RLabel, Label
