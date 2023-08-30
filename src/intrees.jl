@@ -1,3 +1,5 @@
+using ComplexityMeasures
+
 ############################################################################################
 # Rule extraction from random forest
 ############################################################################################
@@ -112,6 +114,80 @@ function intrees(
             prune_rule(Rule(LeftmostConjunctiveForm(children),consequent(r),info(r)))
     end
 
+    """
+        cfs()
+
+    Prunes redundant or irrelevant conjuncts of the antecedent of the input rule cascade
+    considering the error metric
+
+    See also
+    [`Rule`](@ref),
+    [`rulemetrics`](@ref).
+    """
+    function cfs(
+        X,
+        Y::Vector{<:Label},
+    )
+        entropyd(x) = ComplexityMeasures.entropy(probabilities(x))
+        midd(x, y) = -entropyd(collect(zip(x, y)))+entropyd(x)+entropyd(y)
+        information_gain(f1, f2) = entropyd(f1) - (entropyd(f1) - midd(f1, f2))
+        su(f1, f2) = (2.0 * information_gain(f1, f2) / (entropyd(f1) + entropyd(f2)))
+        function merit_calculation(X, Y::Vector{<:Label})
+            n_samples, n_features = size(X)
+            rff = 0
+            rcf = 0
+
+            for i in collect(1:n_features)
+                fi = X[:, i]
+                rcf += su(fi, Y)  # su is the symmetrical uncertainty of fi and y
+                for j in collect(1:n_features)
+                    if j > i
+                        fj = X[:, j]
+                        rff += su(fi, fj)
+                    end
+                end
+            end
+
+            rff *= 2
+            merits = rcf / sqrt(n_features + rff)
+        end
+
+        n_samples, n_features = size(X)
+        F = [] # vector of returned indices samples
+        M = [] # vector which stores the merit values
+
+        while true
+            merit = -100000000000
+            idx = -1
+
+            for i in collect(1:n_features)
+                if i ∉ F
+                    append!(F,i)
+                    idxs_column = F[findall(F .> 0)]
+                    t = merit_calculation(X[:,idxs_column],Y)
+
+                    if t > merit
+                        merit = t
+                        idx = i
+                    end
+
+                    pop!(F)
+                end
+            end
+
+            append!(F,idx)
+            append!(M,merit)
+
+            (length(M) > 5) &&
+                (M[length(M)] <= M[length(M)-1]) &&
+                    (M[length(M)-1] <= M[length(M)-2]) &&
+                        (M[length(M)-2] <= M[length(M)-3]) &&
+                            (M[length(M)-3] <= M[length(M)-4]) && break
+        end
+
+        return F
+    end
+
     ########################################################################################
     # Extract rules from each tree, obtain full ruleset
     ########################################################################################
@@ -159,8 +235,12 @@ function intrees(
 
             #M = hcat([evaluaterule(rule, X, Y)[:antsat] for rule in ruleset]...)
             M = hcat(afterselectionruleset...)
-            best_idxs = findcorrelation(cor(M), threshold = accuracy_rule_selection)
-            ruleset[best_idxs]
+            #best_idxs = findcorrelation(cor(M); threshold = accuracy_rule_selection)
+            best_idxs = cfs(M,Y)
+            valid_idxs = findall(best_idxs .> 0)
+            @show best_idxs
+            @show valid_idxs
+            ruleset[best_idxs[valid_idxs]]
         else
             error("Unexpected method specified: $(method)")
         end
