@@ -1,4 +1,5 @@
 using ComplexityMeasures
+using DecisionTree
 
 ############################################################################################
 # Rule extraction from random forest
@@ -91,7 +92,7 @@ function intrees(
 
             decay_i = (E_minus_i - E_zero) / max(E_zero, pruning_s)
 
-            if decay_i < pruning_decay_threshold
+            if decay_i <= pruning_decay_threshold
                 # Remove the idx-th pair in the vector of decisions
                 deleteat!(valid_idxs, idx)
                 E_zero = E_minus_i
@@ -185,7 +186,34 @@ function intrees(
                             (M[length(M)-3] <= M[length(M)-4]) && break
         end
 
-        return F
+        valid_idxs = findall(F .> 0)
+        @show F
+        @show valid_idxs
+        return F[valid_idxs]
+    end
+
+    function selectRuleRRF(
+        matrixrulemetrics::Matrix{Float64},
+        X,
+        Y::Vector{<:Label},
+    )
+        #coefReg = 0.95 .- (0.01*matrixrulemetrics[:,3]/max(matrixrulemetrics[:,3]...))
+        #@show coefReg
+        rf = build_forest(Y,X,2,50,0.7,-1; rng=rng)
+        imp = begin
+            #importance = impurity_importance(rf, coefReg)
+            importance = impurity_importance(rf)
+            importance/max(importance...)
+        end
+        @show imp
+
+        feaSet = findall(imp .> 0.01)
+        @show feaSet
+        ruleSetPrunedRRF = hcat(matrixrulemetrics[feaSet,:],imp[feaSet],feaSet)
+
+        finalmatrix = sortslices(ruleSetPrunedRRF, dims=1, by=x->(x[4],x[2],x[3]), rev=true)
+
+        return Integer.(finalmatrix[:,5])
     end
 
     ########################################################################################
@@ -228,19 +256,23 @@ function intrees(
     println("Selection phase with $(method_rule_selection) in...")
     best_rules = @time begin
         if method_rule_selection == :CBC
+            matrixrulemetrics = Matrix{Float64}(undef,length(ruleset),3)
             afterselectionruleset = Vector{BitVector}(undef, length(ruleset))
             Threads.@threads for (i,rule) in collect(enumerate(ruleset))
-                afterselectionruleset[i] = evaluaterule(rule, X, Y)[:antsat]
+                eval_result = rulemetrics(rule, X, Y)
+                afterselectionruleset[i] = eval_result[:antsat]
+                matrixrulemetrics[i,1] = eval_result[:support]
+                matrixrulemetrics[i,2] = eval_result[:error]
+                matrixrulemetrics[i,3] = eval_result[:length]
             end
-
             #M = hcat([evaluaterule(rule, X, Y)[:antsat] for rule in ruleset]...)
             M = hcat(afterselectionruleset...)
+
             #best_idxs = findcorrelation(cor(M); threshold = accuracy_rule_selection)
-            best_idxs = cfs(M,Y)
-            valid_idxs = findall(best_idxs .> 0)
+            #best_idxs = cfs(M,Y)
+            best_idxs = selectRuleRRF(matrixrulemetrics,M,Y)
             @show best_idxs
-            @show valid_idxs
-            ruleset[best_idxs[valid_idxs]]
+            ruleset[best_idxs]
         else
             error("Unexpected method specified: $(method)")
         end

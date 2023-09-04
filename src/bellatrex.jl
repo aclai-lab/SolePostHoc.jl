@@ -138,7 +138,7 @@ end
 ############################################################################################
 
 function concordingtrees(
-    m::Vector{<:DecisionTree},
+    m::Vector{<:SoleModels.DecisionTree},
     X::AbstractLogiset,
     y::Label;
     ntrees::AbstractFloat=0.2,
