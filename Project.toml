@@ -1,7 +1,7 @@
 name = "SolePostHoc"
 uuid = "cf1aa0c3-12c9-4ebe-9bdc-bd6c2ca79b72"
 authors = ["Michele Ghiotti", "Giovanni Pagliarini", "Eduard I. Stan"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 Clustering = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
@@ -28,6 +28,7 @@ julia = "1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+SoleLogics = "0.6"
 
 [targets]
 test = ["Test"]
