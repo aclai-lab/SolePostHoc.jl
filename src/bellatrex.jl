@@ -173,7 +173,7 @@ end
 # Features extraction: returns all the features in the SyntaxTree
 featuresextract(m::MultiFormula) =
     reduce(vcat,[featuresextract(modant) for (_,modant) in modforms(m)])
-featuresextract(m::SyntaxTree) = i_variable.(feature.(atom.(propositions(m))))
+featuresextract(m::SyntaxTree) = i_variable.(feature.(value.(atoms(m))))
 
 function rule2vector(m::Rule,X::AbstractLogiset)
     rulevector = zeros(nfeatures(X))
