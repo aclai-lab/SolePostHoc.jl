@@ -22,7 +22,7 @@ using SoleModels: listrules, antecedenttops
 using SoleModels: CLabel, RLabel, Label
 using SoleModels: bestguess, evaluaterule
 
-using SoleFeatures: findcorrelation
+# using SoleFeatures: findcorrelation
 
 using Statistics: cor
 
