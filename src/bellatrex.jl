@@ -73,7 +73,7 @@ function bellatrex(
 
                     brs = Vector{Bool}(undef,length(rs))
                     Threads.@threads for (i,r) in collect(enumerate(rs))
-                        brs[i] = first(antecedenttops(r,currentinstance))
+                        brs[i] = first(checkantecedent(r,currentinstance))
                     end
 
                     rs[findall(brs .== true)]

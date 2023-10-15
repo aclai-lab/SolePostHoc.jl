@@ -18,7 +18,7 @@ using SoleModels: AbstractModel, AbstractLogiset
 using SoleModels: Rule, antecedent, consequent, rulemetrics, trees, info
 using SoleModels: feature, i_variable
 using SoleModels: LeafModel, Branch, DecisionForest, DecisionList
-using SoleModels: listrules, antecedenttops
+using SoleModels: listrules, checkantecedent
 using SoleModels: CLabel, RLabel, Label
 using SoleModels: bestguess, evaluaterule
 
