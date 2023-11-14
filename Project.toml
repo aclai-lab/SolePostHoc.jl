@@ -27,6 +27,7 @@ ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 SoleData = "0.11"
 julia = "1"
 SoleLogics = "0.6"
+SoleModels = "0.4"
 ModalDecisionTrees = "0.2"
 
 [extras]
