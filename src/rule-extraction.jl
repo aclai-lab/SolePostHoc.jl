@@ -1,6 +1,5 @@
 module RuleExtraction
 
-using SoleBase
 using Test
 using ThreadsX
 using Random

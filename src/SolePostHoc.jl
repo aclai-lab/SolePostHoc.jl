@@ -1,6 +1,5 @@
 module SolePostHoc
 
-using SoleBase
 using SoleData
 using SoleLogics
 using SoleModels
