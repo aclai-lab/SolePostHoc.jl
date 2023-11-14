@@ -6,9 +6,10 @@ DocMeta.setdocmeta!(SolePostHoc, :DocTestSetup, :(using SolePostHoc); recursive=
 makedocs(;
     modules=[SolePostHoc],
     authors="Michele Ghiotti, Giovanni Pagliarini, Eduard I. Stan",
-    repo="https://github.com/aclai-lab/SolePostHoc.jl/blob/{commit}{path}#{line}",
+    repo=Documenter.Remotes.GitHub("aclai-lab", "SolePostHoc.jl"),
     sitename="SolePostHoc.jl",
     format=Documenter.HTML(;
+        size_threshold = 4000000,
         prettyurls=get(ENV, "CI", "false") == "true",
         canonical="https://aclai-lab.github.io/SolePostHoc.jl",
         assets=String[],

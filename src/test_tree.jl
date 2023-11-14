@@ -11,8 +11,8 @@
 using SoleLogics
 using SoleModels
 
-formula_p = SoleLogics.parsebaseformula("p")
-formula_q = SoleLogics.parsebaseformula("q")
+formula_p = SoleLogics.parseformula("p")
+formula_q = SoleLogics.parseformula("q")
 formula_r = SoleLogics.parsebaseformula("r")
 formula_s = SoleLogics.parsebaseformula("s")
 
