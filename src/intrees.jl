@@ -1,5 +1,5 @@
+# using DecisionTree
 using ComplexityMeasures
-using DecisionTree
 
 ############################################################################################
 # Rule extraction from random forest
@@ -199,10 +199,10 @@ function intrees(
     )
         #coefReg = 0.95 .- (0.01*matrixrulemetrics[:,3]/max(matrixrulemetrics[:,3]...))
         #@show coefReg
-        rf = build_forest(Y,X,2,50,0.7,-1; rng=rng)
+        rf = DecisionTree.build_forest(Y,X,2,50,0.7,-1; rng=rng)
         imp = begin
             #importance = impurity_importance(rf, coefReg)
-            importance = impurity_importance(rf)
+            importance = DecisionTree.impurity_importance(rf)
             importance/max(importance...)
         end
         @show imp
