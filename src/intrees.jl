@@ -74,7 +74,7 @@ function intrees(
     [`rulemetrics`](@ref).
     """
     function prune_rule(
-        r::Rule{O,<:LeftmostConjunctiveForm} # TODO add Top? and nchildren
+        r::Rule{O,<:LeftmostConjunctiveForm} # TODO use nchildren..?
     ) where {O}
         nruleconjuncts = nconjuncts(r)
         E_zero = rulemetrics(r,X,Y)[:error]
