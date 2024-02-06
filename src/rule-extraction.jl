@@ -7,6 +7,7 @@ using StatsBase
 
 using SoleData
 using SoleData: slicedataset
+using SoleData: feature, i_variable
 
 using SoleLogics
 using SoleLogics: ⊤, AbstractInterpretationSet, LeftmostConjunctiveForm
@@ -15,7 +16,6 @@ using SoleLogics: conjuncts, nconjuncts
 using SoleModels
 using SoleModels: AbstractModel, AbstractLogiset
 using SoleModels: Rule, antecedent, consequent, rulemetrics, trees, info
-using SoleModels: feature, i_variable
 using SoleModels: LeafModel, Branch, DecisionForest, DecisionList
 using SoleModels: listrules, checkantecedent
 using SoleModels: CLabel, RLabel, Label
