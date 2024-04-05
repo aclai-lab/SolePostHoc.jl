@@ -23,6 +23,7 @@ ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
 [compat]
 ModalDecisionTrees = "0.2 - 0.4"
+NearestNeighbors = "0.4"
 Random = "1"
 SoleData = "0.13"
 SoleLogics = "0.8"
