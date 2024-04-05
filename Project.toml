@@ -27,6 +27,7 @@ Random = "1"
 SoleData = "0.13"
 SoleLogics = "0.8"
 SoleModels = "0.6"
+StatsBase = "0.34"
 julia = "1"
 
 [extras]
