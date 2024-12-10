@@ -1,4 +1,4 @@
-module SoleMarcoMinimizer
+module MarcoMinimizer
 
 using Revise
 using Logging
