@@ -3,9 +3,9 @@
 # Source: https://rosettacode.org/wiki/Balanced_ternary#Julia
 struct BalancedTernaryVector <: Signed
     digits::Vector{Int8}
+    BalancedTernaryVector() = zero(BalancedTernaryVector)
+    BalancedTernaryVector(n) = convert(BalancedTernaryVector, n)
 end
-BalancedTernaryVector() = zero(BalancedTernaryVector)
-BalancedTernaryVector(n) = convert(BalancedTernaryVector, n)
 
 const sgn2chr = Dict{Int8,Char}(-1 => '-', 0 => '0', +1 => '+')
 Base.show(io::IO, bt::BalancedTernaryVector) =
