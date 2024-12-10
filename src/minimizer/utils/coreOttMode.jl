@@ -329,7 +329,7 @@ function process_combination_ott(
     results,
     label_count,
     contradictions,
-    apply_function = SoleModels.apply
+    apply_function = SoleModels.apply,
 )
     combination =
         generate_combination(i, num_atoms, thresholds_by_feature, atoms_by_feature)
