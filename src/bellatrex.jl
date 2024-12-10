@@ -199,7 +199,7 @@ function rule2vector(
         if m isa MultiFormula
             [modant for (_,modant) in modforms(m)]
         elseif m isa LeftmostConjunctiveForm
-            children(m)
+            SoleLogics.grandchildren(m)
         end
     end
 

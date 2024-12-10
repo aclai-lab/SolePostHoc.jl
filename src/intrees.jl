@@ -61,8 +61,6 @@ function intrees(
     isnothing(accuracy_rule_selection) && (accuracy_rule_selection = 0.0)
     isnothing(min_frequency) && (min_frequency = 0.01)
 
-    @assert model isa DecisionForest || SoleModels.issymbolic(model) "Cannot extract rules for model of type $(typeof(model))."
-
     """
         prune_rule(rc::Rule)::Rule
 
@@ -103,8 +101,9 @@ function intrees(
     end
 
     function prune_rule(
-        r::Rule{O,<:MultiFormula}
+        r::Rule{O}
     ) where {O}
+        @assert antecedent(r) isa MultiFormula "Cannot use this function on $(antecedent(r))"
         children = [
             MultiFormula(i_modality,modant)
             for (i_modality,modant) in modforms(antecedent(r))
