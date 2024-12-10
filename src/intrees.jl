@@ -72,7 +72,14 @@ function intrees(
     [`rulemetrics`](@ref).
     """
     function prune_rule(
-        r::Rule{O,<:LeftmostConjunctiveForm} # TODO use nchildren..?
+        r::Rule{O}
+    ) where {O}
+    return _prune_rule(typeof(antecedent(r)), r)
+    end
+    
+    function _prune_rule(
+        ::Type{<:LeftmostConjunctiveForm},
+        r::Rule{O}
     ) where {O}
         nruleconjuncts = nconjuncts(r)
         E_zero = rulemetrics(r,X,Y)[:error]
@@ -100,7 +107,8 @@ function intrees(
         return r[valid_idxs]
     end
 
-    function prune_rule(
+    function _prune_rule(
+        ::Type{<:MultiFormula},
         r::Rule{O}
     ) where {O}
         @assert antecedent(r) isa MultiFormula "Cannot use this function on $(antecedent(r))"
