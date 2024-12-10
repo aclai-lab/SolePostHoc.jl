@@ -110,7 +110,8 @@ function truth_combinations_ott(
             },
         },
     },
-    vertical::Float64;
+    vertical::Float64,
+    apply_function = SoleModels.apply;
     print_progress = true,
 )
     thresholds_by_feature = Dict(
@@ -168,7 +169,7 @@ function truth_combinations_ott(
             else
                 combination_dict = SortedDict(combination)
                 combination_vector = collect(values(combination_dict))
-                result = apply_forest(model, combination_vector)
+                result = apply_function(model, combination_vector)
 
                 push!(get!(Vector{BigInt}, local_results, result), BigInt(i))
                 local_label_count[result] = get(local_label_count, result, 0) + 1
@@ -328,13 +329,14 @@ function process_combination_ott(
     results,
     label_count,
     contradictions,
+    apply_function = SoleModels.apply
 )
     combination =
         generate_combination(i, num_atoms, thresholds_by_feature, atoms_by_feature)
 
     if !isnothing(combination)
         features = collect(values(combination))
-        result = apply_forest(model, features)
+        result = apply_function(model, features)
 
         # Thread-safe update of results and label_count
         push!(get!(() -> Vector{BigInt}(), results, result), i)

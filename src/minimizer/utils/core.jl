@@ -25,7 +25,8 @@ function truth_combinations(
             },
         },
     },
-    vertical::Float64;
+    vertical::Float64,
+    apply_function = SoleModels.apply;
     print_progress = true,
 )
     # Inizializzazione di strutture dati per gestire le soglie e gli atomi per feature
@@ -100,7 +101,7 @@ function truth_combinations(
         else
             combination_dict = SortedDict(combination)
             combination_vector = vcat(collect(values(combination_dict))...)
-            result = apply_forest(model, combination_vector)
+            result = apply_function(model, combination_vector)
 
             push!(get!(Vector{BigInt}, results, result), BigInt(i))
             label_count[result] = get(label_count, result, 0) + 1
