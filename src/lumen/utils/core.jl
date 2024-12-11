@@ -225,7 +225,7 @@ function concat_results(
             num_atoms,
             thresholds_by_feature,
             atoms_by_feature,
-            Vector{Vector{Int}}(),
+            Vector{Vector{Int}}(), # TODO nothing
         )
     end
     return res
