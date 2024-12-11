@@ -31,4 +31,7 @@ include("intrees.jl")
 export bellatrex
 include("bellatrex.jl")
 
+export lumen
+include("lumen/main.jl")
+
 end

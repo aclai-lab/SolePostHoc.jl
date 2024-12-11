@@ -8,6 +8,5 @@ using SoleModels
 mse = (y_pred,t_true) -> (sum((y_true .- y_pred).^2) / length(y_true))
 
 include("rule-extraction.jl")
-include("minimizer/marcominimizer.jl")
 
 end

@@ -1,4 +1,4 @@
-module MarcoMinimizer
+module Lumen
 
 using Revise
 using Logging
@@ -18,6 +18,10 @@ using Base.Threads: Atomic, atomic_add!
 using Profile
 using ConcurrentCollections
 using ProgressMeter
+
+function lumen()
+  error("TODO")
+end
 
 ##
 # Types
