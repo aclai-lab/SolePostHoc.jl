@@ -83,9 +83,9 @@ end
 """
     process_alphabet(atom_prop::Vector{<:Atom{<:ScalarCondition{Float64,<:VariableValue,<:ScalarMetaCondition{<:VariableValue,typeof(<)}}}}, n::Int)
 
-Constructs a `MultipleScalarAlphabet` from a vector of `Atom` objects with scalar conditions.
+Constructs a `MultivariateScalarAlphabet` from a vector of `Atom` objects with scalar conditions.
 
-The function processes the `Atom` objects to extract the thresholds and test operators for each feature, and then creates a `UnivariateScalarAlphabet` for each feature. The resulting `UnivariateScalarAlphabet` objects are then combined into a `MultipleScalarAlphabet`.
+The function processes the `Atom` objects to extract the thresholds and test operators for each feature, and then creates a `UnivariateScalarAlphabet` for each feature. The resulting `UnivariateScalarAlphabet` objects are then combined into a `MultivariateScalarAlphabet`.
 
 If a feature is not present in the `Atom` objects, a default threshold of 42.0 is used, and the test operator is set to the first `Atom`'s test operator.
 """
@@ -141,7 +141,7 @@ function process_alphabet(
         alphabet = UnivariateScalarAlphabet((mc, thresholds))
         push!(univariate_alphabets, alphabet)
     end
-    return MultipleScalarAlphabet{ScalarCondition}(univariate_alphabets)
+    return MultivariateScalarAlphabet{ScalarCondition}(univariate_alphabets)
 end
 
 

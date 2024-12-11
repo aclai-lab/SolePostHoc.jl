@@ -90,7 +90,7 @@ Generates a set of valid combinations of feature values based on the provided mo
 
 Args:
     model (Any): The model to be used for evaluating the combinations.
-    alphabet (MultipleScalarAlphabet{ScalarCondition}): The alphabet containing the feature conditions.
+    alphabet (MultivariateScalarAlphabet{ScalarCondition}): The alphabet containing the feature conditions.
     atoms (Vector{<:Atom{<:ScalarCondition{Float64,<:VariableValue,<:ScalarMetaCondition{<:VariableValue,typeof(<)}}}}): The atoms representing the feature conditions.
     vertical (Float64): The vertical parameter used to scale the number of combinations.
     print_progress (bool): Whether to print progress information during the computation.

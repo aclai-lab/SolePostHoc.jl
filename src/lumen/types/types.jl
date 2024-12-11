@@ -8,11 +8,6 @@ const COLORED_INFO = "\033[1;34m"
 const COLORED_ULTRA_OTT = "\033[1;35m"
 const RESET = "\033[0m"
 
-"""
-Represents a union of a scalar condition `C` and a univariate scalar alphabet.
-"""
-const MultipleScalarAlphabet{C<:ScalarCondition} = UnionAlphabet{C,UnivariateScalarAlphabet}
-
 
 """
 A reentrant lock used to synchronize access to shared resources.
