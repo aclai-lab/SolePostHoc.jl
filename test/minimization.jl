@@ -47,7 +47,35 @@ solem = solemodel(fitted_params(mach).forest; classlabels, featurenames)
 solem = solemodel(fitted_params(mach).forest; classlabels, featurenames, keep_condensed = false)
 
 
-SolePostHoc.RuleExtraction.intrees(solem)
+@test SolePostHoc.RuleExtraction.intrees(solem)
+@test SolePostHoc.RuleExtraction.lumen(solem)
+@test SolePostHoc.RuleExtraction.bellatrex(solem)
 
-bellatrex()
 
+@test SolePostHoc.extractrules(solem; method = :lumen, vertical = ...)
+@test SolePostHoc.extractrules(solem; method = :lumenmit, vertical = ...)
+@test SolePostHoc.extractrules(solem; method = :lumenexact, vertical = ...)
+
+@test SolePostHoc.extractrules(solem, method = Lumen(; vertical = 1.0, horizontal = 0.7), kwargs...)
+
+function SolePostHoc.extractrules(modello, metodo; kwargs...)
+@test SolePostHoc.listrules(solem)
+
+
+# basemetho = :lumend = Lumen(; vertical = 1.0, horizontal = 0.7)
+kwargs = (; max_nrules = 10)
+
+for basemethod in [:lumen, Lumen(),,]
+@test SolePostHoc.extractrules(solem, method = basemethod, kwargs...)
+end
+
+
+function extractrules(solem, method, kwargs...)
+  method(solem, kwargs...)
+end
+
+
+Dict{Symbol,}
+function extractrules(solem, method::Symbol, kwargs...)
+  method(solem, kwargs...)
+end
