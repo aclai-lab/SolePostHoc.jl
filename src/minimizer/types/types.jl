@@ -530,14 +530,3 @@ function stampa_disjunct(io::IO, formula::Formula)
         print(io, formula)
     end
 end
-
-
-"""
-Prints a human-readable representation of a `TwoLevelDNFFormula` to the specified output stream `io`.
-
-The representation includes the number of combinations in the formula, and then prints each OR-AND combination using the `stampa_formule_or_and` function.
-"""
-function Base.show(io::IO, ::MIME"text/plain", f::TwoLevelDNFFormula)
-    println(io, "TwoLevelDNFFormula con $(length(eachcombination(f))) combinazioni:")
-    stampa_dnf(io, f)
-end

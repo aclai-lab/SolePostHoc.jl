@@ -220,7 +220,7 @@ function intrees(
 
         finalmatrix = sortslices(ruleSetPrunedRRF, dims=1, by=x->(x[4],x[2],x[3]), rev=true)
 
-        return Integer.(finalmatrix[:,5])
+        return Int.(finalmatrix[:,5])
     end
 
     ########################################################################################
@@ -255,7 +255,7 @@ function intrees(
         end
     end
 
-    println("# Rules to checking: $(length(ruleset))")
+    println("# Rules to check: $(length(ruleset))")
 
     ########################################################################################
     # Rule selection to obtain the best rules
@@ -316,7 +316,7 @@ function intrees(
         # Metrics update based on remaining instances
         rules_support = Vector{AbstractFloat}(undef,length(S))
         rules_error = Vector{AbstractFloat}(undef,length(S))
-        rules_length = Vector{Integer}(undef,length(S))
+        rules_length = Vector{Int}(undef,length(S))
 
         Threads.@threads for (i,s) in collect(enumerate(S))
             metrics = rulemetrics(s,D,L)
