@@ -16,3 +16,5 @@ function minimizza_dnf(
     silent || (println(); @show formula)
     return formula
 end
+
+#null
