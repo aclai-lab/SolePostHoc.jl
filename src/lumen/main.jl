@@ -8,7 +8,7 @@ using SoleModels
 using AbstractTrees
 using SoleData
 using SoleData: MultivariateScalarAlphabet, UnivariateScalarAlphabet
-
+using DecisionTree: load_data, build_forest, apply_forest
 using ModalDecisionTrees
 using SoleLogics
 using BenchmarkTools, StatProfilerHTML
