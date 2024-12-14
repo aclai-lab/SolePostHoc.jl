@@ -84,6 +84,7 @@ lumen(model, start_time, 1.0, 1.0, false, false, :espresso)
 """
 function lumen(
   model,
+  modelJ, # attualmente truth_combinations usa model non di sole ? 
   tempo_inizio,
   vertical::Real = 1.0,
   orizontal::Real = 1.0,
@@ -147,10 +148,10 @@ function lumen(
 
       if (ott_mode == true)
           results, label_count =
-              Lumen.truth_combinations_ott(model, my_alphabet, my_atoms, vertical, apply_forest)
+              Lumen.truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical, apply_forest)
       else
           results, label_count =
-              Lumen.truth_combinations(model, my_alphabet, my_atoms, vertical, apply_forest)
+              Lumen.truth_combinations(modelJ, my_alphabet, my_atoms, vertical, apply_forest)
       end
 
       spa() && println(
@@ -248,7 +249,7 @@ function lumen(
       )
 
       are_results_equal =
-          Lumen.compare_truth_combinations(model, my_alphabet, my_atoms, vertical; kwargs...)
+          Lumen.compare_truth_combinations(modelJ, my_alphabet, my_atoms, vertical; kwargs...)
 
       if are_results_equal
           @info "\nL'ottimizzazione è valida: i risultati sono identici."
