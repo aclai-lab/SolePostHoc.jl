@@ -183,7 +183,7 @@ function lumen(
       start_time = 0
       for (result, formula) in combined_results
           spa() && println("Risultato: $result")
-          spa() && stampa_dnf(stdout, formula)
+          #spa() && stampa_dnf(stdout, formula)
           spa() && println()
 
           @info "Iniziando la semplificazione per il risultato $result"
@@ -205,7 +205,7 @@ function lumen(
               )
               spa() && println()
 
-              Lumen.printIO_custom_or_formula(stdout, formula_semplificata.value)
+              Lumen.stampa_dnf(stdout, formula_semplificata.value)
 
               # Verifica della semplificazione
               is_congruent = Lumen.verify_simplification(formula, formula_semplificata.value)
