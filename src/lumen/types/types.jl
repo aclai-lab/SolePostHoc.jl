@@ -482,15 +482,36 @@ The representation includes the number of combinations in the formula, and then 
 function stampa_dnf(
     io::IO,
     formula::TwoLevelDNFFormula,
+    force_unminimized_formula = false;
     max_combinations::Int = length(formula.combinations),
 )
+    masks = if !isempty(formula.prime_mask)
+        formula.prime_mask
+    else
+        fill(nothing, length(formula.combinations))
+    end
+    
+    function apply_mask(combination, mask)
+        num_atoms, thresholds_by_feature, atoms_by_feature = TODO...
+        combination[mask .!== -1], num_atoms, thresholds_by_feature, atoms_by_feature
+    end
     println(io, "TwoLevelDNFFormula with $(length(formula.combinations)) combinations:")
-    for (i, combination) in enumerate(formula.combinations[1:min(max_combinations, end)])
+    for (i, (combination, mask)) in enumerate(zip(f.combinations[1:min(max_combinations, end)], masks[1:min(max_combinations, end)]))
+        masked_combination, num_atoms, thresholds_by_feature, atoms_by_feature = begin
+            if !force_unminimized_formula && !isempty(formula.prime_mask)
+                masked_combination, num_atoms, thresholds_by_feature, atoms_by_feature = apply_mask(combination, mask)
+            else
+                num_atoms, thresholds_by_feature, atoms_by_feature = formula.num_atoms,
+                    formula.thresholds_by_feature,
+                    formula.atoms_by_feature
+            end
+        end
+
         disjunct = generate_disjunct(
-            combination,
-            formula.num_atoms,
-            formula.thresholds_by_feature,
-            formula.atoms_by_feature,
+            masked_combination,
+            num_atoms,
+            thresholds_by_feature,
+            atoms_by_feature,
         )
         print(io, "  OR[$i]: ")
         stampa_disjunct(io, disjunct)
