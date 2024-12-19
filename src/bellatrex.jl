@@ -9,6 +9,15 @@ using ModalDecisionTrees: DForest
 
 # hyperparameter: ntrees, nclusters
 
+"""
+Dedja, Klest, et al. "BELLATREX: Building explanations through a locally accurate rule extractor." Ieee Access 11 (2023): 41348-41367.
+
+See also [`extractrules`](@ref), [`bellatrex`](@ref), [`RuleExtractor`](@ref).
+"""
+struct BellatrexRuleExtractor <: RuleExtractor end
+
+extractrules(::BellatrexRuleExtractor, m, args...; kwargs...) = bellatrex(m, args...; kwargs...)
+
 # Repository web path: https://github.com/Klest94/Bellatrex
 # Bellatrex is a a
 function bellatrex(

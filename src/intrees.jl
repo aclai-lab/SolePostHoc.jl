@@ -6,6 +6,18 @@ using ComplexityMeasures
 ############################################################################################
 
 """
+Deng, Houtao. "Interpreting tree ensembles with intrees." International Journal of Data Science and Analytics 7.4 (2019): 277-287.
+
+See also [`extractrules`](@ref), [`intrees`](@ref), [`RuleExtractor`](@ref).
+"""
+struct InTreesRuleExtractor <: RuleExtractor end
+
+function extractrules(::InTreesRuleExtractor, m, args...; kwargs...)
+  dl = intrees(m, args...; kwargs...)
+  return listrules(dl)
+end
+
+"""
     intrees(args...; kwargs...)::DecisionList
 
 Extract rules from a model, reduces the length of each rule (number of variable value
@@ -28,7 +40,9 @@ non-redundant rules
 # Returns
 - `DecisionList`: decision list that represent a new learner
 
-TODO cite paper and specify that the method is for forests, but was extended to work with any other model
+TODO cite paper and specify that the method is for forests, but was extended to work with any other models.
+Reference: Deng, Houtao. "Interpreting tree ensembles with intrees." International Journal of Data Science and Analytics 7.4 (2019): 277-287.
+
 
 See also
 [`AbstractModel`](@ref),

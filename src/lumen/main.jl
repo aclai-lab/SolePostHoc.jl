@@ -19,6 +19,18 @@ using Profile
 using ConcurrentCollections
 using ProgressMeter
 
+using SoleModels: RuleExtractor
+import SoleModels: isexact, extractrules
+
+"""
+Pagliarini, Giovanni, et al. "Minimal Rules from Decision Forests: a Systematic Approach." OVERLAY@ AI* IA. 2024.
+
+See also [`extractrules`](@ref), [`intrees`](@ref), [`RuleExtractor`](@ref).
+"""
+struct LumenRuleExtractor <: RuleExtractor end
+
+extractrules(::LumenRuleExtractor, m, args...; kwargs...) = Lumen.lumen(m, args...; kwargs...)
+
 """
     lumen(model, tempo_inizio, vertical = 1.0, orizontal = 1.0, ott_mode = false, 
           controllo = false, minimization_scheme = :espresso; 
