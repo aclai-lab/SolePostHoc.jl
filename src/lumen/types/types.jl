@@ -219,7 +219,7 @@ Input → Threshold Check → BitVector Match → Result
 
 2. **Prime Analysis**
 ```ascii
-Combinations → McQuinss → Essential Bits → Optimization
+Combinations → Minimization → Essential Bits → Optimization
      │            │            │              │
      └────────────┴────────────┴──────────────┘
 ```

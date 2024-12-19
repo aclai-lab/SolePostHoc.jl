@@ -185,7 +185,7 @@ function lumen(
         start_time = 0
         for (result, formula) in combined_results
             spa() && println("Risultato: $result")
-            #spa() && stampa_dnf(stdout, formula)
+            spa() && stampa_dnf(stdout, formula) # stampa la formula in dnf non minimizzata
             spa() && println()
 
             @info "Iniziando la semplificazione per il risultato $result"
@@ -207,7 +207,7 @@ function lumen(
                 )
                 spa() && println()
 
-                println(Lumen.print_filtered_dnf(formula_semplificata.value)) # TODO DIVENTA THDICT!
+                printIO_custom_or_formula(stdout,(formula_semplificata.value)) # TODO DIVENTA THDICT! TODO PARSE!!
 
                 # Verifica della semplificazione
                 is_congruent = Lumen.verify_simplification(formula, formula_semplificata.value)
