@@ -147,17 +147,25 @@ end
 
 function convert_DNF_formula(
     formula::TwoLevelDNFFormula,
+    outcome,
     orizontal::Float64 = 1.0,
 )
     formulas = io_formula_mask(formula, orizontal)
-    result = ""
-    for (i, formula_str) in enumerate(formulas)
-        if i == 1
-            result *= formula_str
-        else
-            result *= " ∨ $formula_str"
-        end
-    end
-    φ = parseformula(result)
-    return φ
+    result = join(formulas, " ∨ ")
+    
+    # Specificare esplicitamente featvaltype = Real per risolvere il warning
+    φ = parseformula(
+        result;
+        atom_parser = a->Atom(
+            parsecondition(
+                SoleData.ScalarCondition, 
+                a; 
+                featuretype = SoleData.VariableValue,
+                featvaltype = Real  # Specifichiamo esplicitamente il tipo
+            )
+        )
+    )
+    
+    # Creiamo la Rule usando l'outcome passato come parametro
+    return Rule(φ, outcome)
 end

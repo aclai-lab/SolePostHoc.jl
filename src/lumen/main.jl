@@ -181,7 +181,7 @@ function lumen(
             Lumen.concat_results(results, num_atoms, thresholds_by_feature, atoms_by_feature)
 
         start_time = 0
-        rules_vector_for_decisionSet = []
+        rules_vector_for_decisionSet = Rule[]
         for (result, formula) in combined_results
             spa() && println("Risultato: $result")
             spa() && stampa_dnf(stdout, formula) # print dnf pre minimization
@@ -206,8 +206,12 @@ function lumen(
                 )
                 spa() && println()
 
-                new_rule = convert_DNF_formula(formula_semplificata.value)
-                #println(new_rule)
+                new_rule = convert_DNF_formula(
+                    formula_semplificata.value,
+                    result,  # Passiamo il result come outcome
+                    orizontal
+                )
+                println(new_rule)
                 push!(rules_vector_for_decisionSet, new_rule)
                 # Verifica della semplificazione
                 is_congruent = Lumen.verify_simplification(formula, formula_semplificata.value)
@@ -228,9 +232,20 @@ function lumen(
             )
         end
 
-        ds=DecisionSet(rules_vector_for_decisionSet);
+        ds = rules_vector_for_decisionSet;
+        #=ds=DecisionSet(rules_vector_for_decisionSet);  FIXME
+        
+        ERROR: LoadError: StackOverflowError:
+        Stacktrace:
+         [1] SoleModels.DecisionSet{…}(rules::Vector{…}, iscomplete::Bool, isnonoverlapping::Bool, info::@NamedTuple{}) (repeats 79984 times)
+           @ SoleModels ~/.julia/dev/SoleModels/src/utils/models/other.jl:315
+        in expression starting at /home/perro/.julia/dev/ModalMinimizerRulesSystematicApp/TestSole/src/TestSole.jl:1
+        Some type information was truncated. Use `show(err)` to see complete types.
+        =#
+        
         print("\n\n$COLORED_TITLE$TITLE\n DECISION SET \n$TITLE$RESET")
-        println(ds) # return ds 
+        map(x -> println(x), rules_vector_for_decisionSet)
+        #return ds
         print("\n\n$COLORED_TITLE$TITLE$RESET")
 
         tempo_fine = time()
