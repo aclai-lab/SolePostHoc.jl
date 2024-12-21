@@ -5,6 +5,7 @@ using Logging
 using Dates
 using DataStructures
 using SoleModels
+using SoleModels:DecisionSet
 using AbstractTrees
 using SoleData
 using SoleData: MultivariateScalarAlphabet, UnivariateScalarAlphabet
@@ -84,7 +85,7 @@ lumen(model, start_time, 1.0, 1.0, false, false, :espresso)
 """
 function lumen(
     model,
-    modelJ, # attualmente truth_combinations usa model non di sole ? 
+    modelJ, # attualmente truth_combinations usa model 
     tempo_inizio,
     vertical::Real=1.0,
     orizontal::Real=1.0,
@@ -98,8 +99,8 @@ function lumen(
     if vertical <= 0.0 || vertical > 1.0 || orizontal <= 0.0 || orizontal > 1.0
         @warn "Inserito parametri non validi"
         @warn "Verranno settati entrambi a 1"
-        vertical = 1.0 # inserito
-        orizontal = 1.0 # TODO MARCO METTILA, NON TI SCORDARE!! 
+        vertical = 1.0 # Agisce in truth_combinations
+        orizontal = 1.0 # Agisce in printIO_custom_or_formula TODO agire pre semplificazione ? 
     end
 
     spa() && println(
@@ -136,14 +137,11 @@ function lumen(
         all(x -> (x == (<)), SoleData.test_operator.(subalphabets(my_alphabet))) ||
         error("Atoms with test operators other from < are not supported.")
 
-        #todo feature isa variable value 
-
+        #TODO feature isa variable value 
 
         spa() && println(my_alphabet)
         num_all_atoms, my_atoms, my_alphabet
     end
-
-
 
     if (controllo == false)
         spa() && println("\n\n$COLORED_TITLE$TITLE\n PARTE 3 TABELLA \n$TITLE$RESET")
@@ -183,9 +181,10 @@ function lumen(
             Lumen.concat_results(results, num_atoms, thresholds_by_feature, atoms_by_feature)
 
         start_time = 0
+        rules_vector_for_decisionSet = []
         for (result, formula) in combined_results
             spa() && println("Risultato: $result")
-            spa() && stampa_dnf(stdout, formula) # stampa la formula in dnf non minimizzata
+            spa() && stampa_dnf(stdout, formula) # print dnf pre minimization
             spa() && println()
 
             @info "Iniziando la semplificazione per il risultato $result"
@@ -207,8 +206,9 @@ function lumen(
                 )
                 spa() && println()
 
-                printIO_custom_or_formula(stdout,(formula_semplificata.value)) # TODO DIVENTA THDICT! TODO PARSE!!
-
+                new_rule = convert_DNF_formula(formula_semplificata.value)
+                #println(new_rule)
+                push!(rules_vector_for_decisionSet, new_rule)
                 # Verifica della semplificazione
                 is_congruent = Lumen.verify_simplification(formula, formula_semplificata.value)
                 spa() && println(
@@ -227,6 +227,12 @@ function lumen(
                 "----------------------------------------------------------------------------",
             )
         end
+
+        ds=DecisionSet(rules_vector_for_decisionSet);
+        print("\n\n$COLORED_TITLE$TITLE\n DECISION SET \n$TITLE$RESET")
+        println(ds) # return ds 
+        print("\n\n$COLORED_TITLE$TITLE$RESET")
+
         tempo_fine = time()
 
         spa() &&
@@ -265,7 +271,7 @@ end
 # Types
 ##
 
-# TritVector TODO Choose and implement one 
+# TritVector TODO Choose and implement one ?
 include("types/trit-vector.jl")
 include("types/balanced-trit-vector.jl")
 include("types/balanced-ternary-vector.jl")

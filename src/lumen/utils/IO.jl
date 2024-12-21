@@ -78,8 +78,6 @@ function print_detailed_results(results::Dict{Any,Vector{BigInt}})
     end
 end
 
-
-
 function io_formula_mask(formula::TwoLevelDNFFormula, orizontal::Float64 = 1.0)
     num_orizontal = floor(Int, formula.thresholds_by_feature.count * orizontal)
     result = Set{String}()
@@ -129,6 +127,7 @@ function io_formula_mask(formula::TwoLevelDNFFormula, orizontal::Float64 = 1.0)
     return collect(result)  # Convertiamo il Set in Array per il risultato finale
 end
 
+
 function printIO_custom_or_formula(
     io::IO,
     formula::TwoLevelDNFFormula,
@@ -137,6 +136,28 @@ function printIO_custom_or_formula(
     formulas = io_formula_mask(formula, orizontal)
     println(io, "OR Formula with $(length(formulas)) combinations:")
     for (i, formula_str) in enumerate(formulas)
-        println(io, "  OR[$i]: $formula_str")
+        if i == 1
+            print(io, "$formula_str")
+        else
+            print(io, " ∨ $formula_str")
+        end
     end
+    println(io,"")
+end
+
+function convert_DNF_formula(
+    formula::TwoLevelDNFFormula,
+    orizontal::Float64 = 1.0,
+)
+    formulas = io_formula_mask(formula, orizontal)
+    result = ""
+    for (i, formula_str) in enumerate(formulas)
+        if i == 1
+            result *= formula_str
+        else
+            result *= " ∨ $formula_str"
+        end
+    end
+    φ = parseformula(result)
+    return φ
 end
