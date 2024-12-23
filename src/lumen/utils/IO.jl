@@ -78,48 +78,40 @@ function print_detailed_results(results::Dict{Any,Vector{BigInt}})
     end
 end
 
-
-############################################################################################
-############################################################################################
 function io_formula_mask(formula::TwoLevelDNFFormula, orizontal::Float64 = 1.0)
     num_orizontal = floor(Int, formula.thresholds_by_feature.count * orizontal)
-    result = Set{String}()  # Usando Set invece di Array per evitare duplicati
+    result = Set{String}()
 
     for mask in formula.prime_mask
         feature_conditions = Dict{Int,Dict{String,Float64}}()
-        atom_idx = 1
+        current_atom_index = 1
 
-        # First pass: collect all conditions by feature
         for (feature, atoms) in formula.atoms_by_feature
-            if atom_idx <= length(atoms)
-                for (value, is_greater_equal) in atoms
-                    if mask[atom_idx] != -1 && feature <= num_orizontal
-                        op_type = mask[atom_idx] == 1 ? "<" : "≥"
-
+            if feature <= num_orizontal
+                for (threshold, is_greater_equal) in atoms
+                    # Prima controlliamo se siamo nel range del mask e se il valore non è -1
+                    if current_atom_index <= length(mask) && mask[current_atom_index] != -1
+                        # Solo se il mask non è -1, inizializziamo e processiamo
                         if !haskey(feature_conditions, feature)
                             feature_conditions[feature] = Dict{String,Float64}()
                         end
 
-                        if op_type == "≥"
-                            # Keep maximum for ≥
-                            if !haskey(feature_conditions[feature], "≥") ||
-                               value > feature_conditions[feature]["≥"]
-                                feature_conditions[feature]["≥"] = value
-                            end
-                        else
-                            # Keep minimum for <
-                            if !haskey(feature_conditions[feature], "<") ||
-                               value < feature_conditions[feature]["<"]
-                                feature_conditions[feature]["<"] = value
-                            end
+                        op = mask[current_atom_index] == 1 ? "<" : "≥"
+                        
+                        if op == "≥" && (!haskey(feature_conditions[feature], "≥") || 
+                                       threshold > feature_conditions[feature]["≥"])
+                            feature_conditions[feature]["≥"] = threshold
+                        elseif op == "<" && (!haskey(feature_conditions[feature], "<") || 
+                                           threshold < feature_conditions[feature]["<"])
+                            feature_conditions[feature]["<"] = threshold
                         end
                     end
-                    atom_idx += 1
+                    current_atom_index += 1
                 end
             end
         end
 
-        # Second pass: build the formula string with most restrictive conditions
+        # Build formula string from collected conditions
         current_atoms = String[]
         for (feature, conditions) in feature_conditions
             for (op, value) in conditions
@@ -135,6 +127,7 @@ function io_formula_mask(formula::TwoLevelDNFFormula, orizontal::Float64 = 1.0)
     return collect(result)  # Convertiamo il Set in Array per il risultato finale
 end
 
+
 function printIO_custom_or_formula(
     io::IO,
     formula::TwoLevelDNFFormula,
@@ -143,6 +136,36 @@ function printIO_custom_or_formula(
     formulas = io_formula_mask(formula, orizontal)
     println(io, "OR Formula with $(length(formulas)) combinations:")
     for (i, formula_str) in enumerate(formulas)
-        println(io, "  OR[$i]: $formula_str")
+        if i == 1
+            print(io, "$formula_str")
+        else
+            print(io, " ∨ $formula_str")
+        end
     end
+    println(io,"")
+end
+
+function convert_DNF_formula(
+    formula::TwoLevelDNFFormula,
+    outcome,
+    orizontal::Float64 = 1.0,
+)
+    formulas = io_formula_mask(formula, orizontal)
+    result = join(formulas, " ∨ ")
+    
+    # Specificare esplicitamente featvaltype = Real per risolvere il warning
+    φ = parseformula(
+        result;
+        atom_parser = a->Atom(
+            parsecondition(
+                SoleData.ScalarCondition, 
+                a; 
+                featuretype = SoleData.VariableValue,
+                featvaltype = Real  # Specifichiamo esplicitamente il tipo
+            )
+        )
+    )
+    
+    # Creiamo la Rule usando l'outcome passato come parametro
+    return Rule(φ, outcome)
 end
