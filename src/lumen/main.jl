@@ -246,7 +246,6 @@ function lumen(
 
         ds = DecisionSet(rules_vector_for_decisionSet);  
         
-        
         print("\n\n$COLORED_TITLE$TITLE\n DECISION SET \n$TITLE$RESET")
         return ds
 
