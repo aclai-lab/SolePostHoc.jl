@@ -244,20 +244,12 @@ function lumen(
             )
         end
 
-        ds = rules_vector_for_decisionSet;
-        #=ds=DecisionSet(rules_vector_for_decisionSet);  FIXME
+        ds = DecisionSet(rules_vector_for_decisionSet);  
         
-        ERROR: LoadError: StackOverflowError:
-        Stacktrace:
-         [1] SoleModels.DecisionSet{…}(rules::Vector{…}, iscomplete::Bool, isnonoverlapping::Bool, info::@NamedTuple{}) (repeats 79984 times)
-           @ SoleModels ~/.julia/dev/SoleModels/src/utils/models/other.jl:315
-        in expression starting at /home/perro/.julia/dev/ModalMinimizerRulesSystematicApp/TestSole/src/TestSole.jl:1
-        Some type information was truncated. Use `show(err)` to see complete types.
-        =#
         
         print("\n\n$COLORED_TITLE$TITLE\n DECISION SET \n$TITLE$RESET")
-        map(x -> println(x), rules_vector_for_decisionSet)
-        #return ds
+        return ds
+
         print("\n\n$COLORED_TITLE$TITLE$RESET")
 
         tempo_fine = time()
@@ -332,6 +324,4 @@ include("deprecate.jl")
 end
 
 
-#DECISIONSET=MINIMIZE(M,METODO);
-#MINIMIZE!(DECISIONSET,METODO) = ... MINIMIZE(DECISIONSET,METODO)
-   
+

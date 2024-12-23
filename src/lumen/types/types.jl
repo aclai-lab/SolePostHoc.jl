@@ -242,12 +242,12 @@ Combinations → Minimization → Essential Bits → Optimization
 └─ Careful Mapping Required
 ```
 """
-struct TwoLevelDNFFormula <: Formula
+struct TwoLevelDNFFormula <: Formula 
     combinations::Vector{BitVector}
     num_atoms::Int
     thresholds_by_feature::Dict{Int,Vector{Float64}}
     atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}}
-    prime_mask::Vector{Vector{Int}}
+    prime_mask::Vector{Vector{Int}} 
 end
 
 eachcombination(f::TwoLevelDNFFormula) = f.combinations
