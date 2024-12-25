@@ -52,6 +52,9 @@ function truth_combinations(
 
     # Calcolo del numero totale di combinazioni
     num_atoms = length(atoms)
+    println("num_atoms: ", num_atoms)
+    println("2^num_atoms: ", BigInt(2)^num_atoms)
+    println("vertical: ", vertical)
     num_combinations = BigInt(round((BigInt(2)^num_atoms) * vertical))
 
     # Stima del tempo di esecuzione
