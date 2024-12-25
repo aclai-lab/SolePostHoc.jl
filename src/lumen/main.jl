@@ -184,7 +184,7 @@ function lumen(
         rules_vector_for_decisionSet = Rule[]
         for (result, formula) in combined_results
             spa() && println("Risultato: $result")
-            spa() && stampa_dnf(stdout, formula) # print dnf pre minimization
+            #spa() && stampa_dnf(stdout, formula) # print dnf pre minimization
             spa() && println()
 
             @info "Iniziando la semplificazione per il risultato $result"

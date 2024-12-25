@@ -52,7 +52,7 @@ function truth_combinations(
 
     # Calcolo del numero totale di combinazioni
     num_atoms = length(atoms)
-    num_combinations = BigInt(round(BigInt(2)^num_atoms * vertical))
+    num_combinations = BigInt(round((BigInt(2)^num_atoms) * vertical))
 
     # Stima del tempo di esecuzione
     spa() && begin
