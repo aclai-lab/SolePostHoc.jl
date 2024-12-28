@@ -143,7 +143,7 @@ function lumen(
 
 
         # @show my_alphabet
-        filteralphabetcallback(my_alphabet)
+        my_alphabet = filteralphabetcallback(my_alphabet)
         # @show my_alphabet
 
         all(x -> (x == (<)), SoleData.test_operator.(subalphabets(my_alphabet))) ||
