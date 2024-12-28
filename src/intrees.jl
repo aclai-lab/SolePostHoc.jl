@@ -281,12 +281,12 @@ function intrees(
             afterselectionruleset = Vector{BitVector}(undef, length(ruleset))
             Threads.@threads for (i,rule) in collect(enumerate(ruleset))
                 eval_result = rulemetrics(rule, X, Y)
-                afterselectionruleset[i] = eval_result[:antsat]
+                afterselectionruleset[i] = eval_result[:checkmask,]
                 matrixrulemetrics[i,1] = eval_result[:support]
                 matrixrulemetrics[i,2] = eval_result[:error]
                 matrixrulemetrics[i,3] = eval_result[:length]
             end
-            #M = hcat([evaluaterule(rule, X, Y)[:antsat] for rule in ruleset]...)
+            #M = hcat([evaluaterule(rule, X, Y)[:checkmask,] for rule in ruleset]...)
             M = hcat(afterselectionruleset...)
 
             #best_idxs = findcorrelation(cor(M); threshold = accuracy_rule_selection)
@@ -387,7 +387,7 @@ function intrees(
 
         # Indices of the remaining instances
         idx_remaining = begin
-            sat_unsat = evaluaterule(S[idx_best], D, L)[:antsat]
+            sat_unsat = evaluaterule(S[idx_best], D, L)[:checkmask,]
             # Remain in D the rule that not satisfying the best rule'pruning_s condition
             findall(sat_unsat .== false)
         end
