@@ -20,6 +20,18 @@ using Profile
 using ConcurrentCollections
 using ProgressMeter
 
+using SoleModels: RuleExtractor
+import SoleModels: isexact, extractrules
+
+"""
+Pagliarini, Giovanni, et al. "Minimal Rules from Decision Forests: a Systematic Approach." OVERLAY@ AI* IA. 2024.
+
+See also [`extractrules`](@ref), [`intrees`](@ref), [`RuleExtractor`](@ref).
+"""
+struct LumenRuleExtractor <: RuleExtractor end
+
+extractrules(::LumenRuleExtractor, m, args...; kwargs...) = Lumen.lumen(m, args...; kwargs...)
+
 """
     lumen(model, tempo_inizio, vertical = 1.0, orizontal = 1.0, ott_mode = false, 
           controllo = false, minimization_scheme = :espresso; 
@@ -86,14 +98,14 @@ lumen(model, start_time, 1.0, 1.0, false, false, :espresso)
 function lumen(
     model,
     modelJ, # attualmente truth_combinations usa model 
-    tempo_inizio,
+    tempo_inizio = time(),
     vertical::Real=1.0,
     orizontal::Real=1.0,
     ott_mode::Bool=false,
     controllo::Bool=false,
     minimization_scheme::Symbol=:espresso;
     minimization_kwargs::NamedTuple=(;),
-    (filteralphabetcallback!)=identity,
+    filteralphabetcallback=identity,
     kwargs...
 )
     if vertical <= 0.0 || vertical > 1.0 || orizontal <= 0.0 || orizontal > 1.0
@@ -131,7 +143,7 @@ function lumen(
 
 
         # @show my_alphabet
-        filteralphabetcallback!(my_alphabet)
+        filteralphabetcallback(my_alphabet)
         # @show my_alphabet
 
         all(x -> (x == (<)), SoleData.test_operator.(subalphabets(my_alphabet))) ||
@@ -233,7 +245,6 @@ function lumen(
         end
 
         ds = DecisionSet(rules_vector_for_decisionSet);  
-        
         
         print("\n\n$COLORED_TITLE$TITLE\n DECISION SET \n$TITLE$RESET")
         return ds

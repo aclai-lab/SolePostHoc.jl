@@ -47,9 +47,15 @@ solem = solemodel(fitted_params(mach).forest; classlabels, featurenames)
 solem = solemodel(fitted_params(mach).forest; classlabels, featurenames, keep_condensed = false)
 
 
-@test SolePostHoc.RuleExtraction.intrees(solem)
-@test SolePostHoc.RuleExtraction.lumen(solem)
-@test SolePostHoc.RuleExtraction.bellatrex(solem)
+@test_nowarn SolePostHoc.InTreesRuleExtractor(solem)
+@test_nowarn SolePostHoc.InTreesRuleExtractor()(solem)
+@test_nowarn SolePostHoc.extractrules(InTreesRuleExtractor(), solem)
+@test_nowarn SolePostHoc.LumenRuleExtractor(solem)
+@test_nowarn SolePostHoc.LumenRuleExtractor()(solem)
+@test_nowarn SolePostHoc.extractrules(LumenRuleExtractor(), solem)
+@test_nowarn SolePostHoc.BellatrexRuleExtractor(solem)
+@test_nowarn SolePostHoc.BellatrexRuleExtractor()(solem)
+@test_nowarn SolePostHoc.extractrules(BellatrexRuleExtractor(), solem)
 
 
 @test SolePostHoc.extractrules(solem; method = :lumen, vertical = ...)

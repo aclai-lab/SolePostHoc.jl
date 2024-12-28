@@ -25,13 +25,17 @@ using SoleModels: bestguess, evaluaterule
 
 using Statistics: cor
 
-export intrees
+using SoleModels: RuleExtractor
+import SoleModels: isexact, extractrules
+
+export InTreesRuleExtractor
 include("intrees.jl")
 
-export bellatrex
+export BellatrexRuleExtractor
 include("bellatrex.jl")
 
 export lumen, Lumen
+export LumenRuleExtractor
 include("lumen/main.jl")
 
 end

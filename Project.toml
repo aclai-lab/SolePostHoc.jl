@@ -1,6 +1,6 @@
 name = "SolePostHoc"
 uuid = "cf1aa0c3-12c9-4ebe-9bdc-bd6c2ca79b72"
-authors = ["Michele Ghiotti", "Giovanni Pagliarini", "Eduard I. Stan"]
+authors = ["Michele Ghiotti", "Giovanni Pagliarini", "Marco Perrotta", "Eduard I. Stan"]
 version = "0.2.0"
 
 [deps]

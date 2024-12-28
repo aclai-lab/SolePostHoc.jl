@@ -6,6 +6,18 @@ using ComplexityMeasures
 ############################################################################################
 
 """
+Deng, Houtao. "Interpreting tree ensembles with intrees." International Journal of Data Science and Analytics 7.4 (2019): 277-287.
+
+See also [`extractrules`](@ref), [`intrees`](@ref), [`RuleExtractor`](@ref).
+"""
+struct InTreesRuleExtractor <: RuleExtractor end
+
+function extractrules(::InTreesRuleExtractor, m, args...; kwargs...)
+  dl = intrees(m, args...; kwargs...)
+  return listrules(dl)
+end
+
+"""
     intrees(args...; kwargs...)::DecisionList
 
 Extract rules from a model, reduces the length of each rule (number of variable value
@@ -28,7 +40,9 @@ non-redundant rules
 # Returns
 - `DecisionList`: decision list that represent a new learner
 
-TODO cite paper and specify that the method is for forests, but was extended to work with any other model
+TODO cite paper and specify that the method is for forests, but was extended to work with any other models.
+Reference: Deng, Houtao. "Interpreting tree ensembles with intrees." International Journal of Data Science and Analytics 7.4 (2019): 277-287.
+
 
 See also
 [`AbstractModel`](@ref),
@@ -267,12 +281,12 @@ function intrees(
             afterselectionruleset = Vector{BitVector}(undef, length(ruleset))
             Threads.@threads for (i,rule) in collect(enumerate(ruleset))
                 eval_result = rulemetrics(rule, X, Y)
-                afterselectionruleset[i] = eval_result[:antsat]
+                afterselectionruleset[i] = eval_result[:checkmask,]
                 matrixrulemetrics[i,1] = eval_result[:support]
                 matrixrulemetrics[i,2] = eval_result[:error]
                 matrixrulemetrics[i,3] = eval_result[:length]
             end
-            #M = hcat([evaluaterule(rule, X, Y)[:antsat] for rule in ruleset]...)
+            #M = hcat([evaluaterule(rule, X, Y)[:checkmask,] for rule in ruleset]...)
             M = hcat(afterselectionruleset...)
 
             #best_idxs = findcorrelation(cor(M); threshold = accuracy_rule_selection)
@@ -373,7 +387,7 @@ function intrees(
 
         # Indices of the remaining instances
         idx_remaining = begin
-            sat_unsat = evaluaterule(S[idx_best], D, L)[:antsat]
+            sat_unsat = evaluaterule(S[idx_best], D, L)[:checkmask,]
             # Remain in D the rule that not satisfying the best rule'pruning_s condition
             findall(sat_unsat .== false)
         end
