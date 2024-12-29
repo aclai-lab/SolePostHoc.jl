@@ -121,7 +121,12 @@ function truth_combinations_ott(
     atoms_by_feature = group_atoms_by_feature(atoms)
 
     num_atoms = length(atoms)
-    num_combinations = BigInt(round(BigInt(2)^num_atoms * vertical))
+    all_combinations = BigInt(2)^num_atoms
+    if vertical == 1.0
+        num_combinations = all_combinations
+    else
+        num_combinations = BigInt(round(BigInt(2)^num_atoms * vertical))
+    end
 
     results = Dict{Any,Vector{BigInt}}()
     label_count = Dict{Any,Int64}()
@@ -157,12 +162,27 @@ function truth_combinations_ott(
         end_i = min(start_i + chunk_size - 1, num_combinations - 1)
 
         for i = start_i:end_i
-            combination, has_contradiction = generate_combination_ott(
-                BigInt(i),
-                num_atoms,
-                thresholds_by_feature,
-                atoms_by_feature,
-            )
+            if vertical == 1.0
+                # Systematic
+                combination, has_contradiction = generate_combination_ott(
+                    BigInt(i),
+                    num_atoms,
+                    thresholds_by_feature,
+                    atoms_by_feature,
+                )
+            else
+                has_contradiction = true
+                # Find the first random non-contradicting one
+                while has_contradiction
+                    i_rand = rand(BigInt(1):all_combinations)
+                    combination, has_contradiction = generate_combination_ott(
+                        BigInt(i_rand),
+                        num_atoms,
+                        thresholds_by_feature,
+                        atoms_by_feature,
+                    )
+                end
+            end
 
             if has_contradiction
                 local_contradictions += 1
@@ -193,8 +213,29 @@ function truth_combinations_ott(
     spa() && println("Combination processing completed.")
 
     total_contradictions = contradictions[]
-    spa() && print_results_summary_ott(num_combinations, total_contradictions, label_count)
-    spa() && print_detailed_results_ott(results)
+    spa() && begin
+        valid_combinations = num_combinations - total_contradictions
+        println("\nTotal combinations: $num_combinations")
+        println("Logical contradictions: $total_contradictions")
+        println("\nLabel distribution:")
+        for (label, count) in sort(collect(label_count), by = x -> x[2], rev = true)
+            percentage = (count / valid_combinations) * 100
+            println("$label: $count ($(round(percentage, digits=2))%)")
+        end
+    end
+
+    spa() && begin
+        println("\nDetailed results:")
+        for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
+            println("[$result] ($(length(combinations)) combinations):")
+            if length(combinations) > 10
+                println("  First 10: $(combinations[1:10])")
+                println("  ... ($(length(combinations)-10) more)")
+            else
+                println("  All: $combinations")
+            end
+        end
+    end
 
     return results, label_count
 end
@@ -347,49 +388,6 @@ function process_combination_ott(
 end
 
 
-"""
-Prints a summary of the results, including the total number of combinations, the number of logical contradictions, and the distribution of labels.
-
-Args:
-    num_combinations (BigInt): The total number of combinations.
-    total_contradictions (Int64): The number of logical contradictions.
-    label_count (Dict{Any,Int64}): A dictionary containing the count of each label.
-"""
-function print_results_summary_ott(
-    num_combinations::BigInt,
-    total_contradictions::Int64,
-    label_count::Dict{Any,Int64},
-)
-    valid_combinations = num_combinations - total_contradictions
-    println("\nTotal combinations: $num_combinations")
-    println("Logical contradictions: $total_contradictions")
-    println("\nLabel distribution:")
-    for (label, count) in sort(collect(label_count), by = x -> x[2], rev = true)
-        percentage = (count / valid_combinations) * 100
-        println("$label: $count ($(round(percentage, digits=2))%)")
-    end
-end
-
-
-"""
-Prints a detailed summary of the results, including the number of combinations for each result label.
-
-Args:
-    results (Dict{Any,Vector{BigInt}}): A dictionary containing the results and their corresponding combinations.
-"""
-function print_detailed_results_ott(results::Dict{Any,Vector{BigInt}})
-    println("\nDetailed results:")
-    for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
-        println("[$result] ($(length(combinations)) combinations):")
-        if length(combinations) > 10
-            println("  First 10: $(combinations[1:10])")
-            println("  ... ($(length(combinations)-10) more)")
-        else
-            println("  All: $combinations")
-        end
-    end
-end
-
 ###############################################################################################################################
 
 """
@@ -453,10 +451,10 @@ function genera_report_statistiche_ott(
             println(file, "\n4. SEMPLIFICAZIONE DELLE FORMULE")
             for (result, formula) in combined_results
                 formula_semplificata = minimizza_dnf(formula)
-                riduzione = (1 - length(formula_semplificata.combinations) / length(formula.combinations)) * 100
+                riduzione = (1 - nterms(formula_semplificata) / nterms(formula)) * 100
                 println(file, "  Etichetta $result:")
-                println(file, "    Termini originali: ", length(formula.combinations))
-                println(file, "    Termini dopo la semplificazione: ", length(formula_semplificata.combinations))
+                println(file, "    Termini originali: ", nterms(formula))
+                println(file, "    Termini dopo la semplificazione: ", nterms(formula_semplificata))
                 println(file, "    Riduzione: ", round(riduzione, digits=2), "%")
             end
         =#
@@ -495,8 +493,8 @@ function genera_report_statistiche_ott(
                 round(
                     (
                         1 -
-                        length(formula_semplificata.combinations) /
-                        length(formula.combinations)
+                        nterms(formula_semplificata) /
+                        nterms(formula)
                     ) * 100,
                     digits = 2,
                 ),
@@ -574,12 +572,12 @@ function compare_truth_combinations(model, alpha, atom_prop, vertical; kwargs...
         end
 
         formula_standard = combined_results_standard[label]
-        if Set(formula_ott.combinations) != Set(formula_standard.combinations)
+        if Set(eachcombination(formula_ott)) != Set(eachcombination(formula_standard))
             spa() && println("Differenze trovate per l'etichetta $label:")
             spa() &&
-                println("  Combinazioni ottimizzate: ", length(formula_ott.combinations))
+                println("  Combinazioni ottimizzate: ", nterms(formula_ott))
             spa() &&
-                println("  Combinazioni standard: ", length(formula_standard.combinations))
+                println("  Combinazioni standard: ", nterms(formula_standard))
             are_equal = false
         end
     end

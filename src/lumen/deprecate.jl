@@ -67,7 +67,7 @@ end
 #= TODO COSTATARE CORRETTEZZA\UTILITA =#
 #= TODO SPEZZARE IN DUE E RINOMINARE  =#
 """
-    IO_print_custom_or_formula_from_mask(formula::TwoLevelDNFFormula, orizontal::Float64) !!DEPRECATE!!
+    IO_print_custom_or_formula_from_mask(formula::TwoLevelDNFFormula, horizontal::Float64) !!DEPRECATE!!
 
 Generate a custom OR formula from a mask.
 
@@ -75,19 +75,19 @@ This function takes a `TwoLevelDNFFormula` and a horizontal threshold value, and
 
 Parameters:
 - `formula::TwoLevelDNFFormula`: The custom OR formula to be processed.
-- `orizontal::Float64`: The horizontal threshold value, which determines the number of features to include in the generated rows.
+- `horizontal::Float64`: The horizontal threshold value, which determines the number of features to include in the generated rows.
 
 Returns:
 - A vector of strings, where each string represents a row in the custom OR formula.
 """
 function IO_print_custom_or_formula_from_mask(
     formula::TwoLevelDNFFormula,
-    orizontal::Float64,
+    horizontal::Float64,
 ) # ex generate_custom_or_formula_from_mask
     all_rows = String[]
     current_row = String[]
 
-    num_orizontal = (floor(formula.thresholds_by_feature.count * orizontal))
+    num_orizontal = (floor(formula.thresholds_by_feature.count * horizontal))
 
     # Script per controllare e impostare i bit non stringenti a -1
     for (j, mask) in enumerate(formula.prime_mask)
@@ -179,7 +179,7 @@ function print_filtered_dnf(f::TwoLevelDNFFormula)
     result = ""
     
     # Process each combination with its corresponding mask
-    for (i, (combination, mask)) in enumerate(zip(f.combinations, f.prime_mask))
+    for (i, (combination, mask)) in enumerate(zip(eachcombination(f), f.prime_mask))
         # Skip if this is an empty combination
         if isempty(combination)
             continue

@@ -236,22 +236,22 @@ end
 
 
 """
-	minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula, orizontal = 1.0)
+	minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula, horizontal = 1.0)
 
 Simplifies a custom OR formula using the Quine algorithm.
 
 This function takes a `TwoLevelDNFFormula` object and applies the Quine algorithm to minimize the number of combinations in the formula. It returns a new `TwoLevelDNFFormula` object with the simplified combinations.
 
 """
-function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula, orizontal = 1.0)
+function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula, horizontal = 1.0)
     # Strutture dati iniziali
-    terms = formula.combinations
+    terms = eachcombination(formula)
     feature_count =
         Dict(feature => length(atoms) for (feature, atoms) in formula.atoms_by_feature)
 
-    # Calcolo features permesse basato su orizontal
+    # Calcolo features permesse basato su horizontal
     total_features = length(formula.thresholds_by_feature)
-    allowed_features = floor(Int, total_features * orizontal)
+    allowed_features = floor(Int, total_features * horizontal)
     num_orizontal = sum(get(feature_count, i, 0) for i = 1:allowed_features)
 
     # Funzioni di conversione
@@ -457,7 +457,7 @@ The Espresso algorithm is a well-known method for Boolean function minimization,
 
 """
 function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula)
-    terms = [Vector{Int}([x ? 1 : 0 for x in term]) for term in formula.combinations]
+    terms = [Vector{Int}([x ? 1 : 0 for x in term]) for term in eachcombination(formula)]
 
     function copre(cube1, cube2)
         for (b1, b2) in zip(cube1, cube2)
@@ -648,7 +648,7 @@ function verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLeve
         assignments = Set{Dict{Int,Bool}}()
 
         # Converti ogni BitVector in un Dict{Int,Bool}
-        for combination in formula.combinations
+        for combination in eachcombination(formula)
             assignment = Dict{Int,Bool}()
             for (i, bit) in enumerate(combination)
                 assignment[i] = bit
@@ -669,7 +669,7 @@ function verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLeve
 
     # Funzione ottimizzata per valutare la formula
     function evaluate_custom_or_formula(formula, assignment)
-        for combination in formula.combinations
+        for combination in eachcombination(formula)
             all_true = true
             for (feat, atom_list) in formula.atoms_by_feature
                 feat_value = get(assignment, feat, false)

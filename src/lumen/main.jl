@@ -33,7 +33,7 @@ struct LumenRuleExtractor <: RuleExtractor end
 extractrules(::LumenRuleExtractor, m, args...; kwargs...) = Lumen.lumen(m, args...; kwargs...)
 
 """
-    lumen(model, tempo_inizio, vertical = 1.0, orizontal = 1.0, ott_mode = false, 
+    lumen(model, tempo_inizio, vertical = 1.0, horizontal = 1.0, ott_mode = false, 
           controllo = false, minimization_scheme = :espresso; 
           minimization_kwargs = (;), filteralphabetcallback! = identity, kwargs...)
 
@@ -44,7 +44,7 @@ logical rules from a decision tree ensemble model into DNF (Disjunctive Normal F
 - `model`: The decision tree ensemble model to analyze
 - `tempo_inizio`: Start time for performance measurement
 - `vertical::Real`: Vertical coverage parameter (α) for rule extraction (0.0 < vertical ≤ 1.0)
-- `orizontal::Real`: Horizontal coverage parameter (β) for rule extraction (0.0 < orizontal ≤ 1.0)
+- `horizontal::Real`: Horizontal coverage parameter (β) for rule extraction (0.0 < horizontal ≤ 1.0)
 - `ott_mode::Bool`: Flag to enable optimized processing mode
 - `controllo::Bool`: Flag to enable validation mode for comparing results
 - `minimization_scheme::Symbol`: DNF minimization algorithm to use (e.g., :espresso)
@@ -83,7 +83,7 @@ No explicit return value, but produces:
 - Statistical reports (when enabled)
 
 # Notes
-- Parameters `vertical` and `orizontal` must be in range (0.0, 1.0]
+- Parameters `vertical` and `horizontal` must be in range (0.0, 1.0]
 - Setting both parameters to 1.0 enforces strong rule extraction
 - The function aligns with Algorithm 1 from the reference implementation
 - Performance statistics are generated based on processing time and rule reduction
@@ -100,7 +100,7 @@ function lumen(
     modelJ, # attualmente truth_combinations usa model 
     tempo_inizio = time(),
     vertical::Real=1.0,
-    orizontal::Real=1.0,
+    horizontal::Real=1.0,
     ott_mode::Bool=false,
     controllo::Bool=false,
     minimization_scheme::Symbol=:espresso;
@@ -108,11 +108,11 @@ function lumen(
     filteralphabetcallback=identity,
     kwargs...
 )
-    if vertical <= 0.0 || vertical > 1.0 || orizontal <= 0.0 || orizontal > 1.0
+    if vertical <= 0.0 || vertical > 1.0 || horizontal <= 0.0 || horizontal > 1.0
         @warn "Inserito parametri non validi"
         @warn "Verranno settati entrambi a 1"
         vertical = 1.0 # Agisce in truth_combinations
-        orizontal = 1.0 # Agisce in printIO_custom_or_formula TODO agire pre semplificazione ? 
+        horizontal = 1.0 # Agisce in printIO_custom_or_formula TODO agire pre semplificazione ? 
     end
 
     spa() && println(
@@ -211,17 +211,22 @@ function lumen(
                 @info "Semplificazione completata in $(formula_semplificata.time) secondi"
                 spa() && println("$COLORED_INFO**************⬆️**************$RESET")
 
-                spa() && println("Termini originali: ", length(formula.combinations))
+                spa() && println("Termini originali: ", nterms(formula))
                 spa() && println(
                     "Termini dopo la semplificazione: ",
-                    length(formula_semplificata.value.combinations),
+                    nterms(formula_semplificata.value),
+                )
+                spa() && println("Atomi/termine originali: ", natomsperterm(formula))
+                spa() && println(
+                    "Atomi/termine dopo la semplificazione: ",
+                    natomsperterm(formula_semplificata.value),
                 )
                 spa() && println()
 
                 new_rule = convert_DNF_formula(
                     formula_semplificata.value,
                     result,  # Passiamo il result come outcome
-                    orizontal
+                    horizontal
                 )
                 println(new_rule)
                 push!(rules_vector_for_decisionSet, new_rule)

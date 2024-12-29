@@ -254,6 +254,15 @@ eachcombination(f::TwoLevelDNFFormula) = f.combinations
 function SoleLogics.atoms(f::TwoLevelDNFFormula)
     Atom.(conditions(f))
 end
+
+nterms(f::TwoLevelDNFFormula) = length(eachcombination(f))
+function natomsperterm(f::TwoLevelDNFFormula)
+    # print(eachcombination(f))
+    # sum(c->sum(!=(-1), c), eachcombination(f))/nterms(f) |> print
+    # readline()
+    sum(c->sum(!=(-1), c), eachcombination(f))/nterms(f)
+end
+
 function conditions(f::TwoLevelDNFFormula)
     return collect(
         Iterators.flatten(
@@ -276,7 +285,7 @@ end
 Provides a custom string representation for the `TwoLevelDNFFormula` struct, displaying the number of combinations it contains.
 """
 Base.show(io::IO, f::TwoLevelDNFFormula) =
-    print(io, "TwoLevelDNFFormula($(length(f.combinations)) combinations)")
+    print(io, "TwoLevelDNFFormula($(nterms(f)) combinations)")
 
 """
 Prints a human-readable representation of a `TwoLevelDNFFormula` to the specified output stream `io`.
@@ -482,10 +491,10 @@ The representation includes the number of combinations in the formula, and then 
 function stampa_dnf(
     io::IO,
     formula::TwoLevelDNFFormula,
-    max_combinations::Int = length(formula.combinations),
+    max_combinations::Int = nterms(formula),
 )
-    println(io, "TwoLevelDNFFormula with $(length(formula.combinations)) combinations:")
-    for (i, combination) in enumerate(formula.combinations[1:min(max_combinations, end)])
+    println(io, "TwoLevelDNFFormula with $(nterms(formula)) combinations:")
+    for (i, combination) in enumerate(eachcombination(formula)[1:min(max_combinations, end)])
         disjunct = generate_disjunct(
             combination,
             formula.num_atoms,
@@ -496,10 +505,10 @@ function stampa_dnf(
         stampa_disjunct(io, disjunct)
         println(io)
 
-        if i == max_combinations && length(formula.combinations) > max_combinations
+        if i == max_combinations && nterms(formula) > max_combinations
             println(
                 io,
-                "  ... (altre $(length(formula.combinations) - max_combinations) combinazioni non mostrate)",
+                "  ... (altre $(nterms(formula) - max_combinations) combinazioni non mostrate)",
             )
         end
     end

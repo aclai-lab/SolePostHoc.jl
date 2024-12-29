@@ -89,15 +89,15 @@ function genera_report_statistiche(
             riduzione =
                 (
                     1 -
-                    length(formula_semplificata.combinations) /
-                    length(formula.combinations)
+                    nterms(formula_semplificata) /
+                    nterms(formula)
                 ) * 100
             println(file, "  Etichetta $result:")
-            println(file, "    Termini originali: ", length(formula.combinations))
+            println(file, "    Termini originali: ", nterms(formula))
             println(
                 file,
                 "    Termini dopo la semplificazione: ",
-                length(formula_semplificata.combinations),
+                nterms(formula_semplificata),
             )
             println(file, "    Riduzione: ", round(riduzione, digits = 2), "%")
         end
@@ -136,8 +136,8 @@ function genera_report_statistiche(
                 round(
                     (
                         1 -
-                        length(formula_semplificata.combinations) /
-                        length(formula.combinations)
+                        nterms(formula_semplificata) /
+                        nterms(formula)
                     ) * 100,
                     digits = 2,
                 ),

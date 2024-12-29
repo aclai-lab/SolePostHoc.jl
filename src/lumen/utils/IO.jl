@@ -78,8 +78,15 @@ function print_detailed_results(results::Dict{Any,Vector{BigInt}})
     end
 end
 
-function io_formula_mask(formula::TwoLevelDNFFormula, orizontal::Float64 = 1.0)
-    num_orizontal = floor(Int, formula.thresholds_by_feature.count * orizontal)
+function io_formula_mask(formula::TwoLevelDNFFormula, horizontal::Float64 = 1.0)
+    
+    if horizontal < 1.0
+        num_orizontal = floor(Int, formula.thresholds_by_feature.count * horizontal)
+        # retain_feature(feature) = (feature  <= num_orizontal)
+    
+        good_features = randperm(formula.thresholds_by_feature.count)[1:num_orizontal]
+        retain_feature(feature) = (feature in good_features)
+    end
     result = Set{String}()
 
     for mask in formula.prime_mask
@@ -87,7 +94,7 @@ function io_formula_mask(formula::TwoLevelDNFFormula, orizontal::Float64 = 1.0)
         current_atom_index = 1
 
         for (feature, atoms) in formula.atoms_by_feature
-            if feature <= num_orizontal
+            if horizontal == 1.0 || retain_feature(feature)
                 for (threshold, is_greater_equal) in atoms
                     # Prima controlliamo se siamo nel range del mask e se il valore non è -1
                     if current_atom_index <= length(mask) && mask[current_atom_index] != -1
@@ -131,9 +138,9 @@ end
 function printIO_custom_or_formula(
     io::IO,
     formula::TwoLevelDNFFormula,
-    orizontal::Float64 = 1.0,
+    horizontal::Float64 = 1.0,
 )
-    formulas = io_formula_mask(formula, orizontal)
+    formulas = io_formula_mask(formula, horizontal)
     println(io, "OR Formula with $(length(formulas)) combinations:")
     for (i, formula_str) in enumerate(formulas)
         if i == 1
@@ -148,9 +155,9 @@ end
 function convert_DNF_formula(
     formula::TwoLevelDNFFormula,
     outcome,
-    orizontal::Float64 = 1.0,
+    horizontal::Float64 = 1.0,
 )
-    formulas = io_formula_mask(formula, orizontal)
+    formulas = io_formula_mask(formula, horizontal)
     result = join(formulas, " ∨ ")
     
     # Specificare esplicitamente featvaltype = Real per risolvere il warning
