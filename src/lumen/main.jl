@@ -159,11 +159,9 @@ function lumen(
         spa() && println("\n\n$COLORED_TITLE$TITLE\n PARTE 3 TABELLA \n$TITLE$RESET")
 
         if (ott_mode == true)
-            results, label_count =
-                Lumen.truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical, apply_forest)
+            results, label_count = @time "Lumen: time taken for computing combinations" Lumen.truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical, apply_forest)
         else
-            results, label_count =
-                Lumen.truth_combinations(modelJ, my_alphabet, my_atoms, vertical, apply_forest)
+            results, label_count = @time "Lumen: time taken for computing combinations" Lumen.truth_combinations(modelJ, my_alphabet, my_atoms, vertical, apply_forest)
         end
 
         spa() && println(
