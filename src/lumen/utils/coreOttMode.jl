@@ -122,10 +122,10 @@ function truth_combinations_ott(
 
     num_atoms = length(atoms)
     all_combinations = BigInt(2)^num_atoms
-    if vertical == 1.0
+    if isone(vertical)
         num_combinations = all_combinations
     else
-        num_combinations = BigInt(round(BigInt(2)^num_atoms * vertical))
+        num_combinations = BigInt(round(all_combinations * vertical))
     end
 
     results = Dict{Any,Vector{BigInt}}()
@@ -162,7 +162,7 @@ function truth_combinations_ott(
         end_i = min(start_i + chunk_size - 1, num_combinations - 1)
 
         for i = start_i:end_i
-            if vertical == 1.0
+            if isone(vertical)
                 # Systematic
                 combination, has_contradiction = generate_combination_ott(
                     BigInt(i),
@@ -174,7 +174,7 @@ function truth_combinations_ott(
                 has_contradiction = true
                 # Find the first random non-contradicting one
                 while has_contradiction
-                    i_rand = rand(BigInt(1):all_combinations)
+                    i_rand = rand(BigInt(0):(all_combinations-1))
                     combination, has_contradiction = generate_combination_ott(
                         BigInt(i_rand),
                         num_atoms,

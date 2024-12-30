@@ -202,36 +202,37 @@ function lumen(
             @info "Iniziando la semplificazione per il risultato $result"
             start_time = time()
 
-            formula_semplificata = @timed Lumen.minimizza_dnf(
+            formula_semplificata_t = @timed Lumen.minimizza_dnf(
                 Val(minimization_scheme),
                 formula;
                 minimization_kwargs...,
             )
+            formula_semplificata = formula_semplificata_t.value
             try
-                @info "Semplificazione completata in $(formula_semplificata.time) secondi"
+                @info "Semplificazione completata in $(formula_semplificata_t.time) secondi"
                 spa() && println("$COLORED_INFO**************⬆️**************$RESET")
 
                 spa() && println("Termini originali: ", nterms(formula))
                 spa() && println(
                     "Termini dopo la semplificazione: ",
-                    nterms(formula_semplificata.value),
+                    nterms(formula_semplificata),
                 )
                 spa() && println("Atomi/termine originali: ", natomsperterm(formula))
                 spa() && println(
                     "Atomi/termine dopo la semplificazione: ",
-                    natomsperterm(formula_semplificata.value),
+                    natomsperterm(formula_semplificata),
                 )
                 spa() && println()
 
-                new_rule = convert_DNF_formula(
-                    formula_semplificata.value,
-                    result,  # Passiamo il result come outcome
+                ant = convert_DNF_formula(
+                    formula_semplificata,
                     horizontal
                 )
+                new_rule = Rule(ant, result)
                 println(new_rule)
                 push!(rules_vector_for_decisionSet, new_rule)
                 # Verifica della semplificazione
-                is_congruent = Lumen.verify_simplification(formula, formula_semplificata.value)
+                is_congruent = Lumen.verify_simplification(formula, formula_semplificata)
                 spa() && println(
                     "\n\n$COLORED_INFO$TITLE\n PARTE 3.a Semplificazione valida ?\n$TITLE$RESET",
                 )

@@ -1,3 +1,5 @@
+using Random
+
 """
 Prints a summary of the estimated time for a computation.
 
@@ -78,9 +80,9 @@ function print_detailed_results(results::Dict{Any,Vector{BigInt}})
     end
 end
 
-function io_formula_mask(formula::TwoLevelDNFFormula, horizontal::Float64 = 1.0)
+function my_syntaxstring(formula::TwoLevelDNFFormula, horizontal::Float64 = 1.0)
     
-    if horizontal < 1.0
+    if !isone(horizontal)
         num_orizontal = floor(Int, formula.thresholds_by_feature.count * horizontal)
         # retain_feature(feature) = (feature  <= num_orizontal)
     
@@ -94,7 +96,7 @@ function io_formula_mask(formula::TwoLevelDNFFormula, horizontal::Float64 = 1.0)
         current_atom_index = 1
 
         for (feature, atoms) in formula.atoms_by_feature
-            if horizontal == 1.0 || retain_feature(feature)
+            if isone(horizontal) || retain_feature(feature)
                 for (threshold, is_greater_equal) in atoms
                     # Prima controlliamo se siamo nel range del mask e se il valore non è -1
                     if current_atom_index <= length(mask) && mask[current_atom_index] != -1
@@ -131,37 +133,31 @@ function io_formula_mask(formula::TwoLevelDNFFormula, horizontal::Float64 = 1.0)
         end
     end
 
-    return collect(result)  # Convertiamo il Set in Array per il risultato finale
+    formulas = collect(result)
+    return join(formulas, " ∨ ")
 end
 
 
-function printIO_custom_or_formula(
-    io::IO,
-    formula::TwoLevelDNFFormula,
-    horizontal::Float64 = 1.0,
-)
-    formulas = io_formula_mask(formula, horizontal)
-    println(io, "OR Formula with $(length(formulas)) combinations:")
-    for (i, formula_str) in enumerate(formulas)
-        if i == 1
-            print(io, "$formula_str")
-        else
-            print(io, " ∨ $formula_str")
-        end
-    end
-    println(io,"")
-end
+# function printIO_custom_or_formula(
+#     io::IO,
+#     formula::TwoLevelDNFFormula,
+#     horizontal::Float64 = 1.0,
+# )
+#     result = my_syntaxstring(formula, horizontal)
+#     println(io, "OR Formula with $(nterms(formula)) combinations:")
+#     print(io, result)
+#     println(io,"")
+# end
 
 function convert_DNF_formula(
     formula::TwoLevelDNFFormula,
     outcome,
     horizontal::Float64 = 1.0,
 )
-    formulas = io_formula_mask(formula, horizontal)
-    result = join(formulas, " ∨ ")
+    result = my_syntaxstring(formula, horizontal)
     
     # Specificare esplicitamente featvaltype = Real per risolvere il warning
-    φ = parseformula(
+    φ = SoleLogics.parseformula(
         result;
         atom_parser = a->Atom(
             parsecondition(
@@ -172,7 +168,5 @@ function convert_DNF_formula(
             )
         )
     )
-    
-    # Creiamo la Rule usando l'outcome passato come parametro
-    return Rule(φ, outcome)
+    return φ
 end

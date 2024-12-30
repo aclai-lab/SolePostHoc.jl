@@ -52,10 +52,16 @@ function truth_combinations(
 
     # Calcolo del numero totale di combinazioni
     num_atoms = length(atoms)
+    all_combinations = BigInt(2)^num_atoms
     println("num_atoms: ", num_atoms)
-    println("2^num_atoms: ", BigInt(2)^num_atoms)
+    println("2^num_atoms: ", all_combinations)
     println("vertical: ", vertical)
-    num_combinations = BigInt(round((BigInt(2)^num_atoms) * vertical))
+    
+    if isone(vertical)
+        num_combinations = all_combinations
+    else
+        num_combinations = BigInt(round(all_combinations * vertical))
+    end
 
     # Stima del tempo di esecuzione
     spa() && begin
@@ -91,14 +97,29 @@ function truth_combinations(
     start_time = time()
     contradictions = 0
     update_interval = max(1, num_combinations ÷ 100)  # Aggiorna ogni 1% di progresso
-
+    
     for i = 0:(num_combinations-1)
-        combination, has_contradiction = process_combination(
-            BigInt(i),
-            num_atoms,
-            thresholds_by_feature,
-            atoms_by_feature,
-        )
+        if isone(vertical)
+            combination, has_contradiction = process_combination(
+                BigInt(i),
+                num_atoms,
+                thresholds_by_feature,
+                atoms_by_feature,
+            )
+        else
+            has_contradiction = true
+            # Find the first random non-contradicting one
+            while has_contradiction
+                # print(".")
+                i_rand = rand(BigInt(0):(all_combinations-1))
+                combination, has_contradiction = process_combination(
+                    BigInt(i_rand),
+                    num_atoms,
+                    thresholds_by_feature,
+                    atoms_by_feature,
+                )
+            end
+        end
         if has_contradiction
             contradictions += 1
         else
