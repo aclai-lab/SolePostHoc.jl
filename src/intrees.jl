@@ -1,4 +1,4 @@
-# using DecisionTree
+import DecisionTree as DT
 using ComplexityMeasures
 
 ############################################################################################
@@ -53,7 +53,7 @@ See also
 """
 # Extract rules from a forest, with respect to a dataset
 function intrees(
-    model::Union{AbstractModel,DecisionForest},
+    model,
     X,
     Y::AbstractVector{<:Label};
     #
@@ -64,6 +64,7 @@ function intrees(
     method_rule_selection = :CBC,
     accuracy_rule_selection = nothing,
     min_frequency = nothing,
+    silent = false,
     #
     rng::AbstractRNG = MersenneTwister(1),
     kwargs...,
@@ -75,6 +76,9 @@ function intrees(
     isnothing(accuracy_rule_selection) && (accuracy_rule_selection = 0.0)
     isnothing(min_frequency) && (min_frequency = 0.01)
 
+    if !(X isa AbstractInterpretationSet)
+        X = SoleData.scalarlogiset(X; silent, allow_propositional = true)
+    end
     """
         prune_rule(rc::Rule)::Rule
 
@@ -98,13 +102,14 @@ function intrees(
         nruleconjuncts = nconjuncts(r)
         E_zero = rulemetrics(r,X,Y)[:error]
         valid_idxs = collect(1:nruleconjuncts)
-
+        antd = antecedent(r)
+        out = consequent(r)
         for idx in reverse(valid_idxs)
             (length(valid_idxs) < 2) && break
 
             # Indices to be considered to evaluate the rule
             other_idxs = intersect!(vcat(1:(idx-1),(idx+1):nruleconjuncts),valid_idxs)
-            rule = r[other_idxs]
+            rule = Rule(LeftmostConjunctiveForm(SoleLogics.grandchildren(antd)[other_idxs]), out)
 
             # Return error of the rule without idx-th pair
             E_minus_i = rulemetrics(rule,X,Y)[:error]
@@ -118,7 +123,7 @@ function intrees(
             end
         end
 
-        return r[valid_idxs]
+        return Rule(r[valid_idxs], out)
     end
 
     function _prune_rule(
@@ -220,10 +225,10 @@ function intrees(
     )
         #coefReg = 0.95 .- (0.01*matrixrulemetrics[:,3]/max(matrixrulemetrics[:,3]...))
         #@show coefReg
-        rf = DecisionTree.build_forest(Y,X,2,50,0.7,-1; rng=rng)
+        rf = DT.build_forest(Y,X,2,50,0.7,-1; rng=rng)
         imp = begin
             #importance = impurity_importance(rf, coefReg)
-            importance = DecisionTree.impurity_importance(rf)
+            importance = DT.impurity_importance(rf)
             importance/max(importance...)
         end
         @show imp
@@ -237,13 +242,16 @@ function intrees(
         return Int.(finalmatrix[:,5])
     end
 
+    if !haslistrules(model)
+        model = solemodel(model)
+    end
     ########################################################################################
     # Extract rules from each tree, obtain full ruleset
     ########################################################################################
     println("Rule extraction in...")
     ruleset = @time begin
-        if model isa DecisionForest
-            rs = unique([listrules(tree; use_shortforms=true) for tree in trees(model)])
+        if isensemble(model)
+            rs = unique([listrules(tree; use_shortforms=true) for tree in SoleModels.models(model)])
             # TODO maybe also sort?
             rs isa Vector{<:Vector{<:Any}} ? reduce(vcat,rs) : rs
         else
@@ -352,28 +360,38 @@ function intrees(
         # Best rule index
         idx_best = begin
             idx_best = nothing
+            @show rules_error
             # First: find the rule with minimum error
-            idx = findall(rules_error .== min(rules_error...))
+            idx = findall(rules_error .== minimum(rules_error))
             (length(idx) == 1) && (idx_best = idx)
             println("Idxs min error: $(idx)")
 
             # If not one, find the rule with maximum frequency
             if isnothing(idx_best)
-                idx_support = findall(rules_support .== max(rules_support[idx]...))
-                (length(intersect!(idx, idx_support)) == 1) && (idx_best = idx)
+                @show idx
+                @show rules_support
+                m = maximum(rules_support)
+                @show m
+                idx_support = findall(rules_support .== m)
+                idx_ = intersect(idx, idx_support)
+                (length(idx_) == 1) && (idx_best = idx_)
             end
             println("Idxs min support: $(idx)")
 
             # If not one, find the rule with minimum length
             if isnothing(idx_best)
-                idx_length = findall(rules_length .== min(rules_length[idx]...))
-                (length(intersect!(idx, idx_length)) == 1) && (idx_best = idx)
+                idx_length = findall(rules_length .== minimum(rules_length))
+                idx_ = intersect(idx, idx_length)
+                (length(idx_) == 1) && (idx_best = idx_)
             end
             println("Idxs min length: $(idx)")
 
+            @show idx_best
+            @show idx
+
             # Final case: more than one rule with minimum length
             # Randomly choose a rule
-            isnothing(idx_best) && (idx_best = rand(rng,idx))
+            isnothing(idx_best) && (idx_best = rand(rng, idx, 1))
 
             length(idx_best) > 1 && error("More than one best indexes")
             println("Idx best: $(idx_best)")

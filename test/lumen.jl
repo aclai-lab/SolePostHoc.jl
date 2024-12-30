@@ -1,7 +1,8 @@
+using Test
 using DecisionTree: load_data, build_forest, apply_forest
 using SolePostHoc
-using SolePostHoc: Lumen
 using SoleModels
+using DataFrames
 
 nome_dataset = "iris"
 
@@ -32,6 +33,11 @@ model = build_forest(
     rng = seed,
 )
 
-f = solemodel(model)
+@test_nowarn Lumen.lumen(model)
 
-Lumen.lumen(f, model)
+ds = extractrules(LumenRuleExtractor(), model, )
+apply_function = SoleModels.apply,
+
+ds = extractrules(InTreesRuleExtractor(), model, DataFrame((X), ["V$(i)" for i in 1:size(X, 2)]), y)
+
+ds = extractrules(InTreesRuleExtractor(), model, X, y)

@@ -36,6 +36,19 @@ include("bellatrex.jl")
 
 export lumen, Lumen
 export LumenRuleExtractor
+
+using SoleModels: RuleExtractor
+import SoleModels: isexact, extractrules
+
+"""
+Pagliarini, Giovanni, et al. "Minimal Rules from Decision Forests: a Systematic Approach." OVERLAY@ AI* IA. 2024.
+
+See also [`extractrules`](@ref), [`intrees`](@ref), [`RuleExtractor`](@ref).
+"""
+struct LumenRuleExtractor <: RuleExtractor end
+
+extractrules(::LumenRuleExtractor, m, args...; kwargs...) = Lumen.lumen(m, args...; kwargs...)
+
 include("lumen/main.jl")
 
 end

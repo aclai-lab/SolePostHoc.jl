@@ -38,7 +38,7 @@ Args:
     results (dict): The dictionary of results.
     label_count (dict): The dictionary of label counts.
     combined_results (dict): The dictionary of combined results.
-    tempo_esecuzione (float): The total execution time.
+    elapsed_time (float): The total execution time.
     model (object): The model object.
 """
 function genera_report_statistiche(
@@ -49,7 +49,7 @@ function genera_report_statistiche(
     results,
     label_count,
     combined_results,
-    tempo_esecuzione,
+    elapsed_time,
     model,
 )
     open(nome_file, "w") do file
@@ -107,13 +107,13 @@ function genera_report_statistiche(
         println(
             file,
             "  Tempo totale di esecuzione: ",
-            round(tempo_esecuzione, digits = 2),
+            round(elapsed_time, digits = 2),
             " secondi",
         )
         println(
             file,
             "  Tempo medio per combinazione: ",
-            round(tempo_esecuzione / num_combinazioni_totali * 1000, digits = 2),
+            round(elapsed_time / num_combinazioni_totali * 1000, digits = 2),
             " millisecondi",
         )
 

@@ -37,7 +37,7 @@ function bellatrex(
     ndatasetinstances = ninstances(X)
     final_predictions = []
     ruleset = begin
-        if m isa DecisionForest
+        if isensemble(m)
             unique([listrules(tree; use_shortforms=true) for tree in ftrees])
         else
             listrules(model)

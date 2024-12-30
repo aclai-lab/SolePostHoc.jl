@@ -401,7 +401,7 @@ Args:
     results (Dict{Any,Vector{BigInt}}): A dictionary containing the results and their corresponding combinations.
     label_count (Dict{Any,Int64}): A dictionary containing the count of each label.
     combined_results (Dict{Any,TwoLevelDNFFormula}): A dictionary containing the simplified formulas for each label.
-    tempo_esecuzione (Float64): The total execution time of the optimization.
+    elapsed_time (Float64): The total execution time of the optimization.
     model (Any): The model used in the optimization.
 """
 function genera_report_statistiche_ott(
@@ -412,7 +412,7 @@ function genera_report_statistiche_ott(
     results,
     label_count,
     combined_results,
-    tempo_esecuzione,
+    elapsed_time,
     model,
 )
     open(nome_file, "w") do file
@@ -464,13 +464,13 @@ function genera_report_statistiche_ott(
         println(
             file,
             "  Tempo totale di esecuzione: ",
-            round(tempo_esecuzione, digits = 2),
+            round(elapsed_time, digits = 2),
             " secondi",
         )
         println(
             file,
             "  Tempo medio per combinazione: ",
-            round(tempo_esecuzione / num_combinazioni_totali * 1000, digits = 2),
+            round(elapsed_time / num_combinazioni_totali * 1000, digits = 2),
             " millisecondi",
         )
 
