@@ -96,9 +96,11 @@ function truth_combinations(
     # Processo di generazione e valutazione delle combinazioni
     start_time = time()
     contradictions = 0
+    i_rand = 0
     update_interval = max(1, num_combinations ÷ 100)  # Aggiorna ogni 1% di progresso
     
     for i = 0:(num_combinations-1)
+        i_v = i                                      # Indice per la progressbar
         if isone(vertical)
             combination, has_contradiction = process_combination(
                 BigInt(i),
@@ -108,33 +110,31 @@ function truth_combinations(
             )
         else
             has_contradiction = true
-            # Find the first random non-contradicting one
-            while has_contradiction
-                # print(".")
-                i_rand = rand(BigInt(0):(all_combinations-1))
+                i = rand(BigInt(0):(all_combinations-1))
                 combination, has_contradiction = process_combination(
-                    BigInt(i_rand),
+                    BigInt(i),
                     num_atoms,
                     thresholds_by_feature,
                     atoms_by_feature,
                 )
-            end
         end
         if has_contradiction
             contradictions += 1
         else
             combination_dict = SortedDict(combination)
             combination_vector = vcat(collect(values(combination_dict))...)
-            result = apply_function(model, combination_vector)
-
-            push!(get!(Vector{BigInt}, results, result), BigInt(i))
-            label_count[result] = get(label_count, result, 0) + 1
+            
+            if !(combination_vector in values(results))
+                result = apply_function(model, combination_vector)
+                push!(get!(Vector{BigInt}, results, result), BigInt(i))
+                label_count[result] = get(label_count, result, 0) + 1
+            end
         end
 
-        # Aggiornamento della barra di avanzamento testuale FIXME TOTALMENTE RIMUOVIBILE
+        # Aggiornamento della barra di avanzamento testuale FIXME TOTALMENTE RIMUOVIBILE ?
         print_progress && begin
-            if i % update_interval == 0 || i == num_combinations - 1
-                progress = BigFloat(i + 1) / num_combinations
+            if i_v % update_interval == 0 || i_v == num_combinations - 1
+                progress = BigFloat(i_v + 1) / num_combinations
                 print_progress_bar(progress)
             end
         end
