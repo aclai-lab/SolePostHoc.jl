@@ -198,6 +198,7 @@ function lumen(
 
         # start_time = 0
         rules_vector_for_decisionSet = Rule[]
+        vectPrePostNumber = Vector{Tuple{Int, Int}}()
         for (result, formula) in combined_results
             spa() && println("Risultato: $result")
             #spa() && stampa_dnf(stdout, formula) # print dnf pre minimization
@@ -215,7 +216,11 @@ function lumen(
             try
                 @info "Semplificazione completata in $(formula_semplificata_t.time) secondi"
                 spa() && println("$COLORED_INFO**************⬆️**************$RESET")
-
+                
+                ntermpresemp = nterms(formula)
+                ntermpostsemp = nterms(formula_semplificata)
+                push!(vectPrePostNumber, (ntermpresemp, ntermpostsemp))
+                
                 spa() && println("Termini originali: ", nterms(formula))
                 spa() && println(
                     "Termini dopo la semplificazione: ",
@@ -257,7 +262,7 @@ function lumen(
         ds = DecisionSet(rules_vector_for_decisionSet);  
         
         print("\n\n$COLORED_TITLE$TITLE\n DECISION SET \n$TITLE$RESET")
-        return ds
+        return ds, vectPrePostNumber
 
         print("\n\n$COLORED_TITLE$TITLE$RESET")
 
