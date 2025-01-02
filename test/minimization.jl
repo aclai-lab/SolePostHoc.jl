@@ -58,30 +58,24 @@ solem = solemodel(fitted_params(mach).forest; classlabels, featurenames, keep_co
 @test_nowarn SolePostHoc.extractrules(BellatrexRuleExtractor(), solem)
 
 
-@test SolePostHoc.extractrules(solem; method = :lumen, vertical = ...)
-@test SolePostHoc.extractrules(solem; method = :lumenmit, vertical = ...)
-@test SolePostHoc.extractrules(solem; method = :lumenexact, vertical = ...)
+@test SolePostHoc.extractrules(solem; method = :lumen, vertical = 1.0)
+@test SolePostHoc.extractrules(solem; method = :lumenmit, vertical = 1.0)
+@test SolePostHoc.extractrules(solem; method = :lumenexact, vertical = 1.0)
 
 @test SolePostHoc.extractrules(solem, method = Lumen(; vertical = 1.0, horizontal = 0.7), kwargs...)
 
-function SolePostHoc.extractrules(modello, metodo; kwargs...)
 @test SolePostHoc.listrules(solem)
 
-
-# basemetho = :lumend = Lumen(; vertical = 1.0, horizontal = 0.7)
 kwargs = (; max_nrules = 10)
 
-for basemethod in [:lumen, Lumen(),,]
-@test SolePostHoc.extractrules(solem, method = basemethod, kwargs...)
+for basemethod in [:lumen, Lumen()]
+    @test SolePostHoc.extractrules(solem, method = basemethod, kwargs...)
 end
-
 
 function extractrules(solem, method, kwargs...)
   method(solem, kwargs...)
 end
 
-
-Dict{Symbol,}
 function extractrules(solem, method::Symbol, kwargs...)
   method(solem, kwargs...)
 end
