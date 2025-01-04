@@ -105,6 +105,7 @@ function lumen(
     solemodel = nothing,
     apply_function = SoleModels.apply,
     silent = false,
+    return_info = true, # TODO must default to `false`.
     kwargs...
 )
     if vertical <= 0.0 || vertical > 1.0 || horizontal <= 0.0 || horizontal > 1.0
@@ -116,7 +117,7 @@ function lumen(
     model = isnothing(solemodel) ? SoleModels.solemodel(modelJ) : solemodel
 
     silent || println(
-        "\n\n$COLORED_TITLE$TITLE\n PARTE 2.a ESTRAZIONE DELLE REGOLE DAGLI ALBERI \n$TITLE$RESET",
+        "\n\n$COLORED_TITLE$TITLE\n PART 2.a STARTER RULESET ESTRACTION \n$TITLE$RESET",
     )
 
     ruleset = @time begin
@@ -131,7 +132,7 @@ function lumen(
     silent || println(ruleset)
 
     silent || println(
-        "\n\n$COLORED_TITLE$TITLE\n PARTE 2.b ESTRAZIONE DEGLI ATOMI DALLE REGOLE \n$TITLE$RESET",
+        "\n\n$COLORED_TITLE$TITLE\n PART 2.b ATOM EXTRACTION \n$TITLE$RESET",
     )
 
     num_all_atoms, my_atoms, my_alphabet = begin
@@ -142,7 +143,7 @@ function lumen(
         silent || println(my_atoms)
 
         silent || println(
-            "\n\n$COLORED_TITLE$TITLE\n PARTE 2.c ESTRAZIONE DELL'ALFABETO pt2 :< \n$TITLE$RESET",
+            "\n\n$COLORED_TITLE$TITLE\n PART 2.c ALPHABET EXTRACTION pt2 \n$TITLE$RESET",
         )
 
         # Get number of features from the maximum feature index in atoms
@@ -167,7 +168,7 @@ function lumen(
     end
 
     if (controllo == false)
-        silent || println("\n\n$COLORED_TITLE$TITLE\n PARTE 3 TABELLA \n$TITLE$RESET")
+        silent || println("\n\n$COLORED_TITLE$TITLE\n PART 3 TABLE GENERATION \n$TITLE$RESET")
 
         if (ott_mode == true)
             results, label_count = @time "Lumen: time taken for computing combinations" Lumen.truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
@@ -176,7 +177,7 @@ function lumen(
         end
 
         silent || println(
-            "\n\n$COLORED_TITLE$TITLE\n PARTE 3 GENERAZIONE L-CLASS PATH FOREST & CONSEGUENTE SEMPLIFICAZIONE CON METODI AD HOC\n$TITLE$RESET",
+            "\n\n$COLORED_TITLE$TITLE\n PART 3 GENERATION OF L-CLASS PATH FOREST & SIMPLIFICATION\n$TITLE$RESET",
         )
 
         num_atoms = length(my_atoms)
@@ -267,14 +268,19 @@ function lumen(
         ds = DecisionSet(rules_vector_for_decisionSet);  
         
         print("\n\n$COLORED_TITLE$TITLE\n DECISION SET \n$TITLE$RESET")
-        return ds, vectPrePostNumber
+        if return_info
+            # return ds, (; vectPrePostNumber = vectPrePostNumber)
+            return ds, vectPrePostNumber
+        else
+            return ds
+        end
 
         print("\n\n$COLORED_TITLE$TITLE$RESET")
 
         end_time = time()
 
         silent ||
-            println("\n\n$COLORED_TITLE$TITLE\n PARTE 4 DOCUMENTO I DATI \n$TITLE$RESET")
+            println("\n\n$COLORED_TITLE$TITLE\n PART 4 DOCUMENTING RESULTS \n$TITLE$RESET")
 
         elapsed_time = end_time - start_time
 
