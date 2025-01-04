@@ -103,6 +103,8 @@ function lumen(
     minimization_kwargs::NamedTuple=(;),
     filteralphabetcallback=identity,
     solemodel = nothing,
+    apply_function = SoleModels.apply,
+    silent = false,
     kwargs...
 )
     if vertical <= 0.0 || vertical > 1.0 || horizontal <= 0.0 || horizontal > 1.0
@@ -113,7 +115,7 @@ function lumen(
     end
     model = isnothing(solemodel) ? SoleModels.solemodel(modelJ) : solemodel
 
-    spa() && println(
+    silent || println(
         "\n\n$COLORED_TITLE$TITLE\n PARTE 2.a ESTRAZIONE DELLE REGOLE DAGLI ALBERI \n$TITLE$RESET",
     )
 
@@ -126,25 +128,28 @@ function lumen(
             listrules(model; use_shortforms=true)
         end
     end
-    spa() && println(ruleset)
+    silent || println(ruleset)
 
-    spa() && println(
+    silent || println(
         "\n\n$COLORED_TITLE$TITLE\n PARTE 2.b ESTRAZIONE DEGLI ATOMI DALLE REGOLE \n$TITLE$RESET",
     )
 
     num_all_atoms, my_atoms, my_alphabet = begin
-        all_atoms = [atom for rule in ruleset for atom in atoms(antecedent(rule))] # all_atoms = collect(atoms(SoleModels.alphabet(model, false)))
+        all_atoms = collect(atoms(SoleModels.alphabet(model, false)))
         num_all_atoms = length(all_atoms)
         my_atoms = unique(all_atoms)
+        
+        silent || println(my_atoms)
 
-        spa() && println(my_atoms)
-
-        spa() && println(
+        silent || println(
             "\n\n$COLORED_TITLE$TITLE\n PARTE 2.c ESTRAZIONE DELL'ALFABETO pt2 :< \n$TITLE$RESET",
         )
 
         # Get number of features from the maximum feature index in atoms
         n_features = maximum(atom.value.metacond.feature.i_variable for atom in my_atoms)
+        if !(n_features isa Integer)
+            error("Lumen does not currently support symbolic feature names. Please ensure that your i_variable are numeric.")
+        end
         my_alphabet = Lumen.process_alphabet(my_atoms, n_features)
 
 
@@ -157,20 +162,20 @@ function lumen(
 
         #TODO feature isa variable value 
 
-        spa() && println(my_alphabet)
+        silent || println(my_alphabet)
         num_all_atoms, my_atoms, my_alphabet
     end
 
     if (controllo == false)
-        spa() && println("\n\n$COLORED_TITLE$TITLE\n PARTE 3 TABELLA \n$TITLE$RESET")
+        silent || println("\n\n$COLORED_TITLE$TITLE\n PARTE 3 TABELLA \n$TITLE$RESET")
 
         if (ott_mode == true)
-            results, label_count = @time "Lumen: time taken for computing combinations" Lumen.truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical, apply_forest)
+            results, label_count = @time "Lumen: time taken for computing combinations" Lumen.truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
         else
-            results, label_count = @time "Lumen: time taken for computing combinations" Lumen.truth_combinations(modelJ, my_alphabet, my_atoms, vertical, apply_forest)
+            results, label_count = @time "Lumen: time taken for computing combinations" Lumen.truth_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
         end
 
-        spa() && println(
+        silent || println(
             "\n\n$COLORED_TITLE$TITLE\n PARTE 3 GENERAZIONE L-CLASS PATH FOREST & CONSEGUENTE SEMPLIFICAZIONE CON METODI AD HOC\n$TITLE$RESET",
         )
 
@@ -200,9 +205,9 @@ function lumen(
         rules_vector_for_decisionSet = Rule[]
         vectPrePostNumber = Vector{Tuple{Int, Int}}()
         for (result, formula) in combined_results
-            spa() && println("Risultato: $result")
-            #spa() && stampa_dnf(stdout, formula) # print dnf pre minimization
-            spa() && println()
+            silent || println("Risultato: $result")
+            #silent || stampa_dnf(stdout, formula) # print dnf pre minimization
+            silent || println()
 
             @info "Iniziando la semplificazione per il risultato $result"
             # start_time = time()
@@ -215,23 +220,23 @@ function lumen(
             formula_semplificata = formula_semplificata_t.value
             try
                 @info "Semplificazione completata in $(formula_semplificata_t.time) secondi"
-                spa() && println("$COLORED_INFO**************⬆️**************$RESET")
+                silent || println("$COLORED_INFO**************⬆️**************$RESET")
                 
                 ntermpresemp = nterms(formula)
                 ntermpostsemp = nterms(formula_semplificata)
                 push!(vectPrePostNumber, (ntermpresemp, ntermpostsemp))
                 
-                spa() && println("Termini originali: ", nterms(formula))
-                spa() && println(
+                silent || println("Termini originali: ", nterms(formula))
+                silent || println(
                     "Termini dopo la semplificazione: ",
                     nterms(formula_semplificata),
                 )
-                spa() && println("Atomi/termine originali: ", natomsperterm(formula))
-                spa() && println(
+                silent || println("Atomi/termine originali: ", natomsperterm(formula))
+                silent || println(
                     "Atomi/termine dopo la semplificazione: ",
                     natomsperterm(formula_semplificata),
                 )
-                spa() && println()
+                silent || println()
 
                 ant = convert_DNF_formula(
                     formula_semplificata,
@@ -242,7 +247,7 @@ function lumen(
                 push!(rules_vector_for_decisionSet, new_rule)
                 # Verifica della semplificazione
                 is_congruent = Lumen.verify_simplification(formula, formula_semplificata)
-                spa() && println(
+                silent || println(
                     "\n\n$COLORED_INFO$TITLE\n PARTE 3.a Semplificazione valida ?\n$TITLE$RESET",
                 )
                 if is_congruent
@@ -254,7 +259,7 @@ function lumen(
             catch e
                 @error "Errore durante la semplificazione: $e"
             end
-            spa() && println(
+            silent || println(
                 "----------------------------------------------------------------------------",
             )
         end
@@ -268,12 +273,12 @@ function lumen(
 
         end_time = time()
 
-        spa() &&
+        silent ||
             println("\n\n$COLORED_TITLE$TITLE\n PARTE 4 DOCUMENTO I DATI \n$TITLE$RESET")
 
         elapsed_time = end_time - start_time
 
-        spa() && begin
+        silent || begin
             if (ott_mode == true)
                 #nome_file_report = "report_statistico_Parallelo_$(Dates.format(Dates.now(), "yyyymmdd_HHMMSS")).txt"
                 #genera_report_statistiche_ott(nome_file_report, ruleset, num_all_atoms, num_atoms, results, label_count, combined_results, elapsed_time, model)
@@ -285,12 +290,12 @@ function lumen(
     end
 
     if (controllo == true)
-        spa() && println(
+        silent || println(
             "\n\n$COLORED_INFO$TITLE\n PARTE 2.d È un ottimizzazione valida?\n$TITLE$RESET",
         )
 
         are_results_equal =
-            Lumen.compare_truth_combinations(modelJ, my_alphabet, my_atoms, vertical; kwargs...)
+            Lumen.compare_truth_combinations(modelJ, my_alphabet, my_atoms, vertical; apply_function, silent, kwargs...)
 
         if are_results_equal
             @info "\nL'ottimizzazione è valida: i risultati sono identici."

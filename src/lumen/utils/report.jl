@@ -150,5 +150,5 @@ function genera_report_statistiche(
         println(file, "Fine del report")
 
     end
-    spa() && println("Report generato con successo: $nome_file")
+    println("Report generato con successo: $nome_file")
 end

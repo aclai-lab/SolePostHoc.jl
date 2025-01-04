@@ -16,13 +16,6 @@ const results_lock = ReentrantLock()
 
 
 """
-Returns `true`.
-
-This is a simple function that always returns `true`. It is likely an implementation detail or a utility function used elsewhere in the codebase.
-"""
-spa() = true
-
-"""
 # TwoLevelDNFFormula
 
 ## Overview

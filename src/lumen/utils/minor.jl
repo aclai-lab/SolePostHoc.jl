@@ -61,23 +61,23 @@ function dict_to_bitvector(d::Dict{Any,Vector{BigInt}}, np::Int)
 end
 
 
-"""
-    create_table(labels::Vector{String}, features::Matrix{Float64})
+# """
+#     create_table(labels::Vector{String}, features::Matrix{Float64})
 
-Create a DataFrame from the given feature matrix and labels.
+# Create a DataFrame from the given feature matrix and labels.
 
-Args:
-    labels::Vector{String}: A vector of labels for each row in the feature matrix.
-    features::Matrix{Float64}: A matrix of feature values.
+# Args:
+#     labels::Vector{String}: A vector of labels for each row in the feature matrix.
+#     features::Matrix{Float64}: A matrix of feature values.
 
-Returns:
-    DataFrame: A DataFrame with the feature values and labels.
-"""
-function create_table(labels::Vector{String}, features::Matrix{Float64})
-    df = DataFrame(features, [:SepalLength, :SepalWidth, :PetalLength, :PetalWidth])
-    df.Label = labels
-    return df
-end
+# Returns:
+#     DataFrame: A DataFrame with the feature values and labels.
+# """
+# function create_table(labels::Vector{String}, features::Matrix{Float64})
+#     df = DataFrame(features, [:SepalLength, :SepalWidth, :PetalLength, :PetalWidth])
+#     df.Label = labels
+#     return df
+# end
 
 
 """
@@ -145,28 +145,28 @@ function process_alphabet(
 end
 
 
-"""
-Extracts the rules from a `DecisionForest` and organizes them by label.
+# """
+# Extracts the rules from a `DecisionForest` and organizes them by label.
 
-For each tree in the forest, this function extracts the rules, groups them by the label (consequent) of the rule, and prints the antecedents for each label.
+# For each tree in the forest, this function extracts the rules, groups them by the label (consequent) of the rule, and prints the antecedents for each label.
 
-This function is primarily used for debugging and inspecting the rules learned by the decision forest model.
-"""
-function extract_rules_by_label(f::DecisionForest)
-    for (i, tree) in enumerate(f.trees)
-        spa() && println("___________ ALBERO #$i ___________")
-        rules_by_label = Dict{String,Vector{Any}}()
-        rules = listrules(tree)
-        for rule in rules
-            label = string(consequent(rule))
-            antecedent_rule = antecedent(rule)
-            push!(get!(Vector{Any}, rules_by_label, label), antecedent_rule)
-        end
-        for (label, antecedents) in rules_by_label
-            spa() && println("Etichetta: ", label)
-            for antecedent in antecedents
-                spa() && println(antecedent)
-            end
-        end
-    end
-end
+# This function is primarily used for debugging and inspecting the rules learned by the decision forest model.
+# """
+# function extract_rules_by_label(f::DecisionForest)
+#     for (i, tree) in enumerate(f.trees)
+#         println("___________ ALBERO #$i ___________")
+#         rules_by_label = Dict{String,Vector{Any}}()
+#         rules = listrules(tree)
+#         for rule in rules
+#             label = string(consequent(rule))
+#             antecedent_rule = antecedent(rule)
+#             push!(get!(Vector{Any}, rules_by_label, label), antecedent_rule)
+#         end
+#         for (label, antecedents) in rules_by_label
+#             println("Etichetta: ", label)
+#             for antecedent in antecedents
+#                 println(antecedent)
+#             end
+#         end
+#     end
+# end

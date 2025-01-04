@@ -25,9 +25,10 @@ function truth_combinations(
             },
         },
     },
-    vertical::Float64,
-    apply_function = SoleModels.apply;
+    vertical::Float64;
+    apply_function = SoleModels.apply,
     print_progress = true,
+    silent = false,
 )
     # Inizializzazione di strutture dati per gestire le soglie e gli atomi per feature
     thresholds_by_feature = Dict{Int,Vector{Float64}}()
@@ -64,7 +65,7 @@ function truth_combinations(
     end
 
     # Stima del tempo di esecuzione
-    spa() && begin
+    silent || begin
         println("Stima del tempo di esecuzione...")
         sample_size = min(1000, num_combinations)
         start_time = time()
@@ -87,8 +88,8 @@ function truth_combinations(
     end
 
     # Inizio della generazione delle combinazioni
-    spa() && println("Inizio della generazione delle combinazioni...")
-    spa() && println("Totale combinazioni da generare: $num_combinations")
+    silent || println("Inizio della generazione delle combinazioni...")
+    silent || println("Totale combinazioni da generare: $num_combinations")
 
     results = Dict{Any,Vector{BigInt}}()
     label_count = Dict{Any,Int}()
@@ -145,13 +146,13 @@ function truth_combinations(
     real_time_per_combination = (end_time - start_time) / num_combinations
 
     # Stampa dei risultati
-    spa() && print_results_summary(
+    silent || print_results_summary(
         real_time_per_combination,
         Int64(contradictions),
         num_combinations,
         label_count,
     )
-    spa() && print_detailed_results(results)
+    silent || print_detailed_results(results)
 
     return results, label_count
 end
@@ -240,10 +241,10 @@ function concat_results(
 )
     results = dict_to_bitvector(results, num_atoms)
     res = Dict{Any,TwoLevelDNFFormula}()
-    spa() && println("\nRisultati dettagliati:")
+    println("\nRisultati dettagliati:")
 
     for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
-        spa() && println("[$result] ($(length(combinations)) combinazioni)")
+        println("[$result] ($(length(combinations)) combinazioni)")
         res[result] = TwoLevelDNFFormula(
             Vector{BitVector}(combinations),
             num_atoms,

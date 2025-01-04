@@ -110,8 +110,9 @@ function truth_combinations_ott(
             },
         },
     },
-    vertical::Float64,
-    apply_function = SoleModels.apply;
+    vertical::Float64;
+    apply_function = SoleModels.apply,
+    silent = false,
     print_progress = true,
 )
     thresholds_by_feature = Dict(
@@ -132,24 +133,24 @@ function truth_combinations_ott(
     label_count = Dict{Any,Int64}()
     contradictions = Atomic{Int64}(0)
 
-    spa() && println("$COLORED_ULTRA_OTT$TITLE\n THREADS DINAMICI \n$TITLE$RESET")
+    silent || println("$COLORED_ULTRA_OTT$TITLE\n THREADS DINAMICI \n$TITLE$RESET")
     optimal_threads = determine_optimal_threads(num_combinations)
 
-    spa() && println("Numero di combinazioni: $num_combinations")
-    spa() && println("Numero attuale di thread: ", Threads.nthreads())
-    spa() && println("Numero ottimale di thread: $optimal_threads")
+    silent || println("Numero di combinazioni: $num_combinations")
+    silent || println("Numero attuale di thread: ", Threads.nthreads())
+    silent || println("Numero ottimale di thread: $optimal_threads")
 
-    spa() && println("\n\n$COLORED_ULTRA_OTT$TITLE\n CHUNK DINAMICI \n$TITLE$RESET")
+    silent || println("\n\n$COLORED_ULTRA_OTT$TITLE\n CHUNK DINAMICI \n$TITLE$RESET")
 
     chunk_size = calculate_dynamic_chunk_size(num_combinations, Threads.nthreads())
     num_chunks = (num_combinations + chunk_size - 1) ÷ chunk_size  # Ceiling division
 
-    spa() && println("Dynamic chunk size: $chunk_size")
-    spa() && println("Number of chunks: $num_chunks")
+    silent || println("Dynamic chunk size: $chunk_size")
+    silent || println("Number of chunks: $num_chunks")
 
-    spa() && println("$COLORED_ULTRA_OTT$TITLE$RESET")
+    silent || println("$COLORED_ULTRA_OTT$TITLE$RESET")
 
-    spa() && println("🚀 Starting combination processing...")
+    silent || println("🚀 Starting combination processing...")
 
     progress = Progress(num_chunks, 1)  # Creiamo una barra di progresso
 
@@ -210,10 +211,10 @@ function truth_combinations_ott(
         next!(progress)  # Aggiorniamo la barra di progresso
     end
 
-    spa() && println("Combination processing completed.")
+    silent || println("Combination processing completed.")
 
     total_contradictions = contradictions[]
-    spa() && begin
+    silent || begin
         valid_combinations = num_combinations - total_contradictions
         println("\nTotal combinations: $num_combinations")
         println("Logical contradictions: $total_contradictions")
@@ -224,7 +225,7 @@ function truth_combinations_ott(
         end
     end
 
-    spa() && begin
+    silent || begin
         println("\nDetailed results:")
         for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
             println("[$result] ($(length(combinations)) combinations):")
@@ -506,7 +507,7 @@ function genera_report_statistiche_ott(
         println(file, "\n====================================")
         println(file, "Fine del report")
     end
-    spa() && println("Report generato con successo: $nome_file")
+    println("Report generato con successo: $nome_file")
 end
 
 
@@ -566,25 +567,23 @@ function compare_truth_combinations(model, alpha, atom_prop, vertical; kwargs...
     are_equal = true
     for (label, formula_ott) in combined_results_ott
         if !haskey(combined_results_standard, label)
-            spa() && println("Etichetta $label presente solo nei risultati ottimizzati")
+            println("Etichetta $label presente solo nei risultati ottimizzati")
             are_equal = false
             continue
         end
 
         formula_standard = combined_results_standard[label]
         if Set(eachcombination(formula_ott)) != Set(eachcombination(formula_standard))
-            spa() && println("Differenze trovate per l'etichetta $label:")
-            spa() &&
-                println("  Combinazioni ottimizzate: ", nterms(formula_ott))
-            spa() &&
-                println("  Combinazioni standard: ", nterms(formula_standard))
+            println("Differenze trovate per l'etichetta $label:")
+            println("  Combinazioni ottimizzate: ", nterms(formula_ott))
+            println("  Combinazioni standard: ", nterms(formula_standard))
             are_equal = false
         end
     end
 
     for label in keys(combined_results_standard)
         if !haskey(combined_results_ott, label)
-            spa() && println("Etichetta $label presente solo nei risultati standard")
+            println("Etichetta $label presente solo nei risultati standard")
             are_equal = false
         end
     end

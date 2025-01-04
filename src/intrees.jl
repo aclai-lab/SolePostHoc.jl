@@ -1,5 +1,8 @@
 import DecisionTree as DT
 using ComplexityMeasures
+using SoleModels
+
+include("intrees-pruning.jl")
 
 ############################################################################################
 # Rule extraction from random forest
@@ -18,31 +21,22 @@ function extractrules(::InTreesRuleExtractor, m, args...; kwargs...)
 end
 
 """
-    intrees(args...; kwargs...)::DecisionList
+    intrees(model::Union{AbstractModel,DecisionForest}, X, y::AbstractVector{<:Label}; kwargs...)::DecisionList
 
-Extract rules from a model, reduces the length of each rule (number of variable value
-pairs), and applies a sequential coverage approach to obtain a set of relevant and
-non-redundant rules
+Return a decision list which approximates the behavior of the input `model` on the specified supervised dataset.
+The set of relevant and
+non-redundant rules in the decision list are obtained by means of rule selection, rule pruning,
+and sequential covering (STEL).
 
-# Arguments
-- `model::Union{AbstractModel,DecisionForest}`: input model
-- `X::Any`: dataset
-- `Y::AbstractVector{<:Label}`: label vector
-
-# Keywords
+# Keyword Arguments
 - `prune_rules::Bool=true`: access to prune or not
 - `pruning_s::Float=nothing`: parameter that limits the denominator in the pruning metric calculation
 - `pruning_decay_threshold::Float=nothing`: threshold used in pruning to remove or not a joint from the rule
-- `method_rule_selection::Symbol=:CBC`: method of rule selection
-- `accuracy_rule_selection::Float=nothing`: percentage of rules that rule selection must follow
-- `min_frequency::Float=nothing`: minimum frequency that the rules must have at the beginning of the definition of the learner
-
-# Returns
-- `DecisionList`: decision list that represent a new learner
+- `rule_selection_method::Symbol=:CBC`: rule selection method. Currently only supports `:CBC`.
+- `min_coverage::Float=nothing`: minimum rule coverage for STEL
 
 TODO cite paper and specify that the method is for forests, but was extended to work with any other models.
 Reference: Deng, Houtao. "Interpreting tree ensembles with intrees." International Journal of Data Science and Analytics 7.4 (2019): 277-287.
-
 
 See also
 [`AbstractModel`](@ref),
@@ -55,90 +49,32 @@ See also
 function intrees(
     model,
     X,
-    Y::AbstractVector{<:Label};
+    y::AbstractVector{<:Label};
     #
     prune_rules = true,
     pruning_s = nothing,
     pruning_decay_threshold = nothing,
     #
-    method_rule_selection = :CBC,
-    accuracy_rule_selection = nothing,
-    min_frequency = nothing,
+    rule_selection_method = :CBC,
+    rule_length_metric = :natoms,
+# - `accuracy_rule_selection::Float=nothing`: percentage of rules that rule selection must follow
+    # accuracy_rule_selection = nothing,
+    min_coverage = nothing,
     silent = false,
     #
     rng::AbstractRNG = MersenneTwister(1),
-    kwargs...,
+    return_info::Bool = false,
+    # kwargs...,
 )
     isnothing(pruning_s) && !isnothing(pruning_decay_threshold) && (prune_rules = false)
     isnothing(pruning_decay_threshold) && !isnothing(pruning_s) && (prune_rules = false)
     isnothing(pruning_s) && (pruning_s = 1.0e-6)
     isnothing(pruning_decay_threshold) && (pruning_decay_threshold = 0.05)
-    isnothing(accuracy_rule_selection) && (accuracy_rule_selection = 0.0)
-    isnothing(min_frequency) && (min_frequency = 0.01)
+    # isnothing(accuracy_rule_selection) && (accuracy_rule_selection = 0.0)
+    isnothing(min_coverage) && (min_coverage = 0.01)
 
     if !(X isa AbstractInterpretationSet)
         X = SoleData.scalarlogiset(X; silent, allow_propositional = true)
-    end
-    """
-        prune_rule(rc::Rule)::Rule
-
-    Prunes redundant or irrelevant conjuncts of the antecedent of the input rule cascade
-    considering the error metric
-
-    See also
-    [`Rule`](@ref),
-    [`rulemetrics`](@ref).
-    """
-    function prune_rule(
-        r::Rule{O}
-    ) where {O}
-    return _prune_rule(typeof(antecedent(r)), r)
-    end
-    
-    function _prune_rule(
-        ::Type{<:LeftmostConjunctiveForm},
-        r::Rule{O}
-    ) where {O}
-        nruleconjuncts = nconjuncts(r)
-        E_zero = rulemetrics(r,X,Y)[:error]
-        valid_idxs = collect(1:nruleconjuncts)
-        antd = antecedent(r)
-        out = consequent(r)
-        for idx in reverse(valid_idxs)
-            (length(valid_idxs) < 2) && break
-
-            # Indices to be considered to evaluate the rule
-            other_idxs = intersect!(vcat(1:(idx-1),(idx+1):nruleconjuncts),valid_idxs)
-            rule = Rule(LeftmostConjunctiveForm(SoleLogics.grandchildren(antd)[other_idxs]), out)
-
-            # Return error of the rule without idx-th pair
-            E_minus_i = rulemetrics(rule,X,Y)[:error]
-
-            decay_i = (E_minus_i - E_zero) / max(E_zero, pruning_s)
-
-            if decay_i <= pruning_decay_threshold
-                # Remove the idx-th pair in the vector of decisions
-                deleteat!(valid_idxs, idx)
-                E_zero = E_minus_i
-            end
-        end
-
-        return Rule(r[valid_idxs], out)
-    end
-
-    function _prune_rule(
-        ::Type{<:MultiFormula},
-        r::Rule{O}
-    ) where {O}
-        @assert antecedent(r) isa MultiFormula "Cannot use this function on $(antecedent(r))"
-        children = [
-            MultiFormula(i_modality,modant)
-            for (i_modality,modant) in modforms(antecedent(r))
-        ]
-
-        return length(children) < 2 ?
-            r :
-            prune_rule(Rule(LeftmostConjunctiveForm(children),consequent(r),info(r)))
     end
 
     """
@@ -153,20 +89,20 @@ function intrees(
     """
     function cfs(
         X,
-        Y::Vector{<:Label},
+        y::AbstractVector{<:Label},
     )
-        entropyd(x) = ComplexityMeasures.entropy(probabilities(x))
-        midd(x, y) = -entropyd(collect(zip(x, y)))+entropyd(x)+entropyd(y)
+        entropyd(_x) = ComplexityMeasures.entropy(probabilities(_x))
+        midd(_x, _y) = -entropyd(collect(zip(_x, _y)))+entropyd(_x)+entropyd(_y)
         information_gain(f1, f2) = entropyd(f1) - (entropyd(f1) - midd(f1, f2))
         su(f1, f2) = (2.0 * information_gain(f1, f2) / (entropyd(f1) + entropyd(f2)))
-        function merit_calculation(X, Y::Vector{<:Label})
+        function merit_calculation(X, y::AbstractVector{<:Label})
             n_samples, n_features = size(X)
             rff = 0
             rcf = 0
 
             for i in collect(1:n_features)
                 fi = X[:, i]
-                rcf += su(fi, Y)  # su is the symmetrical uncertainty of fi and y
+                rcf += su(fi, y)  # su is the symmetrical uncertainty of fi and y
                 for j in collect(1:n_features)
                     if j > i
                         fj = X[:, j]
@@ -191,7 +127,7 @@ function intrees(
                 if i ∉ F
                     append!(F,i)
                     idxs_column = F[findall(F .> 0)]
-                    t = merit_calculation(X[:,idxs_column],Y)
+                    t = merit_calculation(X[:,idxs_column],y)
 
                     if t > merit
                         merit = t
@@ -213,217 +149,242 @@ function intrees(
         end
 
         valid_idxs = findall(F .> 0)
-        @show F
-        @show valid_idxs
+        # @show F
+        # @show valid_idxs
         return F[valid_idxs]
     end
 
-    function selectRuleRRF(
-        matrixrulemetrics::Matrix{Float64},
-        X,
-        Y::Vector{<:Label},
-    )
-        #coefReg = 0.95 .- (0.01*matrixrulemetrics[:,3]/max(matrixrulemetrics[:,3]...))
-        #@show coefReg
-        rf = DT.build_forest(Y,X,2,50,0.7,-1; rng=rng)
-        imp = begin
-            #importance = impurity_importance(rf, coefReg)
-            importance = DT.impurity_importance(rf)
-            importance/max(importance...)
-        end
-        @show imp
-
-        feaSet = findall(imp .> 0.01)
-        @show feaSet
-        ruleSetPrunedRRF = hcat(matrixrulemetrics[feaSet,:],imp[feaSet],feaSet)
-
-        finalmatrix = sortslices(ruleSetPrunedRRF, dims=1, by=x->(x[4],x[2],x[3]), rev=true)
-
-        return Int.(finalmatrix[:,5])
+    function starterruleset(model; kwargs...)
+        unique(reduce(vcat, [listrules(subm; kwargs...) for subm in SoleModels.models(model)]))
+        # TODO maybe also sort?
     end
 
     if !haslistrules(model)
         model = solemodel(model)
     end
+
+    info = (;)
+
     ########################################################################################
     # Extract rules from each tree, obtain full ruleset
     ########################################################################################
-    println("Rule extraction in...")
-    ruleset = @time begin
-        if isensemble(model)
-            rs = unique([listrules(tree; use_shortforms=true) for tree in SoleModels.models(model)])
-            # TODO maybe also sort?
-            rs isa Vector{<:Vector{<:Any}} ? reduce(vcat,rs) : rs
-        else
-            listrules(model; use_shortforms=true)
-        end
-    end
-    ########################################################################################
+    silent || println("Extracting starting rules...")
+    listrules_kwargs = (;
+        use_shortforms=true,
+        # flip_atoms = true,
+        normalize = true,
+        # normalize_kwargs = (; forced_negation_removal = true, reduce_negations = true, allow_atom_flipping = true, rotate_commutatives = false)
+    )
+    ruleset = isensemble(model) ? starterruleset(model; listrules_kwargs...) : listrules(model; listrules_kwargs...)
 
     ########################################################################################
     # Prune rules with respect to a dataset
     ########################################################################################
-    prune_rules ? (println("Pruning phase in...")) : (println("Skipped pruning in..."))
-    ruleset = @time begin
-        if prune_rules
+    if prune_rules
+        silent || println("Pruning $(length(ruleset)) rules...")
+        if return_info
+            info = merge(info, (; unpruned_ruleset = ruleset))
+        end
+        ruleset = @time begin
             afterpruningruleset = Vector{Rule}(undef, length(ruleset))
             Threads.@threads for (i,r) in collect(enumerate(ruleset))
-                afterpruningruleset[i] = prune_rule(r)
+                afterpruningruleset[i] = intrees_prunerule(r, X, y; pruning_s, pruning_decay_threshold)
             end
-            #ruleset = @time prune_rule.(ruleset)
             afterpruningruleset
-        else
-            ruleset
         end
     end
-
-    println("# Rules to check: $(length(ruleset))")
 
     ########################################################################################
     # Rule selection to obtain the best rules
     ########################################################################################
-    println("Selection phase with $(method_rule_selection) in...")
-    best_rules = @time begin
-        if method_rule_selection == :CBC
+    silent || println("Selecting via $(string(rule_selection_method)) from a pool of $(length(ruleset)) rules...")
+    ruleset = @time begin
+        if return_info
+            info = merge(info, (; unselected_ruleset = ruleset))
+        end
+        if rule_selection_method == :CBC
             matrixrulemetrics = Matrix{Float64}(undef,length(ruleset),3)
             afterselectionruleset = Vector{BitVector}(undef, length(ruleset))
             Threads.@threads for (i,rule) in collect(enumerate(ruleset))
-                eval_result = rulemetrics(rule, X, Y)
+                eval_result = rulemetrics(rule, X, y)
                 afterselectionruleset[i] = eval_result[:checkmask,]
-                matrixrulemetrics[i,1] = eval_result[:support]
+                matrixrulemetrics[i,1] = eval_result[:coverage]
                 matrixrulemetrics[i,2] = eval_result[:error]
-                matrixrulemetrics[i,3] = eval_result[:length]
+                matrixrulemetrics[i,3] = eval_result[rule_length_metric]
             end
-            #M = hcat([evaluaterule(rule, X, Y)[:checkmask,] for rule in ruleset]...)
+            #M = hcat([evaluaterule(rule, X, y)[:checkmask,] for rule in ruleset]...)
             M = hcat(afterselectionruleset...)
 
             #best_idxs = findcorrelation(cor(M); threshold = accuracy_rule_selection)
-            #best_idxs = cfs(M,Y)
-            best_idxs = selectRuleRRF(matrixrulemetrics,M,Y)
-            @show best_idxs
+            #best_idxs = cfs(M,y)
+            
+            #coefReg = 0.95 .- (0.01*matrixrulemetrics[:,3]/max(matrixrulemetrics[:,3]...))
+            #@show coefReg
+            rf = DT.build_forest(y,M,2,50,0.7,-1; rng=rng)
+            importances = begin
+                #importance = impurity_importance(rf, coefReg)
+                importance = DT.impurity_importance(rf)
+                importance/max(importance...)
+            end
+            # @show importances
+            best_idxs = begin
+                selected_features = findall(importances .> 0.01)
+                # @show selected_features
+                ruleSetPrunedRRF = hcat(matrixrulemetrics[selected_features,:],importances[selected_features],selected_features)
+                finalmatrix = sortslices(ruleSetPrunedRRF, dims=1, by=x->(x[4],x[2],x[3]), rev=true)
+                best_idxs = Int.(finalmatrix[:,5])
+            end
+            # @show best_idxs
             ruleset[best_idxs]
         else
-            error("Unexpected method specified: $(method)")
+            error("Unexpected rule selection method specified: $(rule_selection_method)")
         end
     end
-    ########################################################################################
-
-    println("# Rules to checking: $(length(best_rules))")
+    silent || println("# rules selected: $(length(ruleset)).")
+    
     ########################################################################################
     # Construct a rule-based model from the set of best rules
     ########################################################################################
-    println("STEL phase starting, end soon")
+    silent || println("Applying STEL...")
+    
+    dl = STEL(ruleset, X, y; min_coverage, rule_length_metric, rng, silent)
 
+    if return_info
+        return dl, info
+    else
+        return dl
+    end
+end
+
+
+
+
+
+function STEL(ruleset, X, y; min_coverage, rule_length_metric = :natoms, rng::AbstractRNG = MersenneTwister(1), silent = false)
     D = deepcopy(X) # Copy of the original dataset
-    L = deepcopy(Y)
+    L = deepcopy(y)
     R = Rule[]      # Ordered rule list
     # S is the vector of rules left
-    S = [deepcopy(best_rules)..., Rule(bestguess(Y; suppress_parity_warning = true))]
+    S = [deepcopy(ruleset)..., Rule(bestguess(y; suppress_parity_warning = true))]
 
-    # Rules with a frequency less than min_frequency
+    # Rules with a frequency less than min_coverage
     S = begin
-        rules_support = Vector{AbstractFloat}(undef,length(S))
+        rules_coverage = Vector{Float64}(undef, length(S))
         Threads.@threads for (i,s) in collect(enumerate(S))
-            rules_support[i] = rulemetrics(s,X,Y)[:support]
+            rules_coverage[i] = rulemetrics(s,X,y)[:coverage]
         end
 
-        idxs_undeleted = findall(rules_support .>= min_frequency)
+        idxs_undeleted = findall(rules_coverage .>= min_coverage)
         S[idxs_undeleted]
     end
 
-    println("# rules in S: $(length(S))")
-    println("# rules in R: $(length(R))")
+    silent || println("# rules in S: $(length(S))")
+    silent || println("# rules in R: $(length(R))")
+
+    # Metrics update based on remaining instances
+    rules_coverage = Vector{Float64}(undef, length(S))
+    rules_error = Vector{Float64}(undef, length(S))
+    rules_length = Vector{Int}(undef, length(S))
 
     while true
-        # Metrics update based on remaining instances
-        rules_support = Vector{AbstractFloat}(undef,length(S))
-        rules_error = Vector{AbstractFloat}(undef,length(S))
-        rules_length = Vector{Int}(undef,length(S))
+        silent || println()
+        silent || println()
+        silent || println()
+        
+        resize!(rules_coverage, length(S))
+        resize!(rules_error, length(S))
+        resize!(rules_length, length(S))
+
+        silent || println("Rules left: $(length(rules_coverage)).")
 
         Threads.@threads for (i,s) in collect(enumerate(S))
             metrics = rulemetrics(s,D,L)
-            rules_support[i] = metrics[:support]
+            rules_coverage[i] = metrics[:coverage]
             rules_error[i] = metrics[:error]
-            rules_length[i] = metrics[:length]
+            rules_length[i] = metrics[rule_length_metric]
+            # @show metrics
         end
+        silent || println("Rules error:")
+        silent || println(rules_error)
 
-        println("Rules error:")
-        println(rules_error)
-        println("Minimo: $(min(rules_error...))")
-
-        #metrics = [rulemetrics(s,D,Y) for s in S]
-        #println(metrics[1])
-        #rules_support = [metrics[i][:support] for i in eachindex(metrics)]
+        #metrics = [rulemetrics(s,D,y) for s in S]
+        #silent || println(metrics[1])
+        #rules_coverage = [metrics[i][:coverage] for i in eachindex(metrics)]
         #rules_error = [metrics[i][:error] for i in eachindex(metrics)]
-        #rules_length = [metrics[i][:length] for i in eachindex(metrics)]
+        #rules_length = [metrics[i][rule_length_metric] for i in eachindex(metrics)]
 
         # Best rule index
         idx_best = begin
             idx_best = nothing
-            @show rules_error
             # First: find the rule with minimum error
-            idx = findall(rules_error .== minimum(rules_error))
-            (length(idx) == 1) && (idx_best = idx)
-            println("Idxs min error: $(idx)")
+            silent || println("By error")
+            m = minimum(filter(!isnan, rules_error))
+            silent || println("Minimum rule error: $(m)")
+            best_idxs = findall(rules_error .== m)
+            (length(best_idxs) == 1) && (idx_best = best_idxs[1])
+            silent || println("Idxs min error: $(best_idxs)")
 
-            # If not one, find the rule with maximum frequency
+            # If not one, find the rule with maximum coverage
             if isnothing(idx_best)
-                @show idx
-                @show rules_support
-                m = maximum(rules_support)
-                @show m
-                idx_support = findall(rules_support .== m)
-                idx_ = intersect(idx, idx_support)
-                (length(idx_) == 1) && (idx_best = idx_)
+                silent || println("By coverage")
+                # @show rules_coverage[best_idxs]
+                m = maximum(filter(!isnan, rules_coverage[best_idxs]))
+                silent || println("Max coverage: $(m)")
+                idx_coverage = findall(rules_coverage[best_idxs] .== m)
+                best_idxs = best_idxs[idx_coverage]
+                silent || println("Idxs max coverage: $(best_idxs)")
+                (length(best_idxs) == 1) && (idx_best = best_idxs[1])
             end
-            println("Idxs min support: $(idx)")
 
             # If not one, find the rule with minimum length
             if isnothing(idx_best)
-                idx_length = findall(rules_length .== minimum(rules_length))
-                idx_ = intersect(idx, idx_length)
-                (length(idx_) == 1) && (idx_best = idx_)
+                silent || println("By length")
+                # @show rules_length[best_idxs]
+                m = minimum(filter(!isnan, rules_length[best_idxs]))
+                silent || println("Min length: $(m)")
+                idx_length = findall(rules_length[best_idxs] .== m)
+                best_idxs = best_idxs[idx_length]
+                silent || println("Idxs min length: $(best_idxs)")
+                (length(best_idxs) == 1) && (idx_best = best_idxs[1])
             end
-            println("Idxs min length: $(idx)")
-
-            @show idx_best
-            @show idx
 
             # Final case: more than one rule with minimum length
             # Randomly choose a rule
-            isnothing(idx_best) && (idx_best = rand(rng, idx, 1))
+            if isnothing(idx_best)
+                idx_best = rand(rng, best_idxs)
+            end
 
-            length(idx_best) > 1 && error("More than one best indexes")
-            println("Idx best: $(idx_best)")
-            idx_best[1]
+            idx_best
         end
-        println("Idx best: $(idx_best)")
+        silent || println("Idx best: $(idx_best)")
 
         # Add at the end the best rule
         push!(R, S[idx_best])
-        println("# rules in R: $(length(R))")
+        silent || println("# rules in R: $(length(R))")
 
         # Indices of the remaining instances
         idx_remaining = begin
             sat_unsat = evaluaterule(S[idx_best], D, L)[:checkmask,]
-            # Remain in D the rule that not satisfying the best rule'pruning_s condition
+            # Remain in D the rule that not satisfying the best rule's pruning_s condition
             findall(sat_unsat .== false)
         end
-        D = length(idx_remaining) > 0 ?
-                slicedataset(D, idx_remaining; return_view=true) : nothing
-        L = L[idx_remaining]
 
+        # Exit condition
         if idx_best == length(S)
-            return DecisionList(R[1:end-1],consequent(R[end]))
-        elseif isnothing(D) || ninstances(D) == 0
-            return DecisionList(R,bestguess(Y; suppress_parity_warning = true))
+            # @show S
+            # @show R
+            # @show DecisionList(R[1:end-1], consequent(R[end]))
+            return DecisionList(R[1:end-1], consequent(R[end]))
+        elseif length(idx_remaining) == 0
+            return DecisionList(R, bestguess(y; suppress_parity_warning = true))
         end
-
+        
+        D = slicedataset(D, idx_remaining; return_view=true)
+        L = L[idx_remaining]
         # Delete the best rule from S
-        deleteat!(S,idx_best)
+        deleteat!(S, idx_best)
         # Update of the default rule
         S[end] = Rule(bestguess(L; suppress_parity_warning = true))
     end
-
-    return error("Unexpected error in intrees!")
+    error("Unexpected error.")
 end
