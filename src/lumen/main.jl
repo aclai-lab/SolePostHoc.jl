@@ -227,7 +227,7 @@ function lumen(
                 formula;
                 minimization_kwargs...,
             )
-            formula_semplificata = formula_semplificata_t.value
+           formula_semplificata = formula_semplificata_t.value
             try
                 @info "Semplificazione completata in $(formula_semplificata_t.time) secondi"
                 silent || println("$COLORED_INFO**************⬆️**************$RESET")
@@ -248,11 +248,12 @@ function lumen(
                 )
                 silent || println()
 
-                ant = convert_DNF_formula(
-                    formula_semplificata,
+                new_rule = convert_DNF_formula(
+                    formula_semplificata_t.value,
+                    result,
                     horizontal
                 )
-                new_rule = Rule(ant, result)
+                #new_rule = Rule(ant, result)
                 println(new_rule)
                 push!(minimized_rules, new_rule)
                 # Verifica della semplificazione
@@ -365,6 +366,3 @@ include("utils/minimization.jl")
 include("deprecate.jl")
 
 end
-
-
-
