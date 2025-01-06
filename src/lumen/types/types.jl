@@ -244,6 +244,7 @@ struct TwoLevelDNFFormula <: Formula
 end
 
 eachcombination(f::TwoLevelDNFFormula) = f.combinations
+eachmaskedcombination(f::TwoLevelDNFFormula) = isempty(f.prime_mask) ? eachcombination(f) : f.prime_mask
 function SoleLogics.atoms(f::TwoLevelDNFFormula)
     Atom.(conditions(f))
 end
@@ -253,7 +254,7 @@ function natomsperterm(f::TwoLevelDNFFormula)
     # print(eachcombination(f))
     # sum(c->sum(!=(-1), c), eachcombination(f))/nterms(f) |> print
     # readline()
-    sum(c->sum(!=(-1), c), eachcombination(f))/nterms(f)
+    sum(c->sum(!=(-1), c), eachmaskedcombination(f))/nterms(f)
 end
 
 function conditions(f::TwoLevelDNFFormula)

@@ -202,8 +202,12 @@ function lumen(
         combined_results =
             Lumen.concat_results(results, num_atoms, thresholds_by_feature, atoms_by_feature)
 
+        if return_info
+            unminimized_rules = []
+        end
+
         # start_time = 0
-        rules_vector_for_decisionSet = Rule[]
+        minimized_rules = Rule[]
         vectPrePostNumber = Vector{Tuple{Int, Int}}()
         for (result, formula) in combined_results
             silent || println("Risultato: $result")
@@ -212,6 +216,11 @@ function lumen(
 
             @info "Iniziando la semplificazione per il risultato $result"
             # start_time = time()
+
+            if return_info
+                ant = convert_DNF_formula(formula, horizontal)
+                push!(minimized_rules, Rule(ant, result))
+            end
 
             formula_semplificata_t = @timed Lumen.minimizza_dnf(
                 Val(minimization_scheme),
@@ -245,7 +254,7 @@ function lumen(
                 )
                 new_rule = Rule(ant, result)
                 println(new_rule)
-                push!(rules_vector_for_decisionSet, new_rule)
+                push!(minimized_rules, new_rule)
                 # Verifica della semplificazione
                 is_congruent = Lumen.verify_simplification(formula, formula_semplificata)
                 silent || println(
@@ -265,12 +274,21 @@ function lumen(
             )
         end
 
-        ds = DecisionSet(rules_vector_for_decisionSet);  
+        ds = DecisionSet(minimized_rules);  
+    
+        if return_info
+            info = (;)
+            info = merge(info, (; vectPrePostNumber = vectPrePostNumber))
+        end
         
+        if return_info
+            unminimized_ds = DecisionSet(unminimized_rules);
+            info = merge(info, (; unminimized_ds = unminimized_ds))
+        end
+
         print("\n\n$COLORED_TITLE$TITLE\n DECISION SET \n$TITLE$RESET")
         if return_info
-            # return ds, (; vectPrePostNumber = vectPrePostNumber)
-            return ds, vectPrePostNumber
+            return ds, info
         else
             return ds
         end
