@@ -21,21 +21,30 @@ using ConcurrentCollections
 using ProgressMeter
 
 """
-    lumen(model, tempo_inizio, vertical = 1.0, orizontal = 1.0, ott_mode = false, 
-          controllo = false, minimization_scheme = :espresso; 
-          minimization_kwargs = (;), filteralphabetcallback! = identity, kwargs...)
+    lumen(model, minimization_scheme = :espresso;
+        start_time = time(),
+        vertical = 1.0,
+        horizontal = 1.0,
+        ott_mode = false, 
+        controllo = false,
+        minimization_kwargs = (;),
+        filteralphabetcallback! = identity,
+        kwargs...
+    )
 
 Logic-driven Unified Minimal Extractor of Notions (LUMEN): A function that extracts and minimizes 
 logical rules from a decision tree ensemble model into DNF (Disjunctive Normal Form) formulas.
 
 # Arguments
 - `model`: The decision tree ensemble model to analyze
-- `tempo_inizio`: Start time for performance measurement
+- `minimization_scheme::Symbol`: DNF minimization algorithm to use (e.g., :espresso)
+
+# Keyword arguments
+- `start_time`: Start time for performance measurement
 - `vertical::Real`: Vertical coverage parameter (α) for rule extraction (0.0 < vertical ≤ 1.0)
-- `orizontal::Real`: Horizontal coverage parameter (β) for rule extraction (0.0 < orizontal ≤ 1.0)
+- `horizontal::Real`: Horizontal coverage parameter (β) for rule extraction (0.0 < horizontal ≤ 1.0)
 - `ott_mode::Bool`: Flag to enable optimized processing mode
 - `controllo::Bool`: Flag to enable validation mode for comparing results
-- `minimization_scheme::Symbol`: DNF minimization algorithm to use (e.g., :espresso)
 - `minimization_kwargs::NamedTuple`: Additional arguments for the minimization algorithm
 - `filteralphabetcallback!`: Callback function for alphabet processing (default: identity)
 - `kwargs...`: Additional keyword arguments
@@ -64,14 +73,14 @@ logical rules from a decision tree ensemble model into DNF (Disjunctive Normal F
    - Compares results between different processing modes
    - Validates optimization correctness
 
-# Returns
+# Return
 No explicit return value, but produces:
 - Simplified DNF formulas for each class
 - Performance metrics and validation results
 - Statistical reports (when enabled)
 
 # Notes
-- Parameters `vertical` and `orizontal` must be in range (0.0, 1.0]
+- Parameters `vertical` and `horizontal` must be in range (0.0, 1.0]
 - Setting both parameters to 1.0 enforces strong rule extraction
 - The function aligns with Algorithm 1 from the reference implementation
 - Performance statistics are generated based on processing time and rule reduction
@@ -80,42 +89,51 @@ No explicit return value, but produces:
 ```julia
 model = load_decision_tree_model()
 start_time = time()
-lumen(model, start_time, 1.0, 1.0, false, false, :espresso)
+lumen(model, :espresso)
 ```
 """
 function lumen(
-    model,
     modelJ, # attualmente truth_combinations usa model 
-    tempo_inizio,
+    minimization_scheme::Symbol=:espresso;
     vertical::Real=1.0,
-    orizontal::Real=1.0,
+    horizontal::Real=1.0,
     ott_mode::Bool=false,
     controllo::Bool=false,
-    minimization_scheme::Symbol=:espresso;
+    start_time = time(),
     minimization_kwargs::NamedTuple=(;),
-    (filteralphabetcallback!)=identity,
+    filteralphabetcallback=identity,
+    solemodel = nothing,
     kwargs...
 )
-    if vertical <= 0.0 || vertical > 1.0 || orizontal <= 0.0 || orizontal > 1.0
+    if vertical <= 0.0 || vertical > 1.0 || horizontal <= 0.0 || horizontal > 1.0
         @warn "Inserito parametri non validi"
         @warn "Verranno settati entrambi a 1"
         vertical = 1.0 # Agisce in truth_combinations
-        orizontal = 1.0 # Agisce in printIO_custom_or_formula TODO agire pre semplificazione ? 
+        horizontal = 1.0 # Agisce in printIO_custom_or_formula TODO agire pre semplificazione ? 
     end
+    model = isnothing(solemodel) ? SoleModels.solemodel(modelJ) : solemodel
 
     spa() && println(
         "\n\n$COLORED_TITLE$TITLE\n PARTE 2.a ESTRAZIONE DELLE REGOLE DAGLI ALBERI \n$TITLE$RESET",
     )
 
-    all_rules = vcat([listrules(tree) for tree in model.models]...)
-    spa() && println(all_rules)
+    ruleset = @time begin
+        if isensemble(model)
+            rs = unique([listrules(tree; use_shortforms=true) for tree in SoleModels.models(model)])
+            # TODO maybe also sort?
+            rs isa Vector{<:Vector{<:Any}} ? reduce(vcat,rs) : rs
+        else
+            listrules(model; use_shortforms=true)
+        end
+    end
+    spa() && println(ruleset)
 
     spa() && println(
         "\n\n$COLORED_TITLE$TITLE\n PARTE 2.b ESTRAZIONE DEGLI ATOMI DALLE REGOLE \n$TITLE$RESET",
     )
 
     num_all_atoms, my_atoms, my_alphabet = begin
-        all_atoms = [atom for rule in all_rules for atom in atoms(antecedent(rule))] # all_atoms = collect(atoms(SoleModels.alphabet(model, false)))
+        all_atoms = [atom for rule in ruleset for atom in atoms(antecedent(rule))] # all_atoms = collect(atoms(SoleModels.alphabet(model, false)))
         num_all_atoms = length(all_atoms)
         my_atoms = unique(all_atoms)
 
@@ -131,7 +149,7 @@ function lumen(
 
 
         # @show my_alphabet
-        filteralphabetcallback!(my_alphabet)
+        my_alphabet = filteralphabetcallback(my_alphabet)
         # @show my_alphabet
 
         all(x -> (x == (<)), SoleData.test_operator.(subalphabets(my_alphabet))) ||
@@ -148,10 +166,10 @@ function lumen(
 
         if (ott_mode == true)
             results, label_count =
-                Lumen.truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical, apply_forest)
+                 Lumen.truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical, apply_forest)
         else
             results, label_count =
-                Lumen.truth_combinations(modelJ, my_alphabet, my_atoms, vertical, apply_forest)
+                 Lumen.truth_combinations(modelJ, my_alphabet, my_atoms, vertical, apply_forest)
         end
 
         spa() && println(
@@ -180,41 +198,53 @@ function lumen(
         combined_results =
             Lumen.concat_results(results, num_atoms, thresholds_by_feature, atoms_by_feature)
 
-        start_time = 0
+        # start_time = 0
         rules_vector_for_decisionSet = Rule[]
+        vectPrePostNumber = Vector{Tuple{Int, Int}}()
         for (result, formula) in combined_results
             spa() && println("Risultato: $result")
-            spa() && stampa_dnf(stdout, formula) # print dnf pre minimization
+            #spa() && stampa_dnf(stdout, formula) # print dnf pre minimization
             spa() && println()
 
             @info "Iniziando la semplificazione per il risultato $result"
-            start_time = time()
+            # start_time = time()
 
-            formula_semplificata = @timed Lumen.minimizza_dnf(
+            formula_semplificata_t = @timed Lumen.minimizza_dnf(
                 Val(minimization_scheme),
                 formula;
                 minimization_kwargs...,
             )
+           formula_semplificata = formula_semplificata_t.value
             try
-                @info "Semplificazione completata in $(formula_semplificata.time) secondi"
+                @info "Semplificazione completata in $(formula_semplificata_t.time) secondi"
                 spa() && println("$COLORED_INFO**************⬆️**************$RESET")
-
-                spa() && println("Termini originali: ", length(formula.combinations))
+                
+                ntermpresemp = nterms(formula)
+                ntermpostsemp = nterms(formula_semplificata)
+                push!(vectPrePostNumber, (ntermpresemp, ntermpostsemp))
+                
+                spa() && println("Termini originali: ", nterms(formula))
                 spa() && println(
                     "Termini dopo la semplificazione: ",
-                    length(formula_semplificata.value.combinations),
+                    nterms(formula_semplificata),
+                )
+                spa() && println("Atomi/termine originali: ", natomsperterm(formula))
+                spa() && println(
+                    "Atomi/termine dopo la semplificazione: ",
+                    natomsperterm(formula_semplificata),
                 )
                 spa() && println()
 
                 new_rule = convert_DNF_formula(
-                    formula_semplificata.value,
-                    result,  # Passiamo il result come outcome
-                    orizontal
+                    formula_semplificata_t.value,
+                    result,
+                    horizontal
                 )
+                #new_rule = Rule(ant, result)
                 println(new_rule)
                 push!(rules_vector_for_decisionSet, new_rule)
                 # Verifica della semplificazione
-                is_congruent = Lumen.verify_simplification(formula, formula_semplificata.value)
+                is_congruent = Lumen.verify_simplification(formula, formula_semplificata)
                 spa() && println(
                     "\n\n$COLORED_INFO$TITLE\n PARTE 3.a Semplificazione valida ?\n$TITLE$RESET",
                 )
@@ -234,26 +264,25 @@ function lumen(
 
         ds = DecisionSet(rules_vector_for_decisionSet);  
         
-        
         print("\n\n$COLORED_TITLE$TITLE\n DECISION SET \n$TITLE$RESET")
-        return ds
-        
+        return ds, vectPrePostNumber
+
         print("\n\n$COLORED_TITLE$TITLE$RESET")
 
-        tempo_fine = time()
+        end_time = time()
 
         spa() &&
             println("\n\n$COLORED_TITLE$TITLE\n PARTE 4 DOCUMENTO I DATI \n$TITLE$RESET")
 
-        tempo_esecuzione = tempo_fine - tempo_inizio
+        elapsed_time = end_time - start_time
 
         spa() && begin
             if (ott_mode == true)
                 #nome_file_report = "report_statistico_Parallelo_$(Dates.format(Dates.now(), "yyyymmdd_HHMMSS")).txt"
-                #genera_report_statistiche_ott(nome_file_report, all_rules, num_all_atoms, num_atoms, results, label_count, combined_results, tempo_esecuzione, model)
+                #genera_report_statistiche_ott(nome_file_report, ruleset, num_all_atoms, num_atoms, results, label_count, combined_results, elapsed_time, model)
             else
                 #nome_file_report = "report_statistico_Seriale_$(Dates.format(Dates.now(), "yyyymmdd_HHMMSS")).txt"
-                #genera_report_statistiche(nome_file_report, all_rules, num_all_atoms, num_atoms, results, label_count, combined_results, tempo_esecuzione, model)
+                #genera_report_statistiche(nome_file_report, ruleset, num_all_atoms, num_atoms, results, label_count, combined_results, elapsed_time, model)
             end
         end
     end

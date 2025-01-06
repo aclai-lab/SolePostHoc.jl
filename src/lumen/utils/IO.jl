@@ -156,7 +156,7 @@ function convert_DNF_formula(
     result = join(formulas, " ∨ ")
     
     # Specificare esplicitamente featvaltype = Real per risolvere il warning
-    φ = parseformula(
+    φ = SoleLogics.parseformula(
         result;
         atom_parser = a->Atom(
             parsecondition(
@@ -167,7 +167,7 @@ function convert_DNF_formula(
             )
         )
     )
-    
+
     # Creiamo la Rule usando l'outcome passato come parametro
     return Rule(φ, outcome)
 end
