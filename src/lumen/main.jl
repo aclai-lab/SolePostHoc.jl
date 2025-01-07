@@ -203,7 +203,7 @@ function lumen(
             Lumen.concat_results(results, num_atoms, thresholds_by_feature, atoms_by_feature)
 
         if return_info
-            unminimized_rules = []
+            unminimized_rules = Rule[]
         end
 
         # start_time = 0
@@ -213,13 +213,21 @@ function lumen(
             silent || println("Risultato: $result")
             #silent || stampa_dnf(stdout, formula) # print dnf pre minimization
             silent || println()
+            #silent || println("formula: $formula")
 
             @info "Iniziando la semplificazione per il risultato $result"
             # start_time = time()
 
             if return_info
-                ant = convert_DNF_formula(formula, horizontal)
-                push!(minimized_rules, Rule(ant, result))
+                #dump(formula)
+                new_rule = convert_DNF_formula(
+                    formula,
+                    result,
+                    horizontal
+                )
+
+                #println(new_rule)
+                push!(unminimized_rules, new_rule)
             end
 
             formula_semplificata_t = @timed Lumen.minimizza_dnf(
