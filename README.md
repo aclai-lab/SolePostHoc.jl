@@ -15,13 +15,14 @@
 TODO:
 * Rule extraction
 	[ ] A clean Rule extraction interface (`SolePostHoc.extractrules`)
-	[ ] LUMEN
+	[ ] LUMEN <!-- TODO link and cite papers -->
 	[ ] InTrees
 	[ ] BATrees
 	[ ] BELLATREX
 	[ ] ModalETEL
 	[ ] binding to intrees
 	[ ] binding to RuleCOSI(+)
+* Documentation
 
 ## About
 
@@ -33,7 +34,7 @@ The package is developed by the [ACLAI Lab](https://aclai.unife.it/en/) @ Univer
 
 ## More on Sole
 - [SoleData.jl](https://github.com/aclai-lab/SoleData.jl)
-- [SoleFeatures.jl](https://github.com/aclai-lab/SoleFeatures.jl) 
+- [SoleFeatures.jl](https://github.com/aclai-lab/SoleFeatures.jl)
 - [SoleModels.jl](https://github.com/aclai-lab/SoleModels.jl)
 - [SolePostHoc.jl](https://github.com/aclai-lab/SolePostHoc.jl)
 
