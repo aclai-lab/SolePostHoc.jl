@@ -478,7 +478,7 @@ The Espresso algorithm is a well-known method for Boolean function minimization,
 4. Removes any duplicate combinations and returns the simplified `TwoLevelDNFFormula`.
 
 """
-function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula)
+function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula; minimization_method_kwargs...)
     terms = [Vector{Int}([x ? 1 : 0 for x in term]) for term in eachcombination(formula)]
 
     function copre(cube1, cube2)
@@ -597,7 +597,7 @@ function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula)
         return essential
     end
 
-    function espresso_minimize(terms)
+    function espresso_minimize(terms; minimization_method_kwargs...)
         if isempty(terms)
             return Vector{Vector{Int}}()
         end
@@ -616,7 +616,7 @@ function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula)
     end
 
     # Esegui la minimizzazione
-    minimized_terms = espresso_minimize(terms)
+    minimized_terms = espresso_minimize(terms; minimization_method_kwargs...)
 
     # Converti il risultato in BitVector e rimuovi i duplicati usando unique!
     nuove_combinazioni = BitVector[]
