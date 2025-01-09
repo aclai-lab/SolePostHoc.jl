@@ -265,219 +265,182 @@ Simplifies a custom OR formula using the Quine algorithm.
 This function takes a `TwoLevelDNFFormula` object and applies the Quine algorithm to minimize the number of combinations in the formula. It returns a new `TwoLevelDNFFormula` object with the simplified combinations.
 
 """
-function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula, horizontal = 1.0)
-    # Strutture dati iniziali
-    terms = eachcombination(formula)
-    feature_count =
-        Dict(feature => length(atoms) for (feature, atoms) in formula.atoms_by_feature)
-
-    # Calcolo features permesse basato su horizontal
-    total_features = length(formula.thresholds_by_feature)
-    allowed_features = floor(Int, total_features * horizontal)
-    num_orizontal = sum(get(feature_count, i, 0) for i = 1:allowed_features)
-
-    # Funzioni di conversione
-    function bitVector_to_term(bv::BitVector)
-        return [Int(b) for b in bv]
+function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
+    # Inizializzazione dei termini
+    terms = [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
+    for (i, term) in enumerate(eachcombination(formula))
+        for (j, x) in enumerate(term)
+            terms[i][j] = x ? Int8(1) : Int8(0)
+        end
+    end
+    
+    if isempty(terms)
+        return formula
     end
 
-    function term_to_bitVector(term::Vector{Int}, original::BitVector)
-        result = copy(original)
-        for (i, val) in enumerate(term)
-            if val != -1
-                result[i] = val == 1
+    # Funzione per controllare se un cubo ne copre un altro
+    function copre(cube1::Vector{Int8}, cube2::Vector{Int8})
+        for i in eachindex(cube1)
+            if cube1[i] != Int8(-1) && cube2[i] != Int8(-1) && cube1[i] != cube2[i]
+                return false
             end
         end
-        return result
+        return true
     end
 
-    # Funzione di mascheramento verticale migliorata
-    function mask_vertical_bits!(term::Vector{Int}, num_orizontal::Int)
-        for i = (num_orizontal+1):length(term)
-            term[i] = -1
+    # Funzione per combinare due cubi
+    function combina_cubi!(result::Vector{Int8}, cube1::Vector{Int8}, cube2::Vector{Int8}, pos::Int)
+        for i in eachindex(cube1)
+            result[i] = (i == pos) ? Int8(-1) : cube1[i]
         end
-        return term
     end
 
-    # Preparazione termini mascherati
-    masked_terms =
-        [mask_vertical_bits!(bitVector_to_term(term), num_orizontal) for term in terms]
-
-    # Funzioni di supporto per l'algoritmo Quine-McCluskey
-    function combina_termini(term1::Vector{Int}, term2::Vector{Int})
-        @assert length(term1) == length(term2) "I termini devono avere la stessa lunghezza"
-        return [t1 == t2 ? t1 : -1 for (t1, t2) in zip(term1, term2)]
-    end
-
-    function conta_uni(term::Vector{Int})
-        return count(x -> x == 1, term)
-    end
-
-    function differisce_per_un_bit(term1::Vector{Int}, term2::Vector{Int})
-        diff_count = 0
-        diff_pos = 0
-        for (i, (t1, t2)) in enumerate(zip(term1, term2))
-            if t1 != -1 && t2 != -1 && t1 != t2
-                diff_count += 1
-                diff_pos = i
-                if diff_count > 1
-                    return false, 0
-                end
-            end
+    function minimizza_step!(termini::Vector{Vector{Int8}})
+        if length(termini) <= 1
+            return termini
         end
-        return diff_count == 1, diff_pos
-    end
-
-    # Implementazione migliorata di trova_prime_implicants
-    function trova_prime_implicants(terms::Vector{Vector{Int}})
-        groups = Dict{Int,Vector{Vector{Int}}}()
-        for term in terms
-            ones = conta_uni(term)
-            if !haskey(groups, ones)
-                groups[ones] = Vector{Vector{Int}}()
-            end
-            push!(groups[ones], term)
-        end
-
-        prime_implicants = Set{Vector{Int}}()
-        used_terms = Set{Vector{Int}}()
-
-        while !isempty(groups)
-            next_groups = Dict{Int,Vector{Vector{Int}}}()
-            merged = false
-
-            for ones_count in sort(collect(keys(groups)))
-                if haskey(groups, ones_count + 1)
-                    for term1 in groups[ones_count]
-                        for term2 in groups[ones_count+1]
-                            is_diff, pos = differisce_per_un_bit(term1, term2)
-                            if is_diff
-                                merged = true
-                                combined = combina_termini(term1, term2)
-                                push!(used_terms, term1)
-                                push!(used_terms, term2)
-
-                                ones_in_combined = conta_uni(combined)
-                                if !haskey(next_groups, ones_in_combined)
-                                    next_groups[ones_in_combined] = Vector{Vector{Int}}()
-                                end
-                                push!(next_groups[ones_in_combined], combined)
+        
+        nuovi_termini = Vector{Vector{Int8}}()
+        usati = fill(false, length(termini))
+        temp_cube = Vector{Int8}(undef, length(termini[1]))
+        
+        # Prima fase: cerca coppie di termini che differiscono per una sola posizione
+        for i in 1:length(termini)-1
+            for j in i+1:length(termini)
+                diff_count = 0
+                diff_pos = -1
+                
+                for k in eachindex(termini[i])
+                    if termini[i][k] != Int8(-1) && termini[j][k] != Int8(-1)
+                        if termini[i][k] != termini[j][k]
+                            diff_count += 1
+                            diff_pos = k
+                            if diff_count > 1
+                                break
                             end
                         end
                     end
                 end
+                
+                if diff_count == 1
+                    combina_cubi!(temp_cube, termini[i], termini[j], diff_pos)
+                    push!(nuovi_termini, copy(temp_cube))
+                    usati[i] = usati[j] = true
+                end
             end
+        end
+        
+        # Aggiungi i termini non usati
+        for i in 1:length(termini)
+            if !usati[i]
+                push!(nuovi_termini, termini[i])
+            end
+        end
+        
+        unique!(nuovi_termini)
+        
+        if length(nuovi_termini) == length(termini)
+            return nuovi_termini
+        end
+        
+        return minimizza_step!(nuovi_termini)
+    end
 
-            # Aggiungi i termini non utilizzati ai prime implicants
-            for (_, terms_in_group) in groups
-                for term in terms_in_group
-                    if term ∉ used_terms
-                        push!(prime_implicants, term)
+    function trova_copertura_minima(termini::Vector{Vector{Int8}}, primi::Vector{Vector{Int8}})
+        if isempty(primi)
+            return termini
+        end
+        
+        # Costruisci matrice di copertura
+        coverage = falses(length(primi), length(termini))
+        for i in 1:length(primi)
+            for j in 1:length(termini)
+                coverage[i,j] = copre(primi[i], termini[j])
+            end
+        end
+        
+        # Trova implicanti essenziali
+        selected_primes = Int[]
+        for j in 1:size(coverage, 2)
+            covering_primes = findall(coverage[:, j])
+            if length(covering_primes) == 1
+                push!(selected_primes, covering_primes[1])
+            end
+        end
+        
+        # Se gli implicanti essenziali coprono tutto, siamo finiti
+        if !isempty(selected_primes)
+            covered_terms = vec(any(coverage[selected_primes, :], dims=1))
+            if all(covered_terms)
+                return primi[unique(selected_primes)]
+            end
+        end
+        
+        # Altrimenti, usa un approccio greedy per coprire i termini rimanenti
+        selected = Set(selected_primes)
+        uncovered = Set(1:size(coverage, 2))
+        
+        # Rimuovi i termini già coperti
+        for i in selected_primes
+            filter!(t -> !coverage[i, t], uncovered)
+        end
+        
+        while !isempty(uncovered)
+            best_coverage = 0
+            best_prime = 0
+            
+            for (i, prime) in enumerate(primi)
+                if i ∉ selected
+                    coverage_count = count(j -> j in uncovered && coverage[i, j], 1:size(coverage, 2))
+                    if coverage_count > best_coverage
+                        best_coverage = coverage_count
+                        best_prime = i
                     end
                 end
             end
-
-            if !merged
+            
+            if best_coverage == 0
                 break
             end
-            groups = next_groups
+            
+            push!(selected, best_prime)
+            filter!(j -> !coverage[best_prime, j], uncovered)
         end
-
-        return collect(prime_implicants)
+        
+        return primi[collect(selected)]
     end
 
-    # Funzione migliorata per trovare gli essential prime implicants
-    function trova_essential_prime_implicants(
-        minterms::Vector{Vector{Int}},
-        prime_implicants::Vector{Vector{Int}},
-    )
-        essential_prime_implicants = Set{Vector{Int}}()
-        remaining_minterms = Set(minterms)
-
-        # Costruisci la tabella di copertura
-        coverage = Dict{Vector{Int},Set{Vector{Int}}}()
-        for pi in prime_implicants
-            coverage[pi] = Set{Vector{Int}}()
-            for minterm in minterms
-                if all(p == -1 || p == m for (p, m) in zip(pi, minterm))
-                    push!(coverage[pi], minterm)
+    try
+        primi = minimizza_step!(terms)
+        minimized = trova_copertura_minima(terms, primi)
+        
+        # Converti il risultato in BitVectors
+        risultato = Vector{BitVector}(undef, length(minimized))
+        for (i, term) in enumerate(minimized)
+            combo = falses(formula.num_atoms)
+            for (j, val) in enumerate(term)
+                if val == Int8(1)
+                    combo[j] = true
                 end
             end
+            risultato[i] = combo
         end
-
-        # Trova gli essential prime implicants
-        while !isempty(remaining_minterms)
-            # Trova i minterms coperti da un solo prime implicant
-            essential_found = false
-            for minterm in remaining_minterms
-                covering_pis = [pi for (pi, covered) in coverage if minterm in covered]
-                if length(covering_pis) == 1
-                    push!(essential_prime_implicants, covering_pis[1])
-                    setdiff!(remaining_minterms, coverage[covering_pis[1]])
-                    essential_found = true
-                    break
-                end
-            end
-
-            # Se non sono stati trovati essential prime implicants, scegli quello con la migliore copertura
-            if !essential_found && !isempty(remaining_minterms)
-                best_coverage = 0
-                best_pi = nothing
-                for (pi, covered) in coverage
-                    current_coverage = length(intersect(covered, remaining_minterms))
-                    if current_coverage > best_coverage
-                        best_coverage = current_coverage
-                        best_pi = pi
-                    end
-                end
-                if best_pi !== nothing
-                    push!(essential_prime_implicants, best_pi)
-                    setdiff!(remaining_minterms, coverage[best_pi])
-                end
-            end
-        end
-
-        return collect(essential_prime_implicants)
+        
+        return TwoLevelDNFFormula(
+            risultato,
+            formula.num_atoms,
+            formula.thresholds_by_feature,
+            formula.atoms_by_feature,
+            minimized
+        )
+        
+    catch e
+        @warn "Errore durante la minimizzazione: $e"
+        @warn "Stack trace: " * sprint(showerror, e, catch_backtrace())
+        return formula
     end
-
-    # Esegui l'algoritmo
-    prime_implicants = trova_prime_implicants(masked_terms)
-    essential_prime_implicants =
-        trova_essential_prime_implicants(masked_terms, prime_implicants)
-
-    # Genera le nuove combinazioni
-    nuove_combinazioni = BitVector[]
-    for implicant in essential_prime_implicants
-        nuovo_bitvector = term_to_bitVector(implicant, terms[1])
-        push!(nuove_combinazioni, nuovo_bitvector)
-    end
-
-    sort!(nuove_combinazioni)
-    return TwoLevelDNFFormula(
-        nuove_combinazioni,
-        formula.num_atoms,
-        formula.thresholds_by_feature,
-        formula.atoms_by_feature,
-        collect(essential_prime_implicants),
-    )
 end
 
-
-"""
-	minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula)
-
-Simplifies a custom OR formula using the Espresso algorithm.
-
-This function takes a `TwoLevelDNFFormula` object and applies the Espresso algorithm to minimize the number of combinations in the formula. It returns a new `TwoLevelDNFFormula` object with the simplified combinations.
-
-The Espresso algorithm is a well-known method for Boolean function minimization, which is used here to simplify the custom OR formula. The function performs the following steps:
-
-1. Converts the formula's combinations into a list of integer vectors representing the minterms.
-2. Applies the Espresso algorithm to find the essential prime implicants of the formula.
-3. Generates new combinations based on the essential prime implicants.
-4. Removes any duplicate combinations and returns the simplified `TwoLevelDNFFormula`.
-
-"""
 function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula)
     terms = [Vector{Int}([x ? 1 : 0 for x in term]) for term in eachcombination(formula)]
 
@@ -646,6 +609,673 @@ function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula)
         collect(minimized_terms),
     )
 end
+
+# FUNZIONANTE
+function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
+    ########################################################################
+    # 1) Termini originali in formato 0/1 per garantire la stessa copertura
+    ########################################################################
+    termini_originali_bit = [
+        Vector{Int8}([b ? 1 : 0 for b in combo])
+        for combo in eachcombination(formula)
+    ]
+
+    ########################################################################
+    # 2) Minimizzazione con Espresso
+    ########################################################################
+    espresso_risultato = minimizza_dnf(Val(:espresso), formula)
+
+    ########################################################################
+    # 3) Converti i risultati di Espresso in cubi con -1 (se prime_mask non vuota)
+    ########################################################################
+    termini_espresso = if isempty(espresso_risultato.prime_mask)
+        [
+            Vector{Int8}([bit ? 1 : 0 for bit in combo])
+            for combo in eachcombination(espresso_risultato)
+        ]
+    else
+        [Vector{Int8}(mask) for mask in espresso_risultato.prime_mask]
+    end
+
+    ########################################################################
+    # 4) Quine–McCluskey: combinazione per prime implicants
+    ########################################################################
+    function quine_combinazione(implicanti::Vector{Vector{Int8}})
+        if length(implicanti) <= 1
+            return implicanti
+        end
+
+        function possono_combinarsi(c1, c2)
+            diff_count = 0
+            for i in eachindex(c1)
+                # Se entrambi non sono -1 e diversi, contiamo differenza
+                if c1[i] != Int8(-1) && c2[i] != Int8(-1) && c1[i] != c2[i]
+                    diff_count += 1
+                    if diff_count > 1
+                        return false
+                    end
+                end
+            end
+            return diff_count == 1
+        end
+
+        function combina(c1, c2)
+            result = copy(c1)
+            for i in eachindex(c1)
+                if c1[i] == c2[i]
+                    result[i] = c1[i]
+                else
+                    result[i] = Int8(-1)
+                end
+            end
+            return result
+        end
+
+        nuovi = Vector{Vector{Int8}}()
+        usati = fill(false, length(implicanti))
+
+        # Tenta di combinare ogni paio
+        for i in 1:length(implicanti)-1
+            for j in i+1:length(implicanti)
+                if possono_combinarsi(implicanti[i], implicanti[j])
+                    push!(nuovi, combina(implicanti[i], implicanti[j]))
+                    usati[i] = true
+                    usati[j] = true
+                end
+            end
+        end
+
+        # Aggiungi i non combinati
+        for i in 1:length(implicanti)
+            if !usati[i]
+                push!(nuovi, implicanti[i])
+            end
+        end
+
+        unique!(nuovi)
+
+        # Se non si riduce più, abbiamo i prime implicants
+        if length(nuovi) == length(implicanti)
+            return nuovi
+        else
+            return quine_combinazione(nuovi)
+        end
+    end
+
+    ########################################################################
+    # 5) Quine: selezione copertura minima (conserve la copertura su termini_originali_bit)
+    ########################################################################
+    function quine_copertura_minima(
+        orig_terms::Vector{Vector{Int8}},
+        prime_impls::Vector{Vector{Int8}}
+    )
+        if isempty(prime_impls)
+            return Vector{Vector{Int8}}()
+        end
+
+        # Ritorna true se cube1 copre cube2
+        function copre(cube1, cube2)
+            for i in eachindex(cube1)
+                if cube1[i] != Int8(-1) && cube1[i] != cube2[i]
+                    return false
+                end
+            end
+            return true
+        end
+
+        coverage = falses(length(prime_impls), length(orig_terms))
+        for i in 1:length(prime_impls)
+            for j in 1:length(orig_terms)
+                coverage[i, j] = copre(prime_impls[i], orig_terms[j])
+            end
+        end
+
+        # Trova prime implicants essenziali
+        selected = Set{Int}()
+        for j in 1:size(coverage, 2)
+            covering = findall(coverage[:, j])
+            if length(covering) == 1
+                push!(selected, covering[1])
+            end
+        end
+
+        coperti = falses(size(coverage, 2))
+        for i in selected
+            for j in 1:size(coverage, 2)
+                if coverage[i, j]
+                    coperti[j] = true
+                end
+            end
+        end
+
+        uncovered = findall(!isequal(true), coperti)
+        while !isempty(uncovered)
+            best_prime = 0
+            best_score = 0
+            for i in 1:length(prime_impls)
+                if i ∉ selected
+                    c = count(j -> coverage[i, j], uncovered)
+                    if c > best_score
+                        best_score = c
+                        best_prime = i
+                    end
+                end
+            end
+            if best_prime == 0
+                break
+            end
+            push!(selected, best_prime)
+            for j in uncovered
+                if coverage[best_prime, j]
+                    coperti[j] = true
+                end
+            end
+            uncovered = findall(!isequal(true), coperti)
+        end
+
+        return prime_impls[collect(selected)]
+    end
+
+    # Otteniamo prime implicants e copertura finale
+    prime_implicants = quine_combinazione(termini_espresso)
+    copertura_finale = quine_copertura_minima(termini_originali_bit, prime_implicants)
+
+    ########################################################################
+    # 6) Passaggio finale: unificazione “spinta” su eventuali feature ridondanti
+    # (Se non ti serve, puoi commentare questa parte)
+    ########################################################################
+    function final_unify_cubes!(implicants::Vector{Vector{Int8}})
+        changed = true
+        while changed
+            changed = false
+            newset = Set{Vector{Int8}}()
+            used = fill(false, length(implicants))
+
+            for i in 1:length(implicants)-1
+                if used[i]
+                    continue
+                end
+                for j in i+1:length(implicants)
+                    if used[j]
+                        continue
+                    end
+                    new_cube = unify_entire_feature(implicants[i], implicants[j], formula)
+                    if new_cube !== nothing
+                        push!(newset, new_cube)
+                        used[i] = true
+                        used[j] = true
+                        changed = true
+                        break
+                    end
+                end
+                if !used[i]
+                    push!(newset, implicants[i])
+                end
+            end
+            if !used[end]
+                push!(newset, implicants[end])
+            end
+
+            implicants = collect(newset)
+            unique!(implicants)
+        end
+        return implicants
+    end
+
+    function unify_entire_feature(c1::Vector{Int8}, c2::Vector{Int8}, formula::TwoLevelDNFFormula)
+        diffpos = Int[]
+        for k in eachindex(c1)
+            if c1[k] != c2[k]
+                push!(diffpos, k)
+            end
+        end
+        if isempty(diffpos)
+            return nothing
+        end
+
+        feats = Set{Int}()
+        for pos in diffpos
+            (f, _thr, _op) = find_feature_op_threshold(pos, formula)
+            push!(feats, f)
+            if length(feats) > 1
+                return nothing
+            end
+        end
+
+        f = first(feats)
+        posf = positions_of_feature(f, formula)
+
+        all_ones = trues(length(posf))
+        for (k, p) in enumerate(posf)
+            if !(c1[p] == Int8(1) || c2[p] == Int8(1))
+                all_ones[k] = false
+            end
+        end
+        if all(all_ones)
+            newcube = copy(c1)
+            for p in posf
+                newcube[p] = Int8(-1)
+            end
+            return newcube
+        end
+        return nothing
+    end
+
+    function positions_of_feature(feat::Int, formula::TwoLevelDNFFormula)
+        out = Int[]
+        offset = 0
+        for (f, atoms) in sort(collect(formula.atoms_by_feature))
+            for _ in atoms
+                offset += 1
+                if f == feat
+                    push!(out, offset)
+                end
+            end
+        end
+        return out
+    end
+
+    function find_feature_op_threshold(idx::Int, formula::TwoLevelDNFFormula)
+        offset = 0
+        for (feat, atoms) in sort(collect(formula.atoms_by_feature))
+            for (thr, op) in atoms
+                offset += 1
+                if offset == idx
+                    return (feat, thr, op)
+                end
+            end
+        end
+        error("find_feature_op_threshold: indice $idx fuori range")
+    end
+
+    # Unificazione finale, se la vuoi
+    copertura_finale_unified = final_unify_cubes!(copertura_finale)
+
+    ########################################################################
+    # 7) Costruzione formula finale
+    ########################################################################
+    nuove_combinazioni = Vector{BitVector}()
+    for cube in copertura_finale_unified
+        combo = falses(formula.num_atoms)
+        for (i, val) in enumerate(cube)
+            if val == Int8(1)
+                combo[i] = true
+            end
+        end
+        push!(nuove_combinazioni, combo)
+    end
+    unique!(nuove_combinazioni)
+
+    return TwoLevelDNFFormula(
+        nuove_combinazioni,
+        formula.num_atoms,
+        formula.thresholds_by_feature,
+        formula.atoms_by_feature,
+        copertura_finale_unified,
+    )
+end
+
+#= TODO DELETE ME
+function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
+    ########################################################################
+    # 1) Termini originali in formato 0/1 per garantire la stessa copertura
+    ########################################################################
+    termini_originali_bit = [
+        Vector{Int8}([b ? 1 : 0 for b in combo])
+        for combo in eachcombination(formula)
+    ]
+
+    ########################################################################
+    # 2) Minimizzazione con Espresso
+    ########################################################################
+    espresso_risultato = minimizza_dnf(Val(:espresso), formula)
+
+    ########################################################################
+    # 3) Converti i risultati di Espresso in cubi con -1 (se prime_mask non vuota)
+    ########################################################################
+    termini_espresso = if isempty(espresso_risultato.prime_mask)
+        [
+            Vector{Int8}([bit ? 1 : 0 for bit in combo])
+            for combo in eachcombination(espresso_risultato)
+        ]
+    else
+        [Vector{Int8}(mask) for mask in espresso_risultato.prime_mask]
+    end
+
+    ########################################################################
+    # 4) Quine–McCluskey: combinazione per prime implicants
+    ########################################################################
+    function quine_combinazione(implicanti::Vector{Vector{Int8}})
+        if length(implicanti) <= 1
+            return implicanti
+        end
+
+        function possono_combinarsi(c1, c2)
+            diff_count = 0
+            for i in eachindex(c1)
+                # Se entrambi non sono -1 e diversi, contiamo differenza
+                if c1[i] != Int8(-1) && c2[i] != Int8(-1) && c1[i] != c2[i]
+                    diff_count += 1
+                    if diff_count > 1
+                        return false
+                    end
+                end
+            end
+            return diff_count == 1
+        end
+
+        function combina(c1, c2)
+            result = copy(c1)
+            for i in eachindex(c1)
+                if c1[i] == c2[i]
+                    result[i] = c1[i]
+                else
+                    result[i] = Int8(-1)
+                end
+            end
+            return result
+        end
+
+        nuovi = Vector{Vector{Int8}}()
+        usati = fill(false, length(implicanti))
+
+        # Tenta di combinare ogni paio
+        for i in 1:length(implicanti)-1
+            for j in i+1:length(implicanti)
+                if possono_combinarsi(implicanti[i], implicanti[j])
+                    push!(nuovi, combina(implicanti[i], implicanti[j]))
+                    usati[i] = true
+                    usati[j] = true
+                end
+            end
+        end
+
+        # Aggiungi i non combinati
+        for i in 1:length(implicanti)
+            if !usati[i]
+                push!(nuovi, implicanti[i])
+            end
+        end
+
+        unique!(nuovi)
+
+        # Se non si riduce più, abbiamo i prime implicants
+        if length(nuovi) == length(implicanti)
+            return nuovi
+        else
+            return quine_combinazione(nuovi)
+        end
+    end
+
+    ########################################################################
+    # 5) Quine: selezione copertura minima (conserve la copertura su termini_originali_bit)
+    ########################################################################
+    function quine_copertura_minima(
+        orig_terms::Vector{Vector{Int8}},
+        prime_impls::Vector{Vector{Int8}}
+    )
+        if isempty(prime_impls)
+            return Vector{Vector{Int8}}()
+        end
+
+        # Ritorna true se cube1 copre cube2
+        function copre(cube1, cube2)
+            for i in eachindex(cube1)
+                if cube1[i] != Int8(-1) && cube1[i] != cube2[i]
+                    return false
+                end
+            end
+            return true
+        end
+
+        coverage = falses(length(prime_impls), length(orig_terms))
+        for i in 1:length(prime_impls)
+            for j in 1:length(orig_terms)
+                coverage[i, j] = copre(prime_impls[i], orig_terms[j])
+            end
+        end
+
+        # Trova prime implicants essenziali
+        selected = Set{Int}()
+        for j in 1:size(coverage, 2)
+            covering = findall(coverage[:, j])
+            if length(covering) == 1
+                push!(selected, covering[1])
+            end
+        end
+
+        coperti = falses(size(coverage, 2))
+        for i in selected
+            for j in 1:size(coverage, 2)
+                if coverage[i, j]
+                    coperti[j] = true
+                end
+            end
+        end
+
+        uncovered = findall(!isequal(true), coperti)
+        while !isempty(uncovered)
+            best_prime = 0
+            best_score = 0
+            for i in 1:length(prime_impls)
+                if i ∉ selected
+                    c = count(j -> coverage[i, j], uncovered)
+                    if c > best_score
+                        best_score = c
+                        best_prime = i
+                    end
+                end
+            end
+            if best_prime == 0
+                break
+            end
+            push!(selected, best_prime)
+            for j in uncovered
+                if coverage[best_prime, j]
+                    coperti[j] = true
+                end
+            end
+            uncovered = findall(!isequal(true), coperti)
+        end
+
+        return prime_impls[collect(selected)]
+    end
+
+    # Otteniamo prime implicants e copertura finale
+    prime_implicants = quine_combinazione(termini_espresso)
+    copertura_finale = quine_copertura_minima(termini_originali_bit, prime_implicants)
+
+    ########################################################################
+    # 6) Passaggio finale: unificazione “spinta” su eventuali feature ridondanti
+    ########################################################################
+    # Qui vogliamo rilevare situazioni in cui, per ESEMPIO,
+    #   (V3 < 5.0) e (V3 ≥ 4.95)  coprono tutto V3 => unisci in "don't care su V3".
+    #
+    # Lo facciamo in una funzione "final_unify_cubes!" che ripete più volte
+    # la ricerca di coppie di cubi unificabili e le sostituisce.
+    ########################################################################
+
+    function final_unify_cubes!(implicants::Vector{Vector{Int8}})
+        changed = true
+        while changed
+            changed = false
+            newset = Set{Vector{Int8}}()
+            used = fill(false, length(implicants))
+
+            # Proviamo a unire le coppie
+            for i in 1:length(implicants)-1
+                if used[i]
+                    continue
+                end
+                for j in i+1:length(implicants)
+                    if used[j]
+                        continue
+                    end
+                    new_cube = unify_entire_feature(implicants[i], implicants[j], formula)
+                    if new_cube !== nothing
+                        # unificati
+                        push!(newset, new_cube)
+                        used[i] = true
+                        used[j] = true
+                        changed = true
+                        break
+                    end
+                end
+                if !used[i]
+                    push!(newset, implicants[i])
+                end
+            end
+
+            # ultimo eventuale non usato
+            if !used[end]
+                push!(newset, implicants[end])
+            end
+
+            implicants = collect(newset)
+            unique!(implicants)
+        end
+        return implicants
+    end
+
+    # unify_entire_feature(c1, c2, formula):
+    #   - Se c1 e c2 sono identici su TUTTE le feature tranne una
+    #     e su QUELLA feature differiscono in modo da coprire l'intero dominio,
+    #     allora restituisce un cubo che ha -1 su quella feature. Altrimenti nothing.
+    function unify_entire_feature(
+        c1::Vector{Int8},
+        c2::Vector{Int8},
+        formula::TwoLevelDNFFormula
+    )
+        # 1) Capire su quante feature differiscono i due cubi.
+        #    Se differiscono su più di 1 feature, => nothing.
+        #    Se differiscono su 1 sola feature, verifichiamo se "unione" di atomi = dominio.
+        #
+        # Per farlo, individuiamo le posizioni in cui c1 != c2
+        # e poi controlliamo se corrispondono TUTTE a un'unica feature.
+        diffpos = Int[]
+        for k in eachindex(c1)
+            if c1[k] != c2[k]
+                push!(diffpos, k)
+            end
+        end
+        if isempty(diffpos)
+            # c1 == c2 => nessuna unione ulteriore
+            return nothing
+        end
+
+        # 2) Scopriamo se diffpos tutte appartengono alla STESSA feature
+        feats = Set{Int}()
+        for pos in diffpos
+            (f, _thr, _op) = find_feature_op_threshold(pos, formula)
+            push!(feats, f)
+            if length(feats) > 1
+                return nothing  # differiscono su più di 1 feature => non unifichiamo
+            end
+        end
+
+        # Ora feats = {f} = una sola feature.
+        # 3) Verifichiamo se i sub-atomi su cui c1 e c2 divergono coprono tutto
+        #    il dominio di quella feature f. Vale a dire:
+        #    - Prendiamo TUTTI gli atomi di feature f = setpos = [positions...].
+        #    - c1 e c2, su quei atomi, devono “complementarsi” e unire tutti i bit = 0/1
+        #      in modo da fare l'intero range. Se sì, => mettiamo -1 su TUTTI i bit di f.
+        f = first(feats)  # la feature su cui divergono
+        posf = positions_of_feature(f, formula)  # tutti gli indici di bit che corrispondono a f
+
+        # Costruiamo l'unione “bitmask” su quei posf: (c1[i] or c2[i]) => se è 1 su tutti => complementare
+        # Ma in realtà non basta un or. Vogliamo dire: c1 e c2, uniti, settano TUTTI gli atomi di f?
+        # Oppure, se “≥4.95” e “<5.0” sono solo 2 atomi su 2 totali => allora sì, coprono tutto.
+        #
+        # Per semplificare, usiamo la logica: “Se la dimensione di posf = numero di atomi su f”,
+        # e su quell'insieme (c1[i], c2[i]) assumono valori tali da far sì che l'OR = 1 su tutti i posf,
+        # allora quell'insieme di atomi = feature f al completo. Per l'esempio (≥4.95, <5.0) è 2 atomi totali.
+        all_ones = trues(length(posf))
+        for (k, p) in enumerate(posf)
+            # se c1[p] o c2[p] == 1 => unione => 1
+            if !(c1[p] == Int8(1) || c2[p] == Int8(1))
+                all_ones[k] = false
+            end
+        end
+
+        # Se l'OR è 1 su TUTTI i bit di posf => stiamo coprendo l'intero dominio di f
+        if all(all_ones)
+            # => unify => cubo con -1 in TUTTI i posf
+            newcube = copy(c1)
+            # Copiamo anche i bit in c2 dove c1 aveva -1 (o viceversa),
+            # tanto poi mettiamo -1 su TUTTA la feature f.
+            for p in posf
+                newcube[p] = Int8(-1)
+            end
+            return newcube
+        end
+
+        return nothing
+    end
+
+    # Trova tutti gli indici di bit (1-based) che corrispondono a una feature data.
+    function positions_of_feature(feat::Int, formula::TwoLevelDNFFormula)
+        out = Int[]
+        offset = 0
+        # Scorriamo formula.atoms_by_feature in ordine, come in find_feature_op_threshold
+        for (f, atoms) in sort(collect(formula.atoms_by_feature))
+            for _ in atoms
+                offset += 1
+                if f == feat
+                    push!(out, offset)
+                end
+            end
+        end
+        return out
+    end
+
+    # Restituisce (feature, threshold, op) per un indice di bit `idx` (1-based).
+    function find_feature_op_threshold(idx::Int, formula::TwoLevelDNFFormula)
+        offset = 0
+        for (feat, atoms) in sort(collect(formula.atoms_by_feature))
+            for (thr, op) in atoms
+                offset += 1
+                if offset == idx
+                    return (feat, thr, op)
+                end
+            end
+        end
+        error("find_feature_op_threshold: indice $idx fuori range")
+    end
+
+    ########################################################################
+    # Applichiamo la unificazione finale
+    ########################################################################
+    copertura_finale_unified = final_unify_cubes!(copertura_finale)
+
+    ########################################################################
+    # 7) Convertiamo i cubi finali in BitVector e costruiamo la formula finale
+    ########################################################################
+    nuove_combinazioni = Vector{BitVector}()
+    for cube in copertura_finale_unified
+        combo = falses(formula.num_atoms)
+        for (i, val) in enumerate(cube)
+            if val == Int8(1)
+                combo[i] = true
+            end
+        end
+        push!(nuove_combinazioni, combo)
+    end
+    unique!(nuove_combinazioni)
+
+    # Ritorno finale
+    return TwoLevelDNFFormula(
+        nuove_combinazioni,
+        formula.num_atoms,
+        formula.thresholds_by_feature,
+        formula.atoms_by_feature,
+        copertura_finale_unified,
+    )
+end
+=#
+
+
+
+
 
 
 """
