@@ -211,3 +211,37 @@ function convert_DNF_formula(
     # Creiamo la Rule usando l'outcome passato come parametro
     return Rule(φ, outcome)
 end
+#=
+function convert_DNF_formula(
+    formula::TwoLevelDNFFormula,
+    outcome,
+    orizontal::Float64 = 1.0,
+)
+    formulas = io_formula_mask(formula, orizontal)
+    
+    # Gestione caso singola condizione
+    if length(formulas) == 1
+        φ = Atom(parsecondition(
+            SoleData.ScalarCondition, 
+            first(formulas); 
+            featuretype = SoleData.VariableValue,
+            featvaltype = Real
+        ))
+    else
+        result = join(formulas, " ∨ ")
+        φ = SoleLogics.parseformula(
+            result;
+            atom_parser = a->Atom(
+                parsecondition(
+                    SoleData.ScalarCondition, 
+                    a; 
+                    featuretype = SoleData.VariableValue,
+                    featvaltype = Real
+                )
+            )
+        )
+    end
+
+    return Rule(φ, outcome)
+end
+=#

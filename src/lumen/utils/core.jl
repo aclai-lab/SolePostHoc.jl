@@ -265,6 +265,7 @@ Simplifies a custom OR formula using the Quine algorithm.
 This function takes a `TwoLevelDNFFormula` object and applies the Quine algorithm to minimize the number of combinations in the formula. It returns a new `TwoLevelDNFFormula` object with the simplified combinations.
 
 """
+# CLASSIC QUINE STABLE (RAM HUNGRY)
 function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
     # Inizializzazione dei termini
     terms = [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
@@ -441,6 +442,7 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
     end
 end
 
+#CLASSIC ESPRESSO STABLE (LOCAL MINIMAL)
 function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula)
     terms = [Vector{Int}([x ? 1 : 0 for x in term]) for term in eachcombination(formula)]
 
@@ -610,7 +612,169 @@ function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula)
     )
 end
 
-# FUNZIONANTE
+function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
+    # Step 1: Versione modificata di Espresso
+    function modified_espresso(terms)
+        function possono_combinarsi(cube1, cube2)
+            diff_count = 0
+            diff_pos = -1
+            
+            for (i, (b1, b2)) in enumerate(zip(cube1, cube2))
+                if b1 != -1 && b2 != -1 && b1 != b2
+                    diff_count += 1
+                    diff_pos = i
+                    if diff_count > 1
+                        return false, -1
+                    end
+                end
+            end
+            
+            return diff_count == 1, diff_pos
+        end
+
+        function combina_cubi(cube1, cube2, pos)
+            result = copy(cube1)
+            result[pos] = -1
+            return result
+        end
+
+        function trova_combinazioni_per_quine(terms)
+            result = Vector{Vector{Int8}}()
+            combined = Set{Tuple{Vector{Int8}, Vector{Int8}}}()
+            
+            while true
+                found_new = false
+                
+                for i in 1:length(terms)
+                    for j in (i+1):length(terms)
+                        if (terms[i], terms[j]) ∉ combined
+                            can_combine, pos = possono_combinarsi(terms[i], terms[j])
+                            if can_combine
+                                new_cube = combina_cubi(terms[i], terms[j], pos)
+                                push!(result, new_cube)
+                                push!(combined, (terms[i], terms[j]))
+                                found_new = true
+                            end
+                        end
+                    end
+                end
+                
+                if !found_new
+                    break
+                end
+                
+                # Aggiungi i nuovi termini a terms per il prossimo round
+                append!(terms, result)
+                empty!(result)
+            end
+            
+            # Filtra i termini ridondanti
+            return unique(terms)
+        end
+
+        return trova_combinazioni_per_quine(terms)
+    end
+
+    # Step 2: Versione modificata di Quine che lavora sui risultati di modified_espresso
+    function modified_quine(terms)
+        function copre(cube1::Vector{Int8}, cube2::Vector{Int8})
+            for i in eachindex(cube1)
+                if cube1[i] != Int8(-1) && cube2[i] != Int8(-1) && cube1[i] != cube2[i]
+                    return false
+                end
+            end
+            return true
+        end
+
+        function trova_copertura_essenziale(terms, primes)
+            essential = Vector{Vector{Int8}}()
+            covered = Set{Vector{Int8}}()
+            
+            # Prima trova gli implicanti essenziali
+            for term in terms
+                covering_primes = filter(p -> copre(p, term), primes)
+                if length(covering_primes) == 1
+                    push!(essential, first(covering_primes))
+                    push!(covered, term)
+                end
+            end
+            
+            # Poi usa un approccio greedy per i rimanenti
+            remaining_terms = setdiff(Set(terms), covered)
+            while !isempty(remaining_terms)
+                best_prime = nothing
+                max_coverage = 0
+                
+                for prime in primes
+                    coverage = count(term -> term ∈ remaining_terms && copre(prime, term), terms)
+                    if coverage > max_coverage
+                        max_coverage = coverage
+                        best_prime = prime
+                    end
+                end
+                
+                if best_prime === nothing || max_coverage == 0
+                    break
+                end
+                
+                push!(essential, best_prime)
+                filter!(term -> !copre(best_prime, term), remaining_terms)
+            end
+            
+            return essential
+        end
+
+        primes = terms
+        return trova_copertura_essenziale(terms, primes)
+    end
+
+    # Converti la formula iniziale in termini Int8
+    initial_terms = [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
+    for (i, term) in enumerate(eachcombination(formula))
+        for (j, x) in enumerate(term)
+            initial_terms[i][j] = x ? Int8(1) : Int8(0)
+        end
+    end
+    
+    if isempty(initial_terms)
+        return formula
+    end
+
+    try
+        # Applica prima Espresso modificato
+        espresso_terms = modified_espresso(initial_terms)
+        
+        # Poi applica Quine modificato
+        final_terms = modified_quine(espresso_terms)
+        
+        # Converti il risultato finale in BitVectors
+        result_combinations = Vector{BitVector}()
+        for term in final_terms
+            combo = falses(formula.num_atoms)
+            for (i, val) in enumerate(term)
+                if val == Int8(1)
+                    combo[i] = true
+                end
+            end
+            push!(result_combinations, combo)
+        end
+        
+        return TwoLevelDNFFormula(
+            result_combinations,
+            formula.num_atoms,
+            formula.thresholds_by_feature,
+            formula.atoms_by_feature,
+            final_terms
+        )
+        
+    catch e
+        @warn "Errore durante la minimizzazione: $e"
+        @warn "Stack trace: " * sprint(showerror, e, catch_backtrace())
+        return formula
+    end
+end
+
+# FUNZIONANTE? stessi risultati di espresso
 function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
     ########################################################################
     # 1) Termini originali in formato 0/1 per garantire la stessa copertura
@@ -782,7 +946,6 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
 
     ########################################################################
     # 6) Passaggio finale: unificazione “spinta” su eventuali feature ridondanti
-    # (Se non ti serve, puoi commentare questa parte)
     ########################################################################
     function final_unify_cubes!(implicants::Vector{Vector{Int8}})
         changed = true
@@ -851,6 +1014,7 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
                 all_ones[k] = false
             end
         end
+
         if all(all_ones)
             newcube = copy(c1)
             for p in posf
@@ -889,34 +1053,33 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
     end
 
     # Unificazione finale, se la vuoi
-    copertura_finale_unified = final_unify_cubes!(copertura_finale)
+        copertura_finale_unified = final_unify_cubes!(copertura_finale)
 
-    ########################################################################
-    # 7) Costruzione formula finale
-    ########################################################################
-    nuove_combinazioni = Vector{BitVector}()
-    for cube in copertura_finale_unified
-        combo = falses(formula.num_atoms)
-        for (i, val) in enumerate(cube)
-            if val == Int8(1)
-                combo[i] = true
+        ########################################################################
+        # 7) Costruzione formula finale
+        ########################################################################
+        nuove_combinazioni = Vector{BitVector}()
+        for cube in copertura_finale_unified
+            combo = falses(formula.num_atoms)
+            for (i, val) in enumerate(cube)
+                if val == Int8(1)
+                    combo[i] = true
+                end
             end
+            push!(nuove_combinazioni, combo)
         end
-        push!(nuove_combinazioni, combo)
-    end
-    unique!(nuove_combinazioni)
+        unique!(nuove_combinazioni)
 
-    return TwoLevelDNFFormula(
-        nuove_combinazioni,
-        formula.num_atoms,
-        formula.thresholds_by_feature,
-        formula.atoms_by_feature,
-        copertura_finale_unified,
-    )
+        return TwoLevelDNFFormula(
+            nuove_combinazioni,
+            formula.num_atoms,
+            formula.thresholds_by_feature,
+            formula.atoms_by_feature,
+            copertura_finale_unified,
+        )
 end
 
-#= TODO DELETE ME
-function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
+function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
     ########################################################################
     # 1) Termini originali in formato 0/1 per garantire la stessa copertura
     ########################################################################
@@ -1271,11 +1434,346 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
         copertura_finale_unified,
     )
 end
-=#
 
+# TODO VALUTARE SE RIMANE (RAM HUNGRY)
+function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
+    ########################################################################
+    # 1) Termini originali in formato 0/1 per garantire la stessa copertura
+    ########################################################################
+    termini_originali_bit = [
+        Vector{Int8}([b ? 1 : 0 for b in combo])
+        for combo in eachcombination(formula)
+    ]
 
+    ########################################################################
+    # 2) Minimizzazione con Espresso (passo iniziale)
+    ########################################################################
+    espresso_risultato = minimizza_dnf(Val(:espresso), formula)
+    println(length(eachcombination(espresso_risultato.combination)))
 
+    ########################################################################
+    # 3) Converti i risultati di Espresso in cubi con -1 (se prime_mask non vuota)
+    ########################################################################
+    termini_espresso = if isempty(espresso_risultato.prime_mask)
+        [
+            Vector{Int8}([bit ? 1 : 0 for bit in combo])
+            for combo in eachcombination(espresso_risultato)
+        ]
+    else
+        [Vector{Int8}(mask) for mask in espresso_risultato.prime_mask]
+    end
 
+    ########################################################################
+    # 4) Quine–McCluskey: combinazione per prime implicants
+    ########################################################################
+    function quine_combinazione(implicanti::Vector{Vector{Int8}})
+
+        # ----------------------------------------------------
+        # EVITIAMO di combinare se produce un cubo tutto -1
+        # ----------------------------------------------------
+        function possono_combinarsi(c1, c2)
+            diff_count = 0
+            for i in eachindex(c1)
+                # Se entrambi non sono -1 e diversi, contiamo differenza
+                if c1[i] != Int8(-1) && c2[i] != Int8(-1) && c1[i] != c2[i]
+                    diff_count += 1
+                    if diff_count > 1
+                        return false
+                    end
+                end
+            end
+            return diff_count == 1
+        end
+
+        function combina(c1, c2)
+            result = copy(c1)
+            for i in eachindex(c1)
+                if c1[i] == c2[i]
+                    result[i] = c1[i]
+                else
+                    result[i] = Int8(-1)
+                end
+            end
+            return result
+        end
+
+        function is_all_dontcare(cube::Vector{Int8})
+            return all(x -> x == Int8(-1), cube)
+        end
+
+        nuovi = Vector{Vector{Int8}}()
+        usati = fill(false, length(implicanti))
+
+        # Tenta di combinare ogni paio
+        for i in 1:length(implicanti)-1
+            for j in i+1:length(implicanti)
+                if possono_combinarsi(implicanti[i], implicanti[j])
+                    new_cube = combina(implicanti[i], implicanti[j])
+
+                    # BLOCCO del cubo tutto -1
+                    if is_all_dontcare(new_cube)
+                        # se non vuoi ammettere la tautologia,
+                        # saltiamo l’inserimento
+                        continue
+                    end
+
+                    push!(nuovi, new_cube)
+                    usati[i] = true
+                    usati[j] = true
+                end
+            end
+        end
+
+        # Aggiungi i non combinati
+        for i in 1:length(implicanti)
+            if !usati[i]
+                push!(nuovi, implicanti[i])
+            end
+        end
+
+        unique!(nuovi)
+
+        # Se non si riduce più, abbiamo i prime implicants
+        if length(nuovi) == length(implicanti)
+            return nuovi
+        else
+            return quine_combinazione(nuovi)
+        end
+    end
+
+    ########################################################################
+    # 5) Quine: selezione copertura minima (conserva la copertura su termini_originali_bit)
+    ########################################################################
+    function quine_copertura_minima(
+        orig_terms::Vector{Vector{Int8}},
+        prime_impls::Vector{Vector{Int8}}
+    )
+        if isempty(prime_impls)
+            return Vector{Vector{Int8}}()
+        end
+
+        function copre(cube1, cube2)
+            # Ritorna true se cube1 copre cube2
+            for i in eachindex(cube1)
+                if cube1[i] != Int8(-1) && cube1[i] != cube2[i]
+                    return false
+                end
+            end
+            return true
+        end
+
+        coverage = falses(length(prime_impls), length(orig_terms))
+        for i in 1:length(prime_impls)
+            for j in 1:length(orig_terms)
+                coverage[i, j] = copre(prime_impls[i], orig_terms[j])
+            end
+        end
+
+        # Trova prime implicants essenziali
+        selected = Set{Int}()
+        for j in 1:size(coverage, 2)
+            covering = findall(coverage[:, j])
+            if length(covering) == 1
+                push!(selected, covering[1])
+            end
+        end
+
+        coperti = falses(size(coverage, 2))
+        for i in selected
+            for j in 1:size(coverage, 2)
+                if coverage[i, j]
+                    coperti[j] = true
+                end
+            end
+        end
+
+        uncovered = findall(!isequal(true), coperti)
+        while !isempty(uncovered)
+            best_prime = 0
+            best_score = 0
+            for i in 1:length(prime_impls)
+                if i ∉ selected
+                    c = count(j -> coverage[i, j], uncovered)
+                    if c > best_score
+                        best_score = c
+                        best_prime = i
+                    end
+                end
+            end
+            if best_prime == 0
+                break
+            end
+            push!(selected, best_prime)
+            for j in uncovered
+                if coverage[best_prime, j]
+                    coperti[j] = true
+                end
+            end
+            uncovered = findall(!isequal(true), coperti)
+        end
+
+        return prime_impls[collect(selected)]
+    end
+
+    ########################################################################
+    # 6) Passaggio finale: unificazione “spinta” su eventuali feature ridondanti
+    ########################################################################
+    function final_unify_cubes!(implicants::Vector{Vector{Int8}})
+        changed = true
+        while changed
+            changed = false
+            newset = Set{Vector{Int8}}()
+            used = fill(false, length(implicants))
+
+            for i in 1:length(implicants)-1
+                if used[i]
+                    continue
+                end
+                for j in i+1:length(implicants)
+                    if used[j]
+                        continue
+                    end
+                    new_cube = unify_entire_feature(implicants[i], implicants[j], formula)
+                    if new_cube !== nothing
+                        # BLOCCO tautologia: se new_cube è completamente -1, lo scartiamo
+                        if all(x -> x == Int8(-1), new_cube)
+                            continue
+                        end
+                        push!(newset, new_cube)
+                        used[i] = true
+                        used[j] = true
+                        changed = true
+                        break
+                    end
+                end
+                if !used[i]
+                    push!(newset, implicants[i])
+                end
+            end
+            if !used[end]
+                push!(newset, implicants[end])
+            end
+
+            implicants = collect(newset)
+            unique!(implicants)
+        end
+        return implicants
+    end
+
+    function unify_entire_feature(
+        c1::Vector{Int8}, 
+        c2::Vector{Int8}, 
+        formula::TwoLevelDNFFormula
+    )
+        diffpos = Int[]
+        for k in eachindex(c1)
+            if c1[k] != c2[k]
+                push!(diffpos, k)
+            end
+        end
+        if isempty(diffpos)
+            return nothing
+        end
+
+        feats = Set{Int}()
+        for pos in diffpos
+            (f, _thr, _op) = find_feature_op_threshold(pos, formula)
+            push!(feats, f)
+            if length(feats) > 1
+                return nothing
+            end
+        end
+
+        # A questo punto c1 e c2 differiscono solo su una singola feature
+        f = first(feats)
+        posf = positions_of_feature(f, formula)
+
+        all_ones = trues(length(posf))
+        for (k, p) in enumerate(posf)
+            if !(c1[p] == Int8(1) || c2[p] == Int8(1))
+                all_ones[k] = false
+            end
+        end
+
+        if all(all_ones)
+            newcube = copy(c1)
+            for p in posf
+                newcube[p] = Int8(-1)
+            end
+            return newcube
+        end
+        return nothing
+    end
+
+    function positions_of_feature(feat::Int, formula::TwoLevelDNFFormula)
+        out = Int[]
+        offset = 0
+        for (f, atoms) in sort(collect(formula.atoms_by_feature))
+            for _ in atoms
+                offset += 1
+                if f == feat
+                    push!(out, offset)
+                end
+            end
+        end
+        return out
+    end
+
+    function find_feature_op_threshold(idx::Int, formula::TwoLevelDNFFormula)
+        offset = 0
+        for (feat, atoms) in sort(collect(formula.atoms_by_feature))
+            for (thr, op) in atoms
+                offset += 1
+                if offset == idx
+                    return (feat, thr, op)
+                end
+            end
+        end
+        error("find_feature_op_threshold: indice $idx fuori range")
+    end
+
+    ############ INIZIO FLUSSO PRINCIPALE ############
+
+    # 1) Otteniamo i prime implicants di base
+    prime_implicants = quine_combinazione(termini_espresso)
+
+    # 2) Troviamo la copertura minima
+    copertura_finale = quine_copertura_minima(termini_originali_bit, prime_implicants)
+
+    # 3) Unificazione finale (spinta)
+    copertura_finale_unified = final_unify_cubes!(copertura_finale)
+
+    # 4) EVENTUALE check di “tautologia residua”
+    # Se c'è esattamente 1 cubo ed è tutto -1, lo scartiamo:
+    if length(copertura_finale_unified) == 1 && all(x -> x == Int8(-1), copertura_finale_unified[1])
+        @warn "minimizza_dnf: trovato 1 cubo completamente -1 (tautologia). Lo rimuovo forzatamente!"
+        copertura_finale_unified = Vector{Vector{Int8}}()  # ad es. formula vuota (“false”)
+        # Oppure potresti tornare indietro ai prime implicants, ecc. Dipende dalla tua logica.
+    end
+
+    ########################################################################
+    # 7) Costruzione formula finale
+    ########################################################################
+    nuove_combinazioni = Vector{BitVector}()
+    for cube in copertura_finale_unified
+        combo = falses(formula.num_atoms)
+        for (i, val) in enumerate(cube)
+            if val == Int8(1)
+                combo[i] = true
+            end
+        end
+        push!(nuove_combinazioni, combo)
+    end
+    unique!(nuove_combinazioni)
+
+    return TwoLevelDNFFormula(
+        nuove_combinazioni,
+        formula.num_atoms,
+        formula.thresholds_by_feature,
+        formula.atoms_by_feature,
+        copertura_finale_unified,
+    )
+end
 
 
 """
