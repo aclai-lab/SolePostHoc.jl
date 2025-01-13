@@ -292,7 +292,8 @@ end
 
 
 """
-Generate an AND formula based on the provided binary `combination` representing a combination of atoms. Calculate conditions for each feature based on the thresholds and atom properties. Construct atoms with corresponding conditions and return the resulting AND formula.
+Generate an AND formula based on the provided binary `combination` representing a combination of atoms. 
+Calculate conditions for each feature based on the thresholds and atom properties. Construct atoms with corresponding conditions and return the resulting AND formula.
 """
 function generate_disjunct(
     combination::BitVector,
