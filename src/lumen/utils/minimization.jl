@@ -28,7 +28,7 @@ This function takes a `TwoLevelDNFFormula` object and applies the Quine algorith
 """
 # CLASSIC QUINE STABLE (RAM HUNGRY)
 function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
-    # Inizializzazione dei termini
+    # Inizializzazione dei termini di partenza
     terms = [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
     for (i, term) in enumerate(eachcombination(formula))
         for (j, x) in enumerate(term)
@@ -37,7 +37,7 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
     end
     
     if isempty(terms)
-        return formula
+        return formula  # Se non ci sono termini, restituisci direttamente la formula vuota
     end
 
     # Funzione per controllare se un cubo ne copre un altro
@@ -50,13 +50,16 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
         return true
     end
 
-    # Funzione per combinare due cubi
-    function combina_cubi!(result::Vector{Int8}, cube1::Vector{Int8}, cube2::Vector{Int8}, pos::Int)
+    # Funzione per combinare due cubi in un nuovo cubo generalizzato
+    function combina_cubi(cube1::Vector{Int8}, cube2::Vector{Int8})
+        result = Vector{Int8}(undef, length(cube1))
         for i in eachindex(cube1)
-            result[i] = (i == pos) ? Int8(-1) : cube1[i]
+            result[i] = ifelse(cube1[i] == cube2[i], cube1[i], Int8(-1))
         end
+        return result
     end
 
+    # Fase di minimizzazione: combinazione dei termini
     function minimizza_step!(termini::Vector{Vector{Int8}})
         if length(termini) <= 1
             return termini
@@ -64,144 +67,312 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
         
         nuovi_termini = Vector{Vector{Int8}}()
         usati = fill(false, length(termini))
-        temp_cube = Vector{Int8}(undef, length(termini[1]))
         
-        # Prima fase: cerca coppie di termini che differiscono per una sola posizione
-        for i in 1:length(termini)-1
-            for j in i+1:length(termini)
+        # Itera su tutte le coppie di termini per combinazioni
+        for i in 1:(length(termini)-1)
+            for j in (i+1):length(termini)
                 diff_count = 0
-                diff_pos = -1
-                
                 for k in eachindex(termini[i])
-                    if termini[i][k] != Int8(-1) && termini[j][k] != Int8(-1)
-                        if termini[i][k] != termini[j][k]
-                            diff_count += 1
-                            diff_pos = k
-                            if diff_count > 1
-                                break
-                            end
+                    if termini[i][k] != termini[j][k] && termini[i][k] != Int8(-1) && termini[j][k] != Int8(-1)
+                        diff_count += 1
+                        if diff_count > 1
+                            break
                         end
                     end
                 end
-                
+                # Combina termini solo se differiscono in una singola posizione
                 if diff_count == 1
-                    combina_cubi!(temp_cube, termini[i], termini[j], diff_pos)
-                    push!(nuovi_termini, copy(temp_cube))
-                    usati[i] = usati[j] = true
+                    push!(nuovi_termini, combina_cubi(termini[i], termini[j]))
+                    usati[i] = true
+                    usati[j] = true
                 end
             end
         end
         
-        # Aggiungi i termini non usati
+        # Aggiungi termini non usati
         for i in 1:length(termini)
             if !usati[i]
                 push!(nuovi_termini, termini[i])
             end
         end
         
+        # Rimuovi duplicati e ordina
         unique!(nuovi_termini)
         
         if length(nuovi_termini) == length(termini)
-            return nuovi_termini
+            return nuovi_termini  # Nessuna nuova combinazione, termina
         end
         
-        return minimizza_step!(nuovi_termini)
+        return minimizza_step!(nuovi_termini)  # Continua a iterare
     end
 
+    # Trova la copertura minima dei termini originali usando i primi implicanti
     function trova_copertura_minima(termini::Vector{Vector{Int8}}, primi::Vector{Vector{Int8}})
         if isempty(primi)
             return termini
         end
         
-        # Costruisci matrice di copertura
+        # Costruzione della matrice di copertura
         coverage = falses(length(primi), length(termini))
         for i in 1:length(primi)
             for j in 1:length(termini)
-                coverage[i,j] = copre(primi[i], termini[j])
+                coverage[i, j] = copre(primi[i], termini[j])
             end
         end
         
-        # Trova implicanti essenziali
+        # Trova gli implicanti essenziali
         selected_primes = Int[]
+        essential_coverage = falses(size(coverage, 2))
+        
         for j in 1:size(coverage, 2)
             covering_primes = findall(coverage[:, j])
             if length(covering_primes) == 1
                 push!(selected_primes, covering_primes[1])
+                essential_coverage .|= coverage[covering_primes[1], :]
             end
         end
-        
-        # Se gli implicanti essenziali coprono tutto, siamo finiti
-        if !isempty(selected_primes)
-            covered_terms = vec(any(coverage[selected_primes, :], dims=1))
-            if all(covered_terms)
-                return primi[unique(selected_primes)]
-            end
-        end
-        
-        # Altrimenti, usa un approccio greedy per coprire i termini rimanenti
-        selected = Set(selected_primes)
-        uncovered = Set(1:size(coverage, 2))
-        
-        # Rimuovi i termini già coperti
-        for i in selected_primes
-            filter!(t -> !coverage[i, t], uncovered)
-        end
-        
-        while !isempty(uncovered)
-            best_coverage = 0
-            best_prime = 0
+
+        # Se necessario, seleziona altri implicanti con approccio greedy
+        if !all(essential_coverage)
+            remaining_terms = .!essential_coverage
+            selected = Set(selected_primes)
             
-            for (i, prime) in enumerate(primi)
-                if i ∉ selected
-                    coverage_count = count(j -> j in uncovered && coverage[i, j], 1:size(coverage, 2))
-                    if coverage_count > best_coverage
-                        best_coverage = coverage_count
-                        best_prime = i
+            while any(remaining_terms)
+                best_prime = -1
+                max_coverage = 0
+                
+                for (i, prime) in enumerate(primi)
+                    if i ∉ selected
+                        coverage_count = count(j -> remaining_terms[j] && coverage[i, j], 1:size(coverage, 2))
+                        if coverage_count > max_coverage
+                            max_coverage = coverage_count
+                            best_prime = i
+                        end
                     end
                 end
+                
+                if best_prime == -1 || max_coverage == 0
+                    break
+                end
+                
+                push!(selected, best_prime)
+                remaining_terms .&= .!coverage[best_prime, :]
             end
             
-            if best_coverage == 0
-                break
-            end
-            
-            push!(selected, best_prime)
-            filter!(j -> !coverage[best_prime, j], uncovered)
+            return primi[collect(selected)]
         end
         
-        return primi[collect(selected)]
+        return primi[selected_primes]
     end
 
     try
-        primi = minimizza_step!(terms)
-        minimized = trova_copertura_minima(terms, primi)
+        # Fase 1: Genera i primi implicanti
+        primi_implicanti = minimizza_step!(terms)
+        # Fase 2: Trova la copertura minima dei termini
+        minimized_terms = trova_copertura_minima(terms, primi_implicanti)
         
-        # Converti il risultato in BitVectors
-        risultato = Vector{BitVector}(undef, length(minimized))
-        for (i, term) in enumerate(minimized)
+        # Conversione dei termini minimizzati in combinazioni leggibili
+        nuove_combinazioni = BitVector[]
+        seen = Set{BitVector}()  # Set per evitare duplicati
+
+        for term in minimized_terms
             combo = falses(formula.num_atoms)
-            for (j, val) in enumerate(term)
+            for (i, val) in enumerate(term)
                 if val == Int8(1)
-                    combo[j] = true
+                    combo[i] = true
                 end
             end
-            risultato[i] = combo
+            if combo ∉ seen
+                push!(seen, combo)
+                push!(nuove_combinazioni, combo)
+            end
         end
         
+        sort!(nuove_combinazioni)
         return TwoLevelDNFFormula(
-            risultato,
+            nuove_combinazioni,
             formula.num_atoms,
             formula.thresholds_by_feature,
             formula.atoms_by_feature,
-            minimized
+            collect(minimized_terms),
         )
-        
     catch e
         @warn "Errore durante la minimizzazione: $e"
-        @warn "Stack trace: " * sprint(showerror, e, catch_backtrace())
-        return formula
+        return formula  # Restituisci la formula originale in caso di errore
     end
 end
+
+
+#CLASSIC ESPRESSO STABLE (LOCAL MINIMAL)
+function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula)
+    terms = [Vector{Int}([x ? 1 : 0 for x in term]) for term in eachcombination(formula)]
+
+    function copre(cube1, cube2)
+        for (b1, b2) in zip(cube1, cube2)
+            if b1 != -1 && b2 != -1 && b1 != b2
+                return false
+            end
+        end
+        return true
+    end
+
+    function possono_combinarsi(cube1, cube2)
+        diff_count = 0
+        diff_pos = -1
+
+        for (i, (b1, b2)) in enumerate(zip(cube1, cube2))
+            if b1 != b2
+                diff_count += 1
+                diff_pos = i
+                if diff_count > 1
+                    return false, -1
+                end
+            end
+        end
+
+        return diff_count == 1, diff_pos
+    end
+
+    function combina_cubi(cube1, cube2, pos)
+        result = copy(cube1)
+        result[pos] = -1
+        return result
+    end
+
+    function trova_combinazioni(cubes)
+        if isempty(cubes)
+            return Vector{Vector{Int}}()
+        end
+
+        result = Set{Vector{Int}}()
+        combined = Set{Vector{Int}}()
+        current_cubes = copy(cubes)
+
+        while true
+            found_new = false
+            for i = 1:length(current_cubes)
+                for j = (i+1):length(current_cubes)
+                    can_combine, pos =
+                        possono_combinarsi(current_cubes[i], current_cubes[j])
+                    if can_combine
+                        nuovo_cubo = combina_cubi(current_cubes[i], current_cubes[j], pos)
+                        if nuovo_cubo ∉ result
+                            push!(result, nuovo_cubo)
+                            push!(combined, current_cubes[i])
+                            push!(combined, current_cubes[j])
+                            found_new = true
+                        end
+                    end
+                end
+            end
+
+            # Aggiungi i cubi non combinati al risultato
+            for cube in current_cubes
+                if cube ∉ combined
+                    push!(result, cube)
+                end
+            end
+
+            if !found_new || length(result) == 0
+                break
+            end
+
+            current_cubes = collect(result)
+            empty!(result)
+            empty!(combined)
+        end
+
+        # Se non abbiamo trovato combinazioni, restituisci i cubi originali
+        if isempty(result)
+            return current_cubes
+        end
+
+        return collect(result)
+    end
+
+    function find_essential_cubes(cubes, terms)
+        if isempty(cubes) || isempty(terms)
+            return terms  # Restituisci i termini originali se non ci sono cubi
+        end
+
+        essential = Vector{Vector{Int}}()
+        remaining_terms = Set(terms)
+
+        while !isempty(remaining_terms)
+            best_cube = nothing
+            max_coverage = 0
+
+            for cube in cubes
+                coverage = count(term -> copre(cube, term), collect(remaining_terms))
+                if coverage > max_coverage
+                    max_coverage = coverage
+                    best_cube = cube
+                end
+            end
+
+            if best_cube === nothing || max_coverage == 0
+                # Se non troviamo più copertura, aggiungi i termini rimanenti
+                append!(essential, collect(remaining_terms))
+                break
+            end
+
+            push!(essential, best_cube)
+            filter!(term -> !copre(best_cube, term), remaining_terms)
+        end
+
+        return essential
+    end
+
+    function espresso_minimize(terms)
+        if isempty(terms)
+            return Vector{Vector{Int}}()
+        end
+
+        combined_terms = trova_combinazioni(terms)
+        if isempty(combined_terms)
+            return terms  # Restituisci i termini originali se non ci sono combinazioni
+        end
+
+        essential = find_essential_cubes(combined_terms, terms)
+        if isempty(essential)
+            return terms  # Restituisci i termini originali se non ci sono termini essenziali
+        end
+
+        return essential
+    end
+
+    # Esegui la minimizzazione
+    minimized_terms = espresso_minimize(terms)
+
+    # Converti il risultato in BitVector e rimuovi i duplicati usando unique!
+    nuove_combinazioni = BitVector[]
+    seen = Set{BitVector}()  # Set per tenere traccia dei termini già visti
+
+    for term in minimized_terms
+        combo = falses(formula.num_atoms)
+        for (i, val) in enumerate(term)
+            if val == 1
+                combo[i] = true
+            end
+        end
+
+        # Aggiungi il termine solo se non è già stato visto
+        if combo ∉ seen
+            push!(seen, combo)
+            push!(nuove_combinazioni, combo)
+        end
+    end
+
+    sort!(nuove_combinazioni)
+    return TwoLevelDNFFormula(
+        nuove_combinazioni,
+        formula.num_atoms,
+        formula.thresholds_by_feature,
+        formula.atoms_by_feature,
+        collect(minimized_terms),
+    )
+end
+
 
 function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
     # Inizializzazione dei termini
@@ -393,176 +564,6 @@ function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
         @warn "Stack trace: " * sprint(showerror, e, catch_backtrace())
         return formula
     end
-end
-
-#CLASSIC ESPRESSO STABLE (LOCAL MINIMAL)
-function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula)
-    terms = [Vector{Int}([x ? 1 : 0 for x in term]) for term in eachcombination(formula)]
-
-    function copre(cube1, cube2)
-        for (b1, b2) in zip(cube1, cube2)
-            if b1 != -1 && b2 != -1 && b1 != b2
-                return false
-            end
-        end
-        return true
-    end
-
-    function possono_combinarsi(cube1, cube2)
-        diff_count = 0
-        diff_pos = -1
-
-        for (i, (b1, b2)) in enumerate(zip(cube1, cube2))
-            if b1 != b2
-                diff_count += 1
-                diff_pos = i
-                if diff_count > 1
-                    return false, -1
-                end
-            end
-        end
-
-        return diff_count == 1, diff_pos
-    end
-
-    function combina_cubi(cube1, cube2, pos)
-        result = copy(cube1)
-        result[pos] = -1
-        return result
-    end
-
-    function trova_combinazioni(cubes)
-        if isempty(cubes)
-            return Vector{Vector{Int}}()
-        end
-
-        result = Set{Vector{Int}}()
-        combined = Set{Vector{Int}}()
-        current_cubes = copy(cubes)
-
-        while true
-            found_new = false
-            for i = 1:length(current_cubes)
-                for j = (i+1):length(current_cubes)
-                    can_combine, pos =
-                        possono_combinarsi(current_cubes[i], current_cubes[j])
-                    if can_combine
-                        nuovo_cubo = combina_cubi(current_cubes[i], current_cubes[j], pos)
-                        if nuovo_cubo ∉ result
-                            push!(result, nuovo_cubo)
-                            push!(combined, current_cubes[i])
-                            push!(combined, current_cubes[j])
-                            found_new = true
-                        end
-                    end
-                end
-            end
-
-            # Aggiungi i cubi non combinati al risultato
-            for cube in current_cubes
-                if cube ∉ combined
-                    push!(result, cube)
-                end
-            end
-
-            if !found_new || length(result) == 0
-                break
-            end
-
-            current_cubes = collect(result)
-            empty!(result)
-            empty!(combined)
-        end
-
-        # Se non abbiamo trovato combinazioni, restituisci i cubi originali
-        if isempty(result)
-            return current_cubes
-        end
-
-        return collect(result)
-    end
-
-    function find_essential_cubes(cubes, terms)
-        if isempty(cubes) || isempty(terms)
-            return terms  # Restituisci i termini originali se non ci sono cubi
-        end
-
-        essential = Vector{Vector{Int}}()
-        remaining_terms = Set(terms)
-
-        while !isempty(remaining_terms)
-            best_cube = nothing
-            max_coverage = 0
-
-            for cube in cubes
-                coverage = count(term -> copre(cube, term), collect(remaining_terms))
-                if coverage > max_coverage
-                    max_coverage = coverage
-                    best_cube = cube
-                end
-            end
-
-            if best_cube === nothing || max_coverage == 0
-                # Se non troviamo più copertura, aggiungi i termini rimanenti
-                append!(essential, collect(remaining_terms))
-                break
-            end
-
-            push!(essential, best_cube)
-            filter!(term -> !copre(best_cube, term), remaining_terms)
-        end
-
-        return essential
-    end
-
-    function espresso_minimize(terms)
-        if isempty(terms)
-            return Vector{Vector{Int}}()
-        end
-
-        combined_terms = trova_combinazioni(terms)
-        if isempty(combined_terms)
-            return terms  # Restituisci i termini originali se non ci sono combinazioni
-        end
-
-        essential = find_essential_cubes(combined_terms, terms)
-        if isempty(essential)
-            return terms  # Restituisci i termini originali se non ci sono termini essenziali
-        end
-
-        return essential
-    end
-
-    # Esegui la minimizzazione
-    minimized_terms = espresso_minimize(terms)
-
-    # Converti il risultato in BitVector e rimuovi i duplicati usando unique!
-    nuove_combinazioni = BitVector[]
-    seen = Set{BitVector}()  # Set per tenere traccia dei termini già visti
-
-    for term in minimized_terms
-        combo = falses(formula.num_atoms)
-        for (i, val) in enumerate(term)
-            if val == 1
-                combo[i] = true
-            end
-        end
-
-        # Aggiungi il termine solo se non è già stato visto
-        if combo ∉ seen
-            push!(seen, combo)
-            push!(nuove_combinazioni, combo)
-        end
-    end
-
-    sort!(nuove_combinazioni)
-    return TwoLevelDNFFormula(
-        nuove_combinazioni,
-        formula.num_atoms,
-        formula.thresholds_by_feature,
-        formula.atoms_by_feature,
-        collect(minimized_terms),
-    )
 end
 
 # quine fuso ad espresso [DEFINITIVO !?!?!?1?!?!?!1?!1?!]
@@ -764,6 +765,186 @@ function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
                 final_terms
             )
             
+        catch e
+            @warn "Errore durante la minimizzazione: $e"
+            @warn "Stack trace: " * sprint(showerror, e, catch_backtrace())
+            return formula
+        end
+    end
+end
+
+function minimizza_dnf(::Val{:pina_interrupted}, formula::TwoLevelDNFFormula)
+    let spinner_state = Ref(1)  # Stato del "spinner"
+        function show_progress(desc::String, current::Int, total::Int)
+            spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+            percentage = round(Int, current * 100 / total)
+
+            # Aggiorna lo stato dello spinner
+            spinner_state[] = spinner_state[] % length(spinner) + 1
+
+            print("\r$desc: $(spinner[spinner_state[]]) $percentage%")
+            flush(stdout)  # Mostra subito l'output
+
+            current == total && println()
+        end
+
+        function possono_combinarsi(cube1, cube2)
+            diff_count = 0
+            diff_pos = -1
+
+            for (i, (b1, b2)) in enumerate(zip(cube1, cube2))
+                if b1 != -1 && b2 != -1 && b1 != b2
+                    diff_count += 1
+                    diff_pos = i
+                    if diff_count > 1
+                        return false, -1
+                    end
+                end
+            end
+
+            return diff_count == 1, diff_pos
+        end
+
+        function combina_cubi(cube1, cube2, pos)
+            result = copy(cube1)
+            result[pos] = -1
+            return result
+        end
+
+        function trova_combinazioni_per_quine(terms)
+            result = Vector{Vector{Int8}}()
+            iteration = 1
+
+            while true
+                found_new = false
+                combined = Set{Tuple{Vector{Int8}, Vector{Int8}}}()
+
+                println("\nEspresso - Iterazione $iteration")
+
+                for i in 1:length(terms)
+                    for j in (i + 1):length(terms)
+                        if (terms[i], terms[j]) ∉ combined
+                            can_combine, pos = possono_combinarsi(terms[i], terms[j])
+                            if can_combine
+                                new_cube = combina_cubi(terms[i], terms[j], pos)
+                                push!(result, new_cube)
+                                push!(combined, (terms[i], terms[j]))
+                                found_new = true
+                            end
+                        end
+                    end
+                end
+
+                if !found_new
+                    break
+                end
+
+                append!(terms, result)
+                terms = unique(sort(terms))
+                empty!(result)
+                iteration += 1
+            end
+
+            return terms
+        end
+
+        function copre(cube1::Vector{Int8}, cube2::Vector{Int8})
+            for i in eachindex(cube1)
+                if cube1[i] != Int8(-1) && cube2[i] != Int8(-1) && cube1[i] != cube2[i]
+                    return false
+                end
+            end
+            return true
+        end
+
+        function trova_copertura_essenziale(terms, primes)
+            essential = Vector{Vector{Int8}}()
+            covered = Set{Vector{Int8}}()
+
+            println("\nQuine - Fase implicanti essenziali")
+            for (i, term) in enumerate(terms)
+                if i % 1000 == 0
+                    show_progress("Analisi termini", i, length(terms))
+                end
+                covering_primes = filter(p -> copre(p, term), primes)
+                if length(covering_primes) == 1
+                    push!(essential, first(covering_primes))
+                    push!(covered, term)
+                end
+            end
+
+            remaining_terms = setdiff(Set(terms), covered)
+            println("\nQuine - Fase greedy")
+
+            while !isempty(remaining_terms)
+                best_prime = nothing
+                max_coverage = 0
+
+                for prime in primes
+                    coverage = count(term -> term ∈ remaining_terms && copre(prime, term), terms)
+                    if coverage > max_coverage
+                        max_coverage = coverage
+                        best_prime = prime
+                    end
+                end
+
+                if best_prime === nothing || max_coverage == 0
+                    break
+                end
+
+                push!(essential, best_prime)
+                filter!(term -> !copre(best_prime, term), remaining_terms)
+            end
+
+            return essential
+        end
+
+        println("\nInizializzazione")
+        initial_terms = [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
+        for (i, term) in enumerate(eachcombination(formula))
+            if i % 1000 == 0
+                show_progress("Conversione termini", i, length(eachcombination(formula)))
+            end
+            for (j, x) in enumerate(term)
+                initial_terms[i][j] = x ? Int8(1) : Int8(0)
+            end
+        end
+
+        if isempty(initial_terms)
+            return formula
+        end
+
+        try
+            println("\nAvvio minimizzazione DNF")
+
+            espresso_terms = trova_combinazioni_per_quine(initial_terms)
+            final_terms = trova_copertura_essenziale(initial_terms, espresso_terms)
+
+            println("\nFinalizzazione")
+            result_combinations = Vector{BitVector}()
+            for (i, term) in enumerate(final_terms)
+                if i % 1000 == 0
+                    show_progress("Conversione risultati", i, length(final_terms))
+                end
+                combo = falses(formula.num_atoms)
+                for (i, val) in enumerate(term)
+                    if val == Int8(1)
+                        combo[i] = true
+                    end
+                end
+                push!(result_combinations, combo)
+            end
+
+            println("\nMinimizzazione completata!")
+
+            return TwoLevelDNFFormula(
+                result_combinations,
+                formula.num_atoms,
+                formula.thresholds_by_feature,
+                formula.atoms_by_feature,
+                final_terms
+            )
+
         catch e
             @warn "Errore durante la minimizzazione: $e"
             @warn "Stack trace: " * sprint(showerror, e, catch_backtrace())
