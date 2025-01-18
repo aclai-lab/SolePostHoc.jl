@@ -770,7 +770,7 @@ function display_results(output_file)
 end
 
 # Main execution
-function main()
+function WRAP_batrees()
     println("Born-Again Tree Analysis")
     println("="^30)
 
@@ -930,5 +930,5 @@ function demonstrate_conversion(ba_tree_file::String, dataset::DataFrame)
 end
 
 
-# Run the main function
-main()
+# Run the WRAP_batrees function
+WRAP_batrees()
