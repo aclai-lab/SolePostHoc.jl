@@ -237,7 +237,8 @@ function convert_DNF_formula(
         stampa_dnf(stdout,formula)
         println("formule:" ,dump(formula)) 
     =#
-    
+    #println("mask:" ,formula.prime_mask)
+    #stampa_dnf(stdout,formula)
     return Rule(φ, outcome)
 end
 

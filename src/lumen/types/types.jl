@@ -351,7 +351,7 @@ using SoleLogics
 
 function Base.convert(::Type{SoleLogics.DNF}, f::TwoLevelDNFFormula)
     conjuncts = [
-        generate_disjunct(comb, f.num_atoms, f.thresholds_by_feature, f.atoms_by_feature) for comb in TestSole.eachcombination(f)
+        generate_disjunct(comb, f.num_atoms, f.thresholds_by_feature, f.atoms_by_feature) for comb in eachcombination(f)
     ]
     filter!(!istop, conjuncts)
     return LeftmostDisjunctiveForm{LeftmostConjunctiveForm{Atom}}(conjuncts, true)

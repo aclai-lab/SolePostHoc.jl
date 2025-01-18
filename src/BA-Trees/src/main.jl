@@ -4,6 +4,11 @@ using CSV
 using DataFrames
 using Statistics
 
+using DecisionTree
+using SoleModels
+
+include("other.jl")
+
 """
 Calculate the mode (most frequent value) of an array.
 
@@ -227,6 +232,85 @@ function create_random_forest_input(dataset, num_trees = 10, max_depth = 3)
     return join(lines, "\n")
 end
 
+function convert_decision_ensemble(f, output_file::String="output.txt")
+    lines = String[]
+    
+    # Header information
+    push!(lines, "DATASET_NAME: iris.train.csv")
+    push!(lines, "ENSEMBLE: RF")
+    push!(lines, "NB_TREES: $(length(f.models))")
+    
+    # Assuming all trees have the same structure for features/classes
+    sample_tree = f.models[1]
+    n_classes = length(unique(sample_tree.info.supporting_labels))
+    push!(lines, "NB_CLASSES: $n_classes")
+    
+    # Format explanation
+    push!(lines, "Format: node / node type (LN - leaf node, IN - internal node) / left child / right child / feature / threshold / node_depth / majority class")
+    push!(lines, "")
+    
+    # Process each tree
+    for (tree_idx, tree) in enumerate(f.models)
+        push!(lines, "[TREE $(tree_idx-1)]")
+        
+        # Convert tree structure
+        tree_nodes = convert_tree_structure(tree)
+        push!(lines, "NB_NODES: $(length(tree_nodes))")
+        append!(lines, tree_nodes)
+        push!(lines, "")
+    end
+    
+    # Write to file
+    open(output_file, "w") do io
+        write(io, join(lines, "\n"))
+    end
+    
+    return join(lines, "\n")
+end
+
+function convert_tree_structure(node, depth=0, node_counter=Ref(0), node_map=Dict())::Vector{String}
+    lines = String[]
+    current_node = node_counter[] += 1
+    
+    if isa(node, ConstantModel)
+        # Leaf node
+        push!(lines, "$current_node / LN / -1 / -1 / -1 / -1.0 / $depth / $(node.outcome)")
+        node_map[node] = current_node
+        return lines
+    end
+    
+    # Internal node
+    feature_idx = node.antecedent.value.metacond.feature.i_variable
+    threshold = node.antecedent.value.threshold
+    
+    # Process children recursively
+    left_subtree = convert_tree_structure(node.posconsequent, depth + 1, node_counter, node_map)
+    right_subtree = convert_tree_structure(node.negconsequent, depth + 1, node_counter, node_map)
+    
+    # Get children node numbers
+    left_child = node_map[node.posconsequent]
+    right_child = node_map[node.negconsequent]
+    
+    # Add current node
+    majority_class = get_majority_class(node.info.supporting_labels)
+    push!(lines, "$current_node / IN / $left_child / $right_child / $feature_idx / $threshold / $depth / $majority_class")
+    node_map[node] = current_node
+    
+    # Combine all nodes
+    append!(lines, left_subtree)
+    append!(lines, right_subtree)
+    
+    return lines
+end
+
+function get_majority_class(labels::Vector{String})::String
+    counts = Dict{String, Int}()
+    for label in labels
+        counts[label] = get(counts, label, 0) + 1
+    end
+    return maximum(p -> p[2], collect(pairs(counts)))[1]
+end
+
 """
 Prepare and run BA-Trees algorithm.
 
@@ -268,6 +352,8 @@ function prepare_and_run_ba_trees(; dataset_name = "iris", num_trees = 4, max_de
 
     try
         println("Generating random forest...")
+        #f, model, start_time = learn_and_convert(3, "iris", 3)
+        #forest_content = convert_decision_ensemble(f) 
         forest_content = create_random_forest_input(dataset, num_trees, max_depth)
         write(input_file, forest_content)
 
@@ -305,7 +391,7 @@ function prepare_and_run_ba_trees(; dataset_name = "iris", num_trees = 4, max_de
         end
     finally
         if !@isdefined(e)
-            #rm(temp_dir, recursive = true, force = true)
+            #rm(temp_dir, recursive = true, force = true) 
         end
     end
 end
@@ -346,7 +432,7 @@ function main()
 
     # Configurable parameters
     dataset_name = "iris"
-    num_trees = 4
+    num_trees = 5
     max_depth = 3
 
     println("Dataset: $dataset_name")

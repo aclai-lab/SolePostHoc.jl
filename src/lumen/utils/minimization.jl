@@ -5,7 +5,7 @@ end
 function minimizza_dnf(
     ::Val{:mitespresso},
     formula::TwoLevelDNFFormula;
-    silent = true,
+    silent = false,
     mitespresso_kwargs...,
 )
     formula = convert(SoleLogics.DNF, formula)
@@ -26,7 +26,7 @@ Simplifies a custom OR formula using the Quine algorithm.
 This function takes a `TwoLevelDNFFormula` object and applies the Quine algorithm to minimize the number of combinations in the formula. It returns a new `TwoLevelDNFFormula` object with the simplified combinations.
 
 """
-# CLASSIC QUINE STABLE (RAM HUNGRY)
+#==#
 function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
     # Inizializzazione dei termini di partenza
     terms = [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
@@ -35,7 +35,7 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
             terms[i][j] = x ? Int8(1) : Int8(0)
         end
     end
-    
+
     if isempty(terms)
         return formula  # Se non ci sono termini, restituisci direttamente la formula vuota
     end
@@ -61,16 +61,12 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
 
     # Fase di minimizzazione: combinazione dei termini
     function minimizza_step!(termini::Vector{Vector{Int8}})
-        if length(termini) <= 1
-            return termini
-        end
-        
         nuovi_termini = Vector{Vector{Int8}}()
         usati = fill(false, length(termini))
-        
+
         # Itera su tutte le coppie di termini per combinazioni
-        for i in 1:(length(termini)-1)
-            for j in (i+1):length(termini)
+        for i in 1:(length(termini) - 1)
+            for j in (i + 1):length(termini)
                 diff_count = 0
                 for k in eachindex(termini[i])
                     if termini[i][k] != termini[j][k] && termini[i][k] != Int8(-1) && termini[j][k] != Int8(-1)
@@ -88,21 +84,346 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
                 end
             end
         end
-        
+
         # Aggiungi termini non usati
         for i in 1:length(termini)
             if !usati[i]
                 push!(nuovi_termini, termini[i])
             end
         end
-        
-        # Rimuovi duplicati e ordina
+
+        # Rimuovi duplicati
         unique!(nuovi_termini)
-        
+
         if length(nuovi_termini) == length(termini)
             return nuovi_termini  # Nessuna nuova combinazione, termina
         end
+
+        return minimizza_step!(nuovi_termini)  # Continua a iterare
+    end
+
+    # Trova la copertura minima dei termini originali usando i primi implicanti
+    function trova_copertura_minima(termini::Vector{Vector{Int8}}, primi::Vector{Vector{Int8}})
+        coverage = falses(length(primi), length(termini))
+
+        for i in 1:length(primi)
+            for j in 1:length(termini)
+                coverage[i, j] = copre(primi[i], termini[j])
+            end
+        end
+
+        # Trova la copertura minima tramite backtracking
+        function trova_copertura_backtrack(coperti::BitVector, implicanti_selezionati::Vector{Int}, candidati::Vector{Int})
+            if all(coperti)
+                return implicanti_selezionati
+            end
+
+            best_soluzione = nothing
+
+            for candidato in candidati
+                nuovi_coperti = coperti .| coverage[candidato, :]
+                nuova_soluzione = trova_copertura_backtrack(nuovi_coperti, [implicanti_selezionati; candidato], setdiff(candidati, [candidato]))
+
+                if nuova_soluzione !== nothing && (best_soluzione === nothing || length(nuova_soluzione) < length(best_soluzione))
+                    best_soluzione = nuova_soluzione
+                end
+            end
+
+            return best_soluzione
+        end
+
+        candidati = collect(1:length(primi))
+        coperti = falses(length(termini))
+
+        soluzione_minima = trova_copertura_backtrack(coperti, Int[], candidati)
+        return primi[soluzione_minima]
+    end
+
+    try
+        # Fase 1: Genera i primi implicanti
+        primi_implicanti = minimizza_step!(terms)
+
+        # Fase 2: Trova la copertura minima dei termini
+        minimized_terms = trova_copertura_minima(terms, primi_implicanti)
+
+        # Conversione dei termini minimizzati in combinazioni leggibili
+        nuove_combinazioni = BitVector[]
+        seen = Set{BitVector}()  # Set per evitare duplicati
+
+        for term in minimized_terms
+            combo = falses(formula.num_atoms)
+            for (i, val) in enumerate(term)
+                if val == Int8(1)
+                    combo[i] = true
+                end
+            end
+            if combo ∉ seen
+                push!(seen, combo)
+                push!(nuove_combinazioni, combo)
+            end
+        end
+
+        sort!(nuove_combinazioni)
+        return TwoLevelDNFFormula(
+            nuove_combinazioni,
+            formula.num_atoms,
+            formula.thresholds_by_feature,
+            formula.atoms_by_feature,
+            collect(minimized_terms),
+        )
+    catch e
+        @warn "Errore durante la minimizzazione: $e"
+        return formula  # Restituisci la formula originale in caso di errore
+    end
+end
+
+
+#=MINIMI CHE NON MI SEMBRANO GLOBALI=#
+function minimizza_dnf(::Val{:quine_naive}, formula::TwoLevelDNFFormula)
+    # Converti i termini in vettori binari
+    terms = [Vector{Int}([x ? 1 : 0 for x in term]) for term in formula.combinations]
+    
+    if isempty(terms)
+        return formula
+    end
+    
+    # 1. Trova tutti i primi implicanti possibili
+    function find_prime_implicants(terms)
+        function can_combine(t1, t2)
+            diff = 0
+            pos = -1
+            for i in eachindex(t1)
+                if t1[i] != t2[i]
+                    diff += 1
+                    pos = i
+                    if diff > 1
+                        return false, -1
+                    end
+                end
+            end
+            return diff == 1, pos
+        end
         
+        function combine(t1, t2, pos)
+            result = copy(t1)
+            result[pos] = -1
+            return result
+        end
+        
+        primes = Set{Vector{Int}}()
+        used = Set{Vector{Int}}()
+        current = copy(terms)
+        
+        while !isempty(current)
+            next_terms = Vector{Vector{Int}}()
+            
+            for i in 1:length(current)
+                for j in (i+1):length(current)
+                    combinable, pos = can_combine(current[i], current[j])
+                    if combinable
+                        push!(used, current[i])
+                        push!(used, current[j])
+                        push!(next_terms, combine(current[i], current[j], pos))
+                    end
+                end
+            end
+            
+            # Aggiungi i termini non utilizzati come primi implicanti
+            for term in current
+                if term ∉ used
+                    push!(primes, term)
+                end
+            end
+            
+            current = unique(next_terms)
+            empty!(used)
+        end
+        
+        return collect(primes)
+    end
+    
+    # 2. Verifica se un primo implicante copre un termine
+    function covers(prime, term)
+        for i in eachindex(prime)
+            if prime[i] != -1 && prime[i] != term[i]
+                return false
+            end
+        end
+        return true
+    end
+    
+    # 3. Genera tutte le possibili combinazioni di k elementi da un array
+    function generate_combinations(arr, k)
+        n = length(arr)
+        if k > n
+            return Vector{Vector{eltype(arr)}}()
+        end
+        
+        result = Vector{Vector{eltype(arr)}}()
+        
+        # Funzione ricorsiva per generare le combinazioni
+        function recursive_combine(start, current)
+            if length(current) == k
+                push!(result, copy(current))
+                return
+            end
+            
+            for i in start:n
+                push!(current, arr[i])
+                recursive_combine(i + 1, current)
+                pop!(current)
+            end
+        end
+        
+        recursive_combine(1, eltype(arr)[])
+        return result
+    end
+    
+    # 4. Genera tutte le possibili combinazioni di primi implicanti
+    function all_combinations(primes)
+        result = Vector{Vector{Vector{Int}}}()
+        for k in 1:length(primes)
+            append!(result, generate_combinations(primes, k))
+        end
+        return result
+    end
+    
+    # 5. Verifica se una combinazione copre tutti i termini
+    function covers_all(combo, terms)
+        for term in terms
+            if !any(prime -> covers(prime, term), combo)
+                return false
+            end
+        end
+        return true
+    end
+    
+    # Esegui l'algoritmo completo
+    try
+        # Trova tutti i primi implicanti
+        primes = find_prime_implicants(terms)
+        
+        # Trova la combinazione minima che copre tutti i termini
+        min_cover = primes  # Fallback alla soluzione completa
+        min_size = length(primes)
+        
+        # Prova tutte le possibili combinazioni di primi implicanti
+        for combo in all_combinations(primes)
+            if covers_all(combo, terms) && length(combo) < min_size
+                min_cover = combo
+                min_size = length(combo)
+            end
+        end
+        
+        # Converti il risultato in BitVector
+        result_combinations = BitVector[]
+        seen = Set{BitVector}()
+        
+        for term in min_cover
+            combo = falses(formula.num_atoms)
+            for (i, val) in enumerate(term)
+                if val == 1
+                    combo[i] = true
+                end
+            end
+            
+            if combo ∉ seen
+                push!(seen, combo)
+                push!(result_combinations, combo)
+            end
+        end
+        
+        sort!(result_combinations)
+        return TwoLevelDNFFormula(
+            result_combinations,
+            formula.num_atoms,
+            formula.thresholds_by_feature,
+            formula.atoms_by_feature,
+            collect(min_cover)
+        )
+    catch e
+        @warn "Errore durante la minimizzazione: $e"
+        return formula
+    end
+end
+
+#=MINIMI GLOBALI MA ERRATI=#
+function minimizza_dnf(::Val{:quine_oldstyle}, formula::TwoLevelDNFFormula)
+    # Inizializzazione dei termini di partenza
+        terms = [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
+        for (i, term) in enumerate(eachcombination(formula))
+            for (j, x) in enumerate(term)
+                terms[i][j] = x ? Int8(1) : Int8(0)
+            end
+    end
+    
+    if isempty(terms)
+        return formula  # Se non ci sono termini, restituisci direttamente la formula vuota
+    end
+
+    # Funzione per controllare se un cubo ne copre un altro
+    function copre(cube1::Vector{Int8}, cube2::Vector{Int8})
+            for i in eachindex(cube1)
+                if cube1[i] != Int8(-1) && cube2[i] != Int8(-1) && cube1[i] != cube2[i]
+                    return false
+                end
+            end
+            return true
+    end
+
+    # Funzione per combinare due cubi in un nuovo cubo generalizzato
+    function combina_cubi(cube1::Vector{Int8}, cube2::Vector{Int8})
+            result = Vector{Int8}(undef, length(cube1))
+            for i in eachindex(cube1)
+                result[i] = ifelse(cube1[i] == cube2[i], cube1[i], Int8(-1))
+            end
+            return result
+    end
+
+    # Fase di minimizzazione: combinazione dei termini
+    function minimizza_step!(termini::Vector{Vector{Int8}})
+        if length(termini) <= 1
+            return termini
+        end
+        
+            nuovi_termini = Vector{Vector{Int8}}()
+            usati = fill(false, length(termini))
+            
+        # Itera su tutte le coppie di termini per combinazioni
+            for i in 1:(length(termini)-1)
+                for j in (i+1):length(termini)
+                    diff_count = 0
+                    for k in eachindex(termini[i])
+                        if termini[i][k] != termini[j][k] && termini[i][k] != Int8(-1) && termini[j][k] != Int8(-1)
+                            diff_count += 1
+                            if diff_count > 1
+                                break
+                            end
+                        end
+                    end
+                # Combina termini solo se differiscono in una singola posizione
+                    if diff_count == 1
+                    push!(nuovi_termini, combina_cubi(termini[i], termini[j]))
+                            usati[i] = true
+                            usati[j] = true
+                    end
+                end
+            end
+            
+            # Aggiungi termini non usati
+            for i in 1:length(termini)
+                if !usati[i]
+                    push!(nuovi_termini, termini[i])
+                end
+            end
+            
+        # Rimuovi duplicati e ordina
+            unique!(nuovi_termini)
+            
+            if length(nuovi_termini) == length(termini)
+            return nuovi_termini  # Nessuna nuova combinazione, termina
+            end
+            
         return minimizza_step!(nuovi_termini)  # Continua a iterare
     end
 
@@ -113,56 +434,56 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
         end
         
         # Costruzione della matrice di copertura
-        coverage = falses(length(primi), length(termini))
-        for i in 1:length(primi)
-            for j in 1:length(termini)
-                coverage[i, j] = copre(primi[i], termini[j])
+            coverage = falses(length(primi), length(termini))
+            for i in 1:length(primi)
+                for j in 1:length(termini)
+                    coverage[i, j] = copre(primi[i], termini[j])
+                end
             end
-        end
-        
-        # Trova gli implicanti essenziali
-        selected_primes = Int[]
-        essential_coverage = falses(size(coverage, 2))
-        
-        for j in 1:size(coverage, 2)
-            covering_primes = findall(coverage[:, j])
-            if length(covering_primes) == 1
-                push!(selected_primes, covering_primes[1])
-                essential_coverage .|= coverage[covering_primes[1], :]
-            end
-        end
-
-        # Se necessario, seleziona altri implicanti con approccio greedy
-        if !all(essential_coverage)
-            remaining_terms = .!essential_coverage
-            selected = Set(selected_primes)
             
-            while any(remaining_terms)
-                best_prime = -1
-                max_coverage = 0
+        # Trova gli implicanti essenziali
+            selected_primes = Int[]
+            essential_coverage = falses(size(coverage, 2))
+            
+            for j in 1:size(coverage, 2)
+                covering_primes = findall(coverage[:, j])
+                if length(covering_primes) == 1
+                    push!(selected_primes, covering_primes[1])
+                    essential_coverage .|= coverage[covering_primes[1], :]
+                end
+            end
+            
+        # Se necessario, seleziona altri implicanti con approccio greedy
+            if !all(essential_coverage)
+                remaining_terms = .!essential_coverage
+                selected = Set(selected_primes)
                 
-                for (i, prime) in enumerate(primi)
-                    if i ∉ selected
-                        coverage_count = count(j -> remaining_terms[j] && coverage[i, j], 1:size(coverage, 2))
-                        if coverage_count > max_coverage
-                            max_coverage = coverage_count
-                            best_prime = i
+                while any(remaining_terms)
+                    best_prime = -1
+                    max_coverage = 0
+                    
+                    for (i, prime) in enumerate(primi)
+                        if i ∉ selected
+                            coverage_count = count(j -> remaining_terms[j] && coverage[i, j], 1:size(coverage, 2))
+                            if coverage_count > max_coverage
+                                max_coverage = coverage_count
+                                best_prime = i
+                            end
                         end
                     end
+                    
+                    if best_prime == -1 || max_coverage == 0
+                        break
+                    end
+                    
+                    push!(selected, best_prime)
+                    remaining_terms .&= .!coverage[best_prime, :]
                 end
                 
-                if best_prime == -1 || max_coverage == 0
-                    break
-                end
-                
-                push!(selected, best_prime)
-                remaining_terms .&= .!coverage[best_prime, :]
+                return primi[collect(selected)]
             end
             
-            return primi[collect(selected)]
-        end
-        
-        return primi[selected_primes]
+            return primi[selected_primes]
     end
 
     try
@@ -201,7 +522,6 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
         return formula  # Restituisci la formula originale in caso di errore
     end
 end
-
 
 #CLASSIC ESPRESSO STABLE (LOCAL MINIMAL)
 function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula)
@@ -373,7 +693,7 @@ function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula)
     )
 end
 
-
+#=prova risoluzione...=#
 function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
     # Inizializzazione dei termini
     terms = [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
@@ -565,6 +885,138 @@ function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
         return formula
     end
 end
+
+#prova risoluzione#
+function minimizza_dnf(::Val{:quine_petrick}, formula::TwoLevelDNFFormula)
+    terms = formula.combinations
+
+    if isempty(terms)
+        return formula
+    end
+
+    # Trova i primi implicanti
+    function find_prime_implicants(terms::Vector{BitVector})
+        function can_combine(t1::Vector{Int}, t2::Vector{Int})
+            diff = 0
+            pos = -1
+            for i in eachindex(t1)
+                if t1[i] != t2[i]
+                    diff += 1
+                    pos = i
+                    if diff > 1
+                        return false, -1
+                    end
+                end
+            end
+            return diff == 1, pos
+        end
+
+        function combine(t1::Vector{Int}, t2::Vector{Int}, pos::Int)
+            result = copy(t1)
+            result[pos] = -1  # Aggiungi un don't care
+            return result
+        end
+
+        primes = Set{Vector{Int}}()
+        used = Set{Vector{Int}}()
+        current = [Vector{Int}([x ? 1 : 0 for x in term]) for term in terms]
+
+        while !isempty(current)
+            next_terms = Vector{Vector{Int}}()
+
+            for i in 1:length(current)
+                for j in (i+1):length(current)
+                    combinable, pos = can_combine(current[i], current[j])
+                    if combinable
+                        push!(used, current[i])
+                        push!(used, current[j])
+                        push!(next_terms, combine(current[i], current[j], pos))
+                    end
+                end
+            end
+
+            for term in current
+                if term ∉ used
+                    push!(primes, term)
+                end
+            end
+
+            current = unique(next_terms)
+            empty!(used)
+        end
+
+        return collect(primes)
+    end
+
+    # Verifica se un termine copre un altro termine
+    function covers(prime::Vector{Int}, term::BitVector)
+        for i in eachindex(prime)
+            if prime[i] != -1 && prime[i] != (term[i] ? 1 : 0)
+                return false
+            end
+        end
+        return true
+    end
+
+    # Metodo di Petrick per minimizzare la copertura
+    function petrick_method(terms::Vector{BitVector}, primes::Vector{Vector{Int}})
+        equation = Vector{Vector{Int}}()
+        for term in terms
+            row = Vector{Int}()
+            for (idx, prime) in enumerate(primes)
+                if covers(prime, term)
+                    push!(row, idx)
+                end
+            end
+            push!(equation, row)
+        end
+
+        function combine_equations(equation::Vector{Vector{Int}})
+            if isempty(equation)
+                return [[]]
+            end
+
+            first_row = first(equation)
+            rest_combinations = combine_equations(equation[2:end])
+            return [vcat([x], combo) for x in first_row for combo in rest_combinations]
+        end
+
+        solutions = combine_equations(equation)
+
+        min_solution = solutions[1]
+        for sol in solutions
+            if length(unique(sol)) < length(unique(min_solution))
+                min_solution = sol
+            end
+        end
+
+        return [primes[idx] for idx in unique(min_solution)]
+    end
+
+    primes = find_prime_implicants(terms)
+    minimized_cover = petrick_method(terms, primes)
+
+    # Crea una nuova lista di combinazioni minimizzate
+    minimized_combinations = BitVector[]
+    for prime in minimized_cover
+        bitvec = falses(formula.num_atoms)
+        for (i, val) in enumerate(prime)
+            if val == 1
+                bitvec[i] = true
+            end
+        end
+        push!(minimized_combinations, bitvec)
+    end
+
+    return TwoLevelDNFFormula(
+        minimized_combinations,
+        formula.num_atoms,
+        formula.thresholds_by_feature,
+        formula.atoms_by_feature,
+        minimized_cover
+    )
+end
+
 
 # quine fuso ad espresso [DEFINITIVO !?!?!?1?!?!?!1?!1?!]
 function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)

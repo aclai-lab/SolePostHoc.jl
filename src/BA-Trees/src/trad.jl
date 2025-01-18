@@ -100,6 +100,6 @@ end
 
 
 # Salva il tuo file come "tree.txt"
-tree = convert_tree("/home/perro/.julia/dev/ModalMinimizerRulesSystematicApp/BA-Trees/temp_ba_trees/result.txt.tree")
+tree = convert_tree(joinpath(@__DIR__,"..", "temp_ba_trees", "result.txt.tree"))
 t = solemodel(tree)
-#ll = listrules(t)
+ll = listrules(t)
