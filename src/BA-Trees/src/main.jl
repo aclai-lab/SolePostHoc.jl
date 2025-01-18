@@ -232,41 +232,385 @@ function create_random_forest_input(dataset, num_trees = 10, max_depth = 3)
     return join(lines, "\n")
 end
 
-function convert_decision_ensemble(f, output_file::String="output.txt")
+#=
+    """
+    Calcola la profondità massima di un albero SoleModels (Branch/ConstantModel).
+    """
+    function compute_tree_depth(node, depth::Int=0)::Int
+        if isa(node, ConstantModel{String})
+            return depth
+        elseif isa(node, Branch{String})
+            left_d  = compute_tree_depth(node.posconsequent, depth+1)
+            right_d = compute_tree_depth(node.negconsequent, depth+1)
+            return max(left_d, right_d)
+        else
+            throw(ArgumentError("Nodo non riconosciuto: $(typeof(node))"))
+        end
+    end
+
+    """
+    Dato un nodo (Branch o ConstantModel), un contatore di node_id (nella Ref)
+    e la profondità corrente, produce un Vector{String} con le righe BA-Trees.
+
+    - Usa DFS in pre-order: prima crea la riga del nodo corrente,
+    poi visita il sottoalbero sinistro, poi quello destro.
+    - Se è foglia (ConstantModel), scrive "LN"; se è Branch, scrive "IN".
+    - feature_offset serve a passare da i_variable=1..4 => 0..3
+    """
+    function create_tree_node_from_branch(
+        node::Union{Branch{String}, ConstantModel{String}},
+        node_id::Ref{Int},       # contatore del prossimo ID di nodo
+        depth::Int,
+        class_map::Dict{String,Int},
+        feature_offset::Int=1
+    )::Vector{String}
+        lines = String[]
+
+        # current_node è l'ID assegnato a questo nodo
+        current_node = node_id[]
+        node_id[] += 1  # incrementiamo per il prossimo nodo
+
+        if isa(node, ConstantModel{String})
+            # Nodo foglia
+            leaf = node::ConstantModel{String}
+            # Troviamo l'indice 0-based della classe
+            leaf_class_idx = class_map[leaf.outcome]
+            push!(lines, "$current_node LN -1 -1 -1 -1 $depth $leaf_class_idx")
+            return lines
+
+        else
+            # Nodo interno
+            branch = node::Branch{String}
+            feature_raw = branch.antecedent.value.metacond.feature.i_variable
+            threshold   = branch.antecedent.value.threshold
+
+            # Passiamo da 1-based a 0-based (se i_variable parte da 1)
+            feature_0 = feature_raw - feature_offset
+
+            # Ricorsione sul sottoalbero sinistro
+            left_child_id = node_id[]  # memorizziamo l'ID che verrà assegnato al left
+            left_lines = create_tree_node_from_branch(
+                branch.posconsequent,
+                node_id,
+                depth+1,
+                class_map,
+                feature_offset
+            )
+
+            # Ricorsione sul sottoalbero destro
+            right_child_id = node_id[] # l'ID del primo nodo del right subtree
+            right_lines = create_tree_node_from_branch(
+                branch.negconsequent,
+                node_id,
+                depth+1,
+                class_map,
+                feature_offset
+            )
+
+            # Riga per il nodo interno
+            # La "classe" è -1 perché non è una foglia
+            push!(lines,
+                "$current_node IN $left_child_id $right_child_id $feature_0 $(round(threshold, digits=3)) $depth -1"
+            )
+
+            # Ora uniamo le righe dei sottoalberi
+            append!(lines, left_lines)
+            append!(lines, right_lines)
+
+            return lines
+        end
+    end
+
+    """
+    Produce un file BA-Trees analogo a `create_random_forest_input`, però
+    anziché generare una foresta random la estrapola dal tuo modello
+    `f::DecisionEnsemble{String}` (SoleModels).
+
+    # Argomenti
+    - f: Un `DecisionEnsemble{String}` con `f.models` = array di Branch/ConstantModel.
+    - output_file: Nome del file in cui salvare il contenuto (di default "forest.txt").
+    - feature_offset: se i_variable in SoleModels parte da 1, metti 1 (default).
+                    se invece parte da 0, metti 0.
+
+    # Ritorna
+    - Una `String` contenente l'intero contenuto BA-Trees.
+    """
+    function create_random_forest_input_from_model(
+        f::DecisionEnsemble{String};
+        output_file::String="forest.txt",
+        feature_offset::Int=1
+    )::String
+
+        # 1) Numero alberi
+        num_trees = length(f.models)
+
+        # 2) Calcolo NB_FEATURES
+        #    Troviamo il max i_variable usato (solo nei Branch).
+        #    Se un albero fosse una foglia pura, consideriamo 0.
+        max_feat_used = 0
+        for tree in f.models
+            if isa(tree, Branch{String})
+                # c'è almeno un branch
+                feat = tree.antecedent.value.metacond.feature.i_variable
+                if feat > max_feat_used
+                    max_feat_used = feat
+                end
+            end
+        end
+        # Ad es. se max_feat_used=4 e offset=1 => NB_FEATURES=4
+        nb_features = max_feat_used - (feature_offset - 1)
+
+        # 3) NB_CLASSES
+        all_labels = f.info.supporting_labels
+        unique_labels = unique(all_labels)
+        nb_classes = length(unique_labels)
+
+        # 4) MAX_TREE_DEPTH
+        if num_trees == 0
+            max_depth = 0
+        else
+            max_depth = maximum(tree -> compute_tree_depth(tree), f.models)
+        end
+
+        # 5) Creiamo la mappa classe => int 0-based
+        class_map = Dict{String,Int}()
+        for (i, cl) in enumerate(unique_labels)
+            class_map[cl] = i - 1
+        end
+
+        # 6) Costruiamo le righe di intestazione
+        lines = String[]
+        push!(lines, "DATASET_NAME: dataset.train.csv")
+        push!(lines, "ENSEMBLE: RF")
+        push!(lines, "NB_TREES: $num_trees")
+        push!(lines, "NB_FEATURES: $nb_features")
+        push!(lines, "NB_CLASSES: $nb_classes")
+        push!(lines, "MAX_TREE_DEPTH: $max_depth")
+        push!(lines, "Format: node / node type (LN - leaf node, IN - internal node) left child / right child / feature / threshold / node_depth / majority class (starts with index 0)")
+        push!(lines, "")
+
+        # 7) Convertiamo ogni albero in righe BA-Trees
+        for (tree_idx, tree) in enumerate(f.models)
+            push!(lines, "[TREE $(tree_idx-1)]")
+
+            # Visita DFS in pre-order, assegnando ID da 0 in poi
+            node_id = Ref(0)
+            tree_lines = create_tree_node_from_branch(
+                tree,
+                node_id,
+                0,  # depth
+                class_map,
+                feature_offset
+            )
+
+            # "NB_NODES: X" dove X è la lunghezza di tree_lines
+            push!(lines, "NB_NODES: $(length(tree_lines))")
+
+            # Ora aggiungiamo le linee dei nodi
+            append!(lines, tree_lines)
+
+            # Riga vuota alla fine di ogni albero
+            push!(lines, "")
+        end
+
+        # 8) Convertiamo in un'unica stringa e salviamo su file
+        output_str = join(lines, "\n")
+        open(output_file, "w") do io
+            write(io, output_str)
+        end
+
+        return output_str
+    end
+
+=#
+
+"""
+Funzione di utilità che calcola la profondità massima
+di un albero SoleModels (Branch/ConstantModel).
+"""
+function compute_tree_depth(node, depth::Int=0)::Int
+    if isa(node, ConstantModel{String})
+        return depth
+    elseif isa(node, Branch{String})
+        left_d  = compute_tree_depth(node.posconsequent, depth+1)
+        right_d = compute_tree_depth(node.negconsequent, depth+1)
+        return max(left_d, right_d)
+    else
+        throw(ArgumentError("Nodo non riconosciuto: $(typeof(node))"))
+    end
+end
+
+"""
+Dato un nodo (Branch o ConstantModel), visita ricorsivamente in pre-order DFS,
+creando le righe BA-Trees in un Vector{String}.
+
+Se il nodo è foglia (ConstantModel), stampa "LN", se è Branch, stampa "IN".
+"""
+function create_tree_node_from_branch(
+    node::Union{Branch{String}, ConstantModel{String}},
+    node_id::Ref{Int},       # contatore del prossimo ID di nodo
+    depth::Int,
+    class_map::Dict{String,Int},
+    feature_offset::Int=1
+)::Vector{String}
+
     lines = String[]
-    
-    # Header information
-    push!(lines, "DATASET_NAME: iris.train.csv")
+
+    # ID assegnato a questo nodo
+    current_node = node_id[]
+    node_id[] += 1  # incrementiamo per il prossimo nodo
+
+    if isa(node, ConstantModel{String})
+        # Nodo foglia
+        leaf = node::ConstantModel{String}
+        leaf_class_idx = class_map[leaf.outcome]
+        push!(lines, "$current_node LN -1 -1 -1 -1 $depth $leaf_class_idx")
+        return lines
+    else
+        # Nodo interno
+        branch = node::Branch{String}
+        feature_raw = branch.antecedent.value.metacond.feature.i_variable
+        threshold   = branch.antecedent.value.threshold
+
+        # Shift da 1-based a 0-based (se serve)
+        feature_0 = feature_raw - feature_offset
+        threshold_str = round(threshold, digits=3)
+
+        # Sottoalbero sinistro
+        left_child_id = node_id[]
+        left_lines = create_tree_node_from_branch(
+            branch.posconsequent,
+            node_id,
+            depth+1,
+            class_map,
+            feature_offset
+        )
+
+        # Sottoalbero destro
+        right_child_id = node_id[]
+        right_lines = create_tree_node_from_branch(
+            branch.negconsequent,
+            node_id,
+            depth+1,
+            class_map,
+            feature_offset
+        )
+
+        # Riga per il nodo interno
+        push!(lines,
+              "$current_node IN $left_child_id $right_child_id $feature_0 $threshold_str $depth -1"
+        )
+
+        # Uniamo le righe dei due figli
+        append!(lines, left_lines)
+        append!(lines, right_lines)
+
+        return lines
+    end
+end
+
+"""
+Crea un file BA-Trees analogo a create_random_forest_input, ma usando
+il tuo modello f::DecisionEnsemble{String} (SoleModels).
+
+- Non scrive la mappa delle classi nel file (per non interferire con BA-Trees),
+  la stampa a terminale con "println" così puoi vederla.
+- Le classi in foglia sono numeri 0-based (0 -> la prima classe incontrata, 1 -> la seconda, etc.).
+
+# Argomenti
+- f: DecisionEnsemble{String} con f.models = array di Branch{String} o ConstantModel{String}.
+- output_file: Nome file per salvare l'output BA-Trees. Default "forest.txt".
+- feature_offset: Se i_variable parte da 1, metti 1 (default). Se parte da 0, metti 0.
+
+# Ritorna
+- Stringa con il contenuto BA-Trees (lo stesso scritto su file).
+"""
+function create_random_forest_input_from_model(
+    f::DecisionEnsemble{String};
+    output_file::String="forest.txt",
+    feature_offset::Int=1
+)::String
+
+    # 1) Numero alberi
+    num_trees = length(f.models)
+
+    # 2) Calcolo NB_FEATURES
+    #    max_feat_used = massima feature i_variable nei branch
+    max_feat_used = 0
+    for tree in f.models
+        if isa(tree, Branch{String})
+            feat = tree.antecedent.value.metacond.feature.i_variable
+            max_feat_used = max(max_feat_used, feat)
+        end
+    end
+    # Esempio: se max_feat_used=4 e offset=1 => NB_FEATURES=4
+    nb_features = max_feat_used - (feature_offset - 1)
+
+    # 3) NB_CLASSES: ricaviamo da f.info.supporting_labels
+    all_labels = f.info.supporting_labels
+    unique_labels = unique(all_labels)
+    nb_classes = length(unique_labels)
+
+    # 4) MAX_TREE_DEPTH (massimo su tutti gli alberi)
+    max_depth = num_trees == 0 ? 0 :
+        maximum(tree -> compute_tree_depth(tree), f.models)
+
+    # 5) Creiamo un dizionario per mappare le classi a int 0-based
+    class_map = Dict{String,Int}()
+    for (i, cl) in enumerate(unique_labels)
+        class_map[cl] = i - 1
+    end
+
+    # --- STAMPA A TERMINALE la mappa delle classi (non la scriviamo nel file) ---
+    println("\nClass mapping (0-based) per il modello:")
+    for (lbl, idx) in sort(collect(class_map), by=x->x[2])
+        println("   $idx -> $lbl")
+    end
+    println()
+
+    # 6) Costruiamo le righe di intestazione
+    lines = String[]
+    push!(lines, "DATASET_NAME: dataset.train.csv")
     push!(lines, "ENSEMBLE: RF")
-    push!(lines, "NB_TREES: $(length(f.models))")
-    
-    # Assuming all trees have the same structure for features/classes
-    sample_tree = f.models[1]
-    n_classes = length(unique(sample_tree.info.supporting_labels))
-    push!(lines, "NB_CLASSES: $n_classes")
-    
-    # Format explanation
-    push!(lines, "Format: node / node type (LN - leaf node, IN - internal node) / left child / right child / feature / threshold / node_depth / majority class")
+    push!(lines, "NB_TREES: $num_trees")
+    push!(lines, "NB_FEATURES: $nb_features")
+    push!(lines, "NB_CLASSES: $nb_classes")
+    push!(lines, "MAX_TREE_DEPTH: $max_depth")
+    push!(lines, "Format: node / node type (LN - leaf node, IN - internal node) left child / right child / feature / threshold / node_depth / majority class (starts with index 0)")
     push!(lines, "")
-    
-    # Process each tree
-    for (tree_idx, tree) in enumerate(f.models)
-        push!(lines, "[TREE $(tree_idx-1)]")
-        
-        # Convert tree structure
-        tree_nodes = convert_tree_structure(tree)
-        push!(lines, "NB_NODES: $(length(tree_nodes))")
-        append!(lines, tree_nodes)
+
+    # 7) Convertiamo ogni albero in righe BA-Trees
+    for (i, tree) in enumerate(f.models)
+        push!(lines, "[TREE $(i)]")  # se vuoi 0-based per i, è uguale: i=0..(num_trees-1)
+
+        node_id = Ref(0)
+        tree_lines = create_tree_node_from_branch(
+            tree,
+            node_id,
+            0,  # depth
+            class_map,
+            feature_offset
+        )
+
+        # "NB_NODES: X"
+        push!(lines, "NB_NODES: $(length(tree_lines))")
+
+        # Aggiungiamo le linee dei nodi
+        append!(lines, tree_lines)
+
+        # Riga vuota
         push!(lines, "")
     end
-    
-    # Write to file
+
+    # 8) Unione e scrittura su file
+    output_str = join(lines, "\n")
     open(output_file, "w") do io
-        write(io, join(lines, "\n"))
+        write(io, output_str)
     end
-    
-    return join(lines, "\n")
+
+    return output_str
 end
+
 
 function convert_tree_structure(node, depth=0, node_counter=Ref(0), node_map=Dict())::Vector{String}
     lines = String[]
@@ -319,7 +663,7 @@ Prepare and run BA-Trees algorithm.
 - `num_trees`: Number of trees to generate
 - `max_depth`: Maximum tree depth
 """
-function prepare_and_run_ba_trees(; dataset_name = "iris", num_trees = 4, max_depth = 3)
+function prepare_and_run_ba_trees(; dataset_name = "iris", num_trees = 3, max_depth = 3)
     base_dir = pwd()
     dataset_path = joinpath(base_dir, "src", dataset_name * ".csv")
     @show dataset_path
@@ -352,9 +696,9 @@ function prepare_and_run_ba_trees(; dataset_name = "iris", num_trees = 4, max_de
 
     try
         println("Generating random forest...")
-        #f, model, start_time = learn_and_convert(3, "iris", 3)
-        #forest_content = convert_decision_ensemble(f) 
-        forest_content = create_random_forest_input(dataset, num_trees, max_depth)
+        f, model, start_time = learn_and_convert(num_trees, "iris", 3)      # NON VANNO
+        forest_content = create_random_forest_input_from_model(f)   # NON VANNO
+        #forest_content = create_random_forest_input(dataset, num_trees, max_depth)
         write(input_file, forest_content)
 
         cmd = `$executable_path $input_file $output_base -trees $num_trees -obj 4`
@@ -432,7 +776,7 @@ function main()
 
     # Configurable parameters
     dataset_name = "iris"
-    num_trees = 5
+    num_trees = 3
     max_depth = 3
 
     println("Dataset: $dataset_name")
