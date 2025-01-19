@@ -1,3 +1,6 @@
+module TradModule
+export trad
+
 using DecisionTree
 using SoleModels
 using SoleLogics
@@ -214,9 +217,14 @@ end
 
 
 # Salva il tuo file come "tree.txt"
-tree = convert_tree(joinpath(@__DIR__,"..", "temp_ba_trees", "result.txt.tree"))
-t = solemodel(tree)
+function trad()
+    tree = convert_tree(joinpath(@__DIR__,"..", "temp_ba_trees", "result.txt.tree"))
+    t = solemodel(tree)
 
-ll = listrules(t)
-minimized_rules = build_dnf_rules(ll)
-DecisionSet(minimized_rules)
+    ll = listrules(t)
+    minimized_rules = build_dnf_rules(ll)
+    ds = DecisionSet(minimized_rules)
+    return ds
+end
+
+end
