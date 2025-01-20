@@ -37,7 +37,7 @@ include("bellatrex.jl")
 export lumen, Lumen
 export LumenRuleExtractor
 
-export batrees, BATrees #TODO here
+#export batrees, BATrees #TODO here
 
 using SoleModels: RuleExtractor
 import SoleModels: isexact, extractrules
@@ -52,6 +52,6 @@ struct LumenRuleExtractor <: RuleExtractor end
 extractrules(::LumenRuleExtractor, m, args...; kwargs...) = Lumen.lumen(m, args...; kwargs...)
 
 include("lumen/main.jl")
-include("BA-Trees/src/main.jl") #TODO here
+#include("BA-Trees/src/main.jl") #TODO here
 
 end
