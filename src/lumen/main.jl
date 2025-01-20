@@ -9,16 +9,15 @@ using SoleModels:DecisionSet
 using AbstractTrees
 using SoleData
 using SoleData: MultivariateScalarAlphabet, UnivariateScalarAlphabet
-using DecisionTree: load_data, build_forest, apply_forest
-using ModalDecisionTrees
 using SoleLogics
 using BenchmarkTools, StatProfilerHTML
 using Base: intersect
 using Base.Threads: @threads
 using Base.Threads: Atomic, atomic_add!
 using Profile
-using ConcurrentCollections
 using ProgressMeter
+
+import DecisionTree as DT
 
 """
     lumen(model, minimization_scheme = :espresso;
@@ -103,7 +102,7 @@ function lumen(
     minimization_kwargs::NamedTuple=(;),
     filteralphabetcallback=identity,
     solemodel = nothing,
-    apply_function = SoleModels.apply,
+    apply_function = nothing,
     silent = false,
     return_info = true, # TODO must default to `false`.
     kwargs...
@@ -115,6 +114,14 @@ function lumen(
         horizontal = 1.0 # Agisce in printIO_custom_or_formula TODO agire pre semplificazione ? 
     end
     model = isnothing(solemodel) ? SoleModels.solemodel(modelJ) : solemodel
+
+    if isnothing(apply_function)
+        if modelJ isa DT.Ensemble
+            apply_function = DT.apply_forest
+        else
+            apply_function = SoleModels.apply
+        end
+    end
 
     silent || println(
         "\n\n$COLORED_TITLE$TITLE\n PART 2.a STARTER RULESET ESTRACTION \n$TITLE$RESET",

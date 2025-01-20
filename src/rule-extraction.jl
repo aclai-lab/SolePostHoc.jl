@@ -23,13 +23,19 @@ using SoleModels: bestguess, evaluaterule
 
 # using SoleFeatures: findcorrelation
 
-using Statistics: cor
+# using Statistics: cor
+
+function _get_rule_extractor_docstring(::Type{<:RuleExtractor}, method)
+    return """Extract rules from a symbolic model using [`$(string(method))`](ref).""" *
+    "\n\n" *
+    """See also [`extractrules`](@ref), [`RuleExtractor`](@ref)."""
+end
 
 using SoleModels: RuleExtractor
 import SoleModels: isexact, extractrules
 
 export InTreesRuleExtractor
-include("intrees.jl")
+include("intrees/intrees.jl")
 
 export BellatrexRuleExtractor
 include("bellatrex.jl")
@@ -41,6 +47,7 @@ using SoleModels: RuleExtractor
 import SoleModels: isexact, extractrules
 
 """
+TODO explain
 Pagliarini, Giovanni, et al. "Minimal Rules from Decision Forests: a Systematic Approach." OVERLAY@ AI* IA. 2024.
 
 See also [`extractrules`](@ref), [`intrees`](@ref), [`RuleExtractor`](@ref).

@@ -1,14 +1,15 @@
 module SolePostHoc
 
+using Reexport
 using SoleData
 using SoleLogics
 using SoleModels
 
-# Function mse of Metrics.jl
+# Function mse (from Metrics.jl)
 mse = (y_pred,t_true) -> (sum((y_true .- y_pred).^2) / length(y_true))
 
 include("rule-extraction.jl")
 
-using .RuleExtraction
+@reexport using .RuleExtraction
 
 end

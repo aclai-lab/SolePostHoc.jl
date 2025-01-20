@@ -1,0 +1,3 @@
+B1,static,Original,/home/lele7x/results9/evolutionary-rule-extraction/pruning-ensemble/models_cache/B1-increment-static/model_7db95af7209aaea3bee1de18defeee63f9a6246be45aca9922fa88bdaba00710.jld2,100,97.50000000000001,98.75,97.5609756097561,100.0
+B1,static,Subforest,/home/lele7x/results9/evolutionary-rule-extraction/pruning-ensemble/models_cache/B1-increment-static/model_7db95af7209aaea3bee1de18defeee63f9a6246be45aca9922fa88bdaba00710.jld2,1,92.5,96.25,93.02325581395348,100.0
+B1,static,Avgforest,Nothing,1,92.5,96.25,93.02325581395348,100.0
