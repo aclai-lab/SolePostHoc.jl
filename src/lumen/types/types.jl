@@ -292,7 +292,8 @@ end
 
 
 """
-Generate an AND formula based on the provided binary `combination` representing a combination of atoms. Calculate conditions for each feature based on the thresholds and atom properties. Construct atoms with corresponding conditions and return the resulting AND formula.
+Generate an AND formula based on the provided binary `combination` representing a combination of atoms. 
+Calculate conditions for each feature based on the thresholds and atom properties. Construct atoms with corresponding conditions and return the resulting AND formula.
 """
 function generate_disjunct(
     combination::BitVector,
@@ -350,7 +351,7 @@ using SoleLogics
 
 function Base.convert(::Type{SoleLogics.DNF}, f::TwoLevelDNFFormula)
     conjuncts = [
-        generate_disjunct(comb, f.num_atoms, f.thresholds_by_feature, f.atoms_by_feature) for comb in TestSole.eachcombination(f)
+        generate_disjunct(comb, f.num_atoms, f.thresholds_by_feature, f.atoms_by_feature) for comb in eachcombination(f)
     ]
     filter!(!istop, conjuncts)
     return LeftmostDisjunctiveForm{LeftmostConjunctiveForm{Atom}}(conjuncts, true)
