@@ -2,6 +2,7 @@ function minimizza_dnf(_minimization_scheme::Val, formula::TwoLevelDNFFormula, k
     error("Unknown minimization scheme: $(_minimization_scheme)!")
 end
 
+using Infiltrator
 function minimizza_dnf(
     ::Val{:mitespresso},
     formula::TwoLevelDNFFormula;
@@ -12,6 +13,7 @@ function minimizza_dnf(
     silent || (println(); @show formula)
     formula = SoleData.espresso_minimize(formula, silent; mitespresso_kwargs...)
     silent || (println(); @show formula)
+    @infiltrate
     formula = convert(TwoLevelDNFFormula, formula)
     silent || (println(); @show formula)
     return formula

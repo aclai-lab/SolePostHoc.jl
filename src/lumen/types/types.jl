@@ -243,6 +243,14 @@ struct TwoLevelDNFFormula <: Formula
     prime_mask::Vector{Vector{Int}} 
 end
 
+function TwoLevelDNFFormula(f::AbstractVector)
+    if isempty(f)
+        # return TwoLevelDNFFormula(BitVector[], 0, Dict{Int,Vector{Float64}}(), Dict{Int,Vector{Tuple{Float64,Bool}}}(), Vector{Int}[])
+    else
+        error("TODO implement constructor.")
+    end
+end
+
 eachcombination(f::TwoLevelDNFFormula) = f.combinations
 eachmaskedcombination(f::TwoLevelDNFFormula) = isempty(f.prime_mask) ? eachcombination(f) : f.prime_mask
 function SoleLogics.atoms(f::TwoLevelDNFFormula)
@@ -357,22 +365,38 @@ function Base.convert(::Type{SoleLogics.DNF}, f::TwoLevelDNFFormula)
     return LeftmostDisjunctiveForm{LeftmostConjunctiveForm{Atom}}(conjuncts, true)
 end
 
-function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.DNF)
-    atoms = unique(SoleLogics.atoms(f))
-    conds = SoleLogics.value.(atoms)
-    num_atoms = length(atoms)
-    # TODO:
-    thresholds_by_feature = nothing
-    atoms_by_feature = nothing
-    combinations = nothing
-    prime_mask = nothing
-    return TwoLevelDNFFormula(
-        combinations,
-        num_atoms,
-        thresholds_by_feature,
-        atoms_by_feature,
-        prime_mask,
-    )
+function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula)
+    if SoleLogics.istop(f)
+        TwoLevelDNFFormula([])
+    else
+        f = SoleLogics.dnf(f)
+        atoms = unique(SoleLogics.atoms(f))
+        conds = SoleLogics.value.(atoms)
+        if f isa SoleLogics.DNF
+            disjs = SoleLogics.disjuncts(f)
+            # 
+            # TODO @Marco
+            combinations, num_atoms, thresholds_by_feature, atoms_by_feature, prime_mask = begin
+                num_atoms = length(atoms)
+                combinations = [get_comb(disj, conds) for disj in disjs]
+                thresholds_by_feature = nothing
+                atoms_by_feature = nothing
+                combinations = nothing
+                prime_mask = nothing
+                # 
+                combinations, num_atoms, thresholds_by_feature, atoms_by_feature, prime_mask
+            end
+        else
+            error("Could not convert formula of type $(typeof(f)) to TwoLevelDNFFormula.")
+        end
+        return TwoLevelDNFFormula(
+            combinations,
+            num_atoms,
+            thresholds_by_feature,
+            atoms_by_feature,
+            prime_mask,
+        )
+    end
 end
 
 
