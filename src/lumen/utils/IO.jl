@@ -80,7 +80,7 @@ function print_detailed_results(results::Dict{Any,Vector{BigInt}})
     end
 end
 
-function io_formula_mask(formula::TwoLevelDNFFormula, orizontal::Float64 = 1.0)
+function my_syntaxstring(formula::TwoLevelDNFFormula, orizontal::Float64 = 1.0)
     num_orizontal = floor(Int, formula.thresholds_by_feature.count * orizontal)
     result = Set{String}()
 
@@ -89,27 +89,49 @@ function io_formula_mask(formula::TwoLevelDNFFormula, orizontal::Float64 = 1.0)
         for mask in formula.prime_mask
             feature_conditions = Dict{Int,Dict{String,Float64}}()
             current_atom_index = 1
-
+            
+            # Mappiamo prima tutti i bit a ciascuna feature
+            feature_to_bits = Dict{Int,Vector{Tuple{Int,Float64}}}()
             for (feature, atoms) in formula.atoms_by_feature
                 if feature <= num_orizontal
+                    feature_to_bits[feature] = []
                     for (threshold, _) in atoms
-                        if current_atom_index <= length(mask) && mask[current_atom_index] != -1
-                            if !haskey(feature_conditions, feature)
-                                feature_conditions[feature] = Dict{String,Float64}()
-                            end
-
-                            # Se mask[current_atom_index] == 1, cerchiamo x < threshold
-                            op = mask[current_atom_index] == 1 ? "<" : "≥"
-                            
-                            if op == "≥" && (!haskey(feature_conditions[feature], "≥") || 
-                                           threshold > feature_conditions[feature]["≥"])
-                                feature_conditions[feature]["≥"] = threshold
-                            elseif op == "<" && (!haskey(feature_conditions[feature], "<") || 
-                                               threshold < feature_conditions[feature]["<"])
+                        push!(feature_to_bits[feature], (current_atom_index, threshold))
+                        current_atom_index += 1
+                    end
+                end
+            end
+            
+            # Per ogni feature, processiamo i bit nell'ordine corretto
+            for feature in sort(collect(keys(feature_to_bits)); rev=true)
+                bits_and_thresholds = feature_to_bits[feature]
+                
+                # Consideriamo solo i bit che non sono don't-care (-1)
+                active_bits = [(i, t, mask[i]) for (i, t) in bits_and_thresholds if i <= length(mask) && mask[i] != -1]
+                
+                if !isempty(active_bits)
+                    if !haskey(feature_conditions, feature)
+                        feature_conditions[feature] = Dict{String,Float64}()
+                    end
+                    
+                    # Ordiniamo i threshold per valore
+                    sort!(active_bits, by = x -> x[2])
+                    
+                    # Per ogni bit attivo
+                    for (bit_idx, threshold, bit_value) in active_bits
+                        if bit_value == 1  # bit attivo
+                            # Per < prendiamo il threshold effettivo
+                            if !haskey(feature_conditions[feature], "<") || 
+                               threshold < feature_conditions[feature]["<"]
                                 feature_conditions[feature]["<"] = threshold
                             end
+                        else  # bit_value == 0
+                            # Per ≥ prendiamo il threshold effettivo
+                            if !haskey(feature_conditions[feature], "≥") || 
+                               threshold > feature_conditions[feature]["≥"]
+                                feature_conditions[feature]["≥"] = threshold
+                            end
                         end
-                        current_atom_index += 1
                     end
                 end
             end
@@ -127,7 +149,7 @@ function io_formula_mask(formula::TwoLevelDNFFormula, orizontal::Float64 = 1.0)
         end
     else
         # Logica per formule non semplificate
-        for term in formula.combinations 
+        for term in formula.combinations
             feature_conditions = Dict{Int,Dict{String,Float64}}()
             current_atom_index = 1
             
@@ -138,10 +160,10 @@ function io_formula_mask(formula::TwoLevelDNFFormula, orizontal::Float64 = 1.0)
                             is_active = term[current_atom_index]
                             
                             if is_active
-                                if !haskey(feature_conditions, feature)
-                                    feature_conditions[feature] = Dict{String,Float64}()
-                                end
-                                
+                            if !haskey(feature_conditions, feature)
+                                feature_conditions[feature] = Dict{String,Float64}()
+                            end
+                            
                                 # Se is_active (truth_row[j] == 1), cerchiamo x < threshold
                                 # come in process_combination
                                 op = "<"
@@ -158,11 +180,11 @@ function io_formula_mask(formula::TwoLevelDNFFormula, orizontal::Float64 = 1.0)
                                 end
                                 
                                 op = "≥"
-                                
-                                if !haskey(feature_conditions[feature], op) || 
-                                   (op == "<" && threshold < feature_conditions[feature][op]) ||
-                                   (op == "≥" && threshold > feature_conditions[feature][op])
-                                    feature_conditions[feature][op] = threshold
+                            
+                            if !haskey(feature_conditions[feature], op) || 
+                               (op == "<" && threshold < feature_conditions[feature][op]) ||
+                               (op == "≥" && threshold > feature_conditions[feature][op])
+                                feature_conditions[feature][op] = threshold
                                 end
                             end
                         end
@@ -174,7 +196,7 @@ function io_formula_mask(formula::TwoLevelDNFFormula, orizontal::Float64 = 1.0)
             current_atoms = String[]
             for (feature, conditions) in feature_conditions
                 for (op, value) in conditions
-                    push!(current_atoms, "V$(feature) $(op) $(value)")
+                        push!(current_atoms, "V$(feature) $(op) $(value)")
                 end
             end
 
@@ -192,7 +214,7 @@ function convert_DNF_formula(
     outcome,
     orizontal::Float64 = 1.0,
 )
-    formulas = io_formula_mask(formula, orizontal)    
+    formulas = my_syntaxstring(formula, orizontal)    
     result = join(formulas, " ∨ ")
     
     # Specificare esplicitamente featvaltype = Real per risolvere il warning 
@@ -208,6 +230,49 @@ function convert_DNF_formula(
         )
     )
 
-    # Creiamo la Rule usando l'outcome passato come parametro
+    #= 
+        Creiamo la Rule usando l'outcome passato come parametro
+        println("mask:" ,formula.prime_mask)
+        println("combination",formula.combinations)
+        stampa_dnf(stdout,formula)
+        println("formule:" ,dump(formula)) 
+    =#
+    #println("mask:" ,formula.prime_mask)
+    #stampa_dnf(stdout,formula)
     return Rule(φ, outcome)
 end
+
+#=
+function convert_DNF_formula(
+    formula::TwoLevelDNFFormula,
+    outcome,
+    orizontal::Float64 = 1.0,
+)
+    formulas = my_syntaxstring(formula, orizontal)
+    
+    # Gestione caso singola condizione
+    if length(formulas) == 1
+        φ = Atom(parsecondition(
+            SoleData.ScalarCondition, 
+            first(formulas); 
+            featuretype = SoleData.VariableValue,
+            featvaltype = Real
+        ))
+    else
+        result = join(formulas, " ∨ ")
+        φ = SoleLogics.parseformula(
+            result;
+            atom_parser = a->Atom(
+                parsecondition(
+                    SoleData.ScalarCondition, 
+                    a; 
+                    featuretype = SoleData.VariableValue,
+                    featvaltype = Real
+                )
+            )
+        )
+    end
+
+    return Rule(φ, outcome)
+end
+=#

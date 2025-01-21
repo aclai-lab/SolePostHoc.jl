@@ -93,7 +93,7 @@ lumen(model, :espresso)
 """
 function lumen(
     modelJ, # attualmente truth_combinations usa model 
-    minimization_scheme::Symbol=:espresso;
+    minimization_scheme::Symbol=:mitespresso;
     vertical::Real=1.0,
     horizontal::Real=1.0,
     ott_mode::Bool=false,
