@@ -378,10 +378,9 @@ function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula)
             # TODO @Marco
             combinations, num_atoms, thresholds_by_feature, atoms_by_feature, prime_mask = begin
                 num_atoms = length(atoms)
-                combinations = [get_comb(disj, conds) for disj in disjs]
+                combinations = [encode_disjunct(disj, conds) for disj in disjs]
                 thresholds_by_feature = nothing
                 atoms_by_feature = nothing
-                combinations = nothing
                 prime_mask = nothing
                 # 
                 combinations, num_atoms, thresholds_by_feature, atoms_by_feature, prime_mask
