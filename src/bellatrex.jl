@@ -7,28 +7,14 @@ using Random
 using Hyperopt
 using ModalDecisionTrees: DForest
 
-"""$(_get_rule_extractor_docstring(BellatrexRuleExtractor, bellatrex))"""
-@with_kw struct BellatrexRuleExtractor <: RuleExtractor
-    ntrees::Float64
-    ndims::Union{Nothing,Int}
-    nclusters::Int
-end
-
-function extractrules(::InTreesRuleExtractor, m, args...; kwargs...)
-  dl = bellatrex(m, args...; kwargs...)
-  return listrules(dl)
-end
-
 """
-Dedja, Klest, et al. "BELLATREX: Building explanations through a locally accurate rule extractor." Ieee Access 11 (2023): 41348-41367.
+TODO docstring
+# References
+- Dedja, Klest, et al. "BELLATREX: Building explanations through a locally accurate rule extractor." Ieee Access 11 (2023): 41348-41367.
+- https://github.com/Klest94/Bellatrex
 
 See also [`extractrules`](@ref), [`bellatrex`](@ref), [`RuleExtractor`](@ref).
 """
-
-
-
-# Repository web path: https://github.com/Klest94/Bellatrex
-# Bellatrex is a a
 function bellatrex(
     m::Union{AbstractModel,DecisionForest,DForest},
     X::AbstractLogiset, # testing dataset

@@ -3,22 +3,6 @@ using ComplexityMeasures
 using SoleModels
 
 
-"""$(_get_rule_extractor_docstring(InTreesRuleExtractor, intrees))"""
-@with_kw struct InTreesRuleExtractor <: RuleExtractor
-    prune_rules::Bool = true
-    pruning_s::Union{Float64,Nothing} = nothing
-    pruning_decay_threshold::Union{Float64,Nothing} = nothing
-    rule_selection_method::Symbol = :CBC
-    rule_complexity_metric::Symbol = :natoms
-    # accuracy_rule_selection = nothing
-    min_coverage::Union{Float64,Nothing} = nothing
-end
-
-function extractrules(::InTreesRuleExtractor, m, args...; kwargs...)
-  dl = intrees(m, args...; kwargs...)
-  return listrules(dl)
-end
-
 ############################################################################################
 ############################################################################################
 

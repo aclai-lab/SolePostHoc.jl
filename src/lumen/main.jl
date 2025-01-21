@@ -19,6 +19,8 @@ using ProgressMeter
 
 import DecisionTree as DT
 
+export lumen
+
 """
     lumen(model, minimization_scheme = :espresso;
         start_time = time(),
@@ -83,6 +85,9 @@ No explicit return value, but produces:
 - Setting both parameters to 1.0 enforces strong rule extraction
 - The function aligns with Algorithm 1 from the reference implementation
 - Performance statistics are generated based on processing time and rule reduction
+
+# References
+- Pagliarini, Giovanni, et al. "Minimal Rules from Decision Forests: a Systematic Approach." OVERLAY@ AI* IA. 2024.
 
 # Example
 ```julia
