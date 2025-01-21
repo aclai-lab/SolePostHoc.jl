@@ -1,5 +1,6 @@
 module RuleExtraction
 
+using Reexport
 using Test
 using ThreadsX
 using Random
@@ -68,7 +69,7 @@ include("bellatrex.jl")
     nclusters::Int
 end
 
-function extractrules(::InTreesRuleExtractor, m, args...; kwargs...)
+function extractrules(::BellatrexRuleExtractor, m, args...; kwargs...)
   dl = bellatrex(m, args...; kwargs...)
   return listrules(dl)
 end
@@ -93,7 +94,7 @@ function extractrules(::LumenRuleExtractor, m, args...; kwargs...)
   return listrules(dl)
 end
 
-include("BA-Trees/src/main.jl")
+include("BA-Trees/main.jl")
 @reexport using .BATrees
 
 

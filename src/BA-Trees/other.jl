@@ -1,5 +1,5 @@
-using Pkg
-Pkg.activate(".")
+# using Pkg
+# Pkg.activate(".")
 using Revise
 using Random
 using Logging

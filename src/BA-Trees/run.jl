@@ -4,7 +4,7 @@ using DelimitedFiles
 using Random
 using CSV
 using DataFrames
-using Statistics
+# using Statistics
 
 using DecisionTree
 using SoleModels
