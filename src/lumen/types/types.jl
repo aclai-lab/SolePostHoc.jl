@@ -372,13 +372,43 @@ function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula)
         f = SoleLogics.dnf(f)
         atoms = unique(SoleLogics.atoms(f))
         conds = SoleLogics.value.(atoms)
-        if f isa SoleLogics.DNF
+        if f isa SoleLogics.LeftmostDisjunctiveForm{<:Union{Atom,Literal,LeftmostConjunctive{<:Union{Atom,Literal}}}}
             disjs = SoleLogics.disjuncts(f)
             # 
             # TODO @Marco
             combinations, num_atoms, thresholds_by_feature, atoms_by_feature, prime_mask = begin
                 num_atoms = length(atoms)
-                combinations = [encode_disjunct(disj, conds) for disj in disjs]
+                function disjunct_to_combination!(combination, disj::Atom, conds)
+                    combination[findall(==(disj), conds)] = 1
+                    if SoleLogics.hasdual(disj)
+                        combination[findall(==(SoleLogics.dual(disj)), conds)] = 0
+                    end
+                    combination
+                end
+                function disjunct_to_combination!(combination, disj::Literal, conds)
+                    if SoleLogics.ispos(disj)
+                        disjunct_to_combination!(combination, disj(disj), conds)
+                    else
+                        combination[findall(==(disj), conds)] = 0
+                        if SoleLogics.hasdual(disj)
+                            combination[findall(==(SoleLogics.dual(disj)), conds)] = 1
+                        end
+                        combination
+                    end
+                end
+                function disjunct_to_combination(disj, conds)
+                    combination = fill(-1, length(conds))
+                    disjunct_to_combination!(combination, disj, conds)
+                end
+                disjunct_to_combination(disj, conds) = error("Cannot convert disjunct of type $(typeof(disj)) to combination.")
+                function disjunct_to_combination(disj::LeftmostConjunctive, conds)
+                    combination = fill(-1, length(conds))
+                    for conj in conjuncts(disj)
+                        disjunct_to_combination!(combination, conj, conds)
+                    end
+                end
+                # TODO test!
+                combinations = [disjunct_to_combination(disj, conds) for disj in disjs]
                 thresholds_by_feature = nothing
                 atoms_by_feature = nothing
                 prime_mask = nothing
