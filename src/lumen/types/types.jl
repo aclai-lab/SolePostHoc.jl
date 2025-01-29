@@ -379,19 +379,19 @@ function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula)
             combinations, num_atoms, thresholds_by_feature, atoms_by_feature, prime_mask = begin
                 num_atoms = length(atoms)
                 function disjunct_to_combination!(combination, disj::Atom, conds)
-                    combination[findall(==(disj), conds)] = 1
+                    combination[findall(==(disj), conds)] .= 1
                     if SoleLogics.hasdual(disj)
-                        combination[findall(==(SoleLogics.dual(disj)), conds)] = 0
+                        combination[findall(==(SoleLogics.dual(disj)), conds)] .= 0
                     end
                     combination
                 end
                 function disjunct_to_combination!(combination, disj::Literal, conds)
                     if SoleLogics.ispos(disj)
-                        disjunct_to_combination!(combination, disj(disj), conds)
+                        disjunct_to_combination!(combination, atom(disj), conds)
                     else
-                        combination[findall(==(disj), conds)] = 0
+                        combination[findall(==(disj), conds)] .= 0
                         if SoleLogics.hasdual(disj)
-                            combination[findall(==(SoleLogics.dual(disj)), conds)] = 1
+                            combination[findall(==(SoleLogics.dual(disj)), conds)] .= 1
                         end
                         combination
                     end
@@ -403,9 +403,10 @@ function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula)
                 disjunct_to_combination(disj, conds) = error("Cannot convert disjunct of type $(typeof(disj)) to combination.")
                 function disjunct_to_combination(disj::LeftmostConjunctiveForm, conds)
                     combination = fill(-1, length(conds))
-                    for conj in conjuncts(disj)
+                    for conj in SoleLogics.conjuncts(disj)
                         disjunct_to_combination!(combination, conj, conds)
                     end
+                    combination
                 end
                 # TODO test!
                 combinations = [disjunct_to_combination(disj, conds) for disj in disjs]
