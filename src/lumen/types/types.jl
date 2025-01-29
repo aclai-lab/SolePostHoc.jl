@@ -372,7 +372,7 @@ function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula)
         f = SoleLogics.dnf(f)
         atoms = unique(SoleLogics.atoms(f))
         conds = SoleLogics.value.(atoms)
-        if f isa SoleLogics.LeftmostDisjunctiveForm{<:Union{Atom,Literal,LeftmostConjunctive{<:Union{Atom,Literal}}}}
+        if f isa SoleLogics.LeftmostDisjunctiveForm{<:Union{Atom,Literal,LeftmostConjunctiveForm{<:Union{Atom,Literal}}}}
             disjs = SoleLogics.disjuncts(f)
             # 
             # TODO @Marco
@@ -401,7 +401,7 @@ function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula)
                     disjunct_to_combination!(combination, disj, conds)
                 end
                 disjunct_to_combination(disj, conds) = error("Cannot convert disjunct of type $(typeof(disj)) to combination.")
-                function disjunct_to_combination(disj::LeftmostConjunctive, conds)
+                function disjunct_to_combination(disj::LeftmostConjunctiveForm, conds)
                     combination = fill(-1, length(conds))
                     for conj in conjuncts(disj)
                         disjunct_to_combination!(combination, conj, conds)
