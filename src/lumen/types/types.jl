@@ -400,7 +400,7 @@ function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula)
                     combination = fill(-1, length(conds))
                     disjunct_to_combination!(combination, disj, conds)
                 end
-                disjunct_to_combination(disj, conds) = error("Cannot convert disjunct of type $(typeof(disj)) to combination.")
+                # disjunct_to_combination(disj, conds) = error("Cannot convert disjunct of type $(typeof(disj)) to combination.")
                 function disjunct_to_combination(disj::LeftmostConjunctiveForm, conds)
                     combination = fill(-1, length(conds))
                     for conj in SoleLogics.conjuncts(disj)
