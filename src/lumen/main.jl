@@ -16,6 +16,7 @@ using Base.Threads: @threads
 using Base.Threads: Atomic, atomic_add!
 using Profile
 using ProgressMeter
+using DataFrames
 
 import DecisionTree as DT
 

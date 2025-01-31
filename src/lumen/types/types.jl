@@ -14,6 +14,14 @@ A reentrant lock used to synchronize access to shared resources.
 """
 const results_lock = ReentrantLock()
 
+"""
+    VariableNamedValue
+
+A type alias representing either a variable value or a univariate named feature.
+This union type enables unified handling of both `VariableValue` and `UnivariateNamedFeature` types.
+"""
+const VariableNamedValue = Union{VariableValue, UnivariateNamedFeature}
+
 
 """
 # TwoLevelDNFFormula

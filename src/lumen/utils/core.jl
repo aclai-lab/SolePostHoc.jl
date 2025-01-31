@@ -20,8 +20,8 @@ function truth_combinations(
         <:Atom{
             <:ScalarCondition{
                 Float64,
-                <:VariableValue,
-                <:ScalarMetaCondition{<:VariableValue,typeof(<)},
+                <:VariableNamedValue,
+                <:ScalarMetaCondition{<:VariableNamedValue,typeof(<)},
             },
         },
     },

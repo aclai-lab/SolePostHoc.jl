@@ -94,8 +94,8 @@ function process_alphabet(
         <:Atom{
             <:ScalarCondition{
                 Float64,
-                <:VariableValue,
-                <:ScalarMetaCondition{<:VariableValue,typeof(<)},
+                <:VariableNamedValue,
+                <:ScalarMetaCondition{<:VariableNamedValue,typeof(<)},
             },
         },
     },
