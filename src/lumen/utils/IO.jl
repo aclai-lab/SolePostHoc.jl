@@ -276,3 +276,67 @@ function convert_DNF_formula(
     return Rule(φ, outcome)
 end
 =#
+
+"""
+    leftmost_disjunctive_form_to_string(ldf)
+
+Data una struttura `ldf` di tipo `LeftmostDisjunctiveForm{LeftmostConjunctiveForm}`, 
+genera la stringa corrispondente in forma DNF (disgiunzione di congiunzioni).
+
+Nel caso in cui, all'interno di `ldf.grandchildren`, sia presente direttamente un 
+`Atom` invece di un `LeftmostConjunctiveForm`, lo gestisce correttamente considerandolo 
+come una congiunzione di un solo atomo.
+"""
+function leftmost_disjunctive_form_to_string(ldf)
+
+    # Funzione di supporto che, dato un oggetto, restituisce la lista di atomi:
+    # - Se è un `LeftmostConjunctiveForm`, ne ritorna i `grandchildren`.
+    # - Se è già un `Atom`, crea un array di un singolo elemento.
+    function get_atoms(cf)
+        if cf isa LeftmostConjunctiveForm
+            return cf.grandchildren
+        elseif cf isa Atom
+            return [cf]
+        else
+            error("Oggetto di tipo sconosciuto: $(typeof(cf))")
+        end
+    end
+
+    conjunctive_strings = String[]
+
+    # ldf.grandchildren è la lista dei "termini" in disgiunzione
+    for child in ldf.grandchildren
+        # child può essere un `LeftmostConjunctiveForm` o un `Atom`
+        these_atoms = get_atoms(child)
+
+        atom_strings = String[]
+        for atom in these_atoms
+            # Ogni `atom` dovrebbe essere di tipo Atom{ScalarCondition{...}}
+            cond = atom.value
+
+            # Estraiamo i campi di interesse
+            i_var   = cond.metacond.feature.i_variable
+            op_fun  = cond.metacond.test_operator
+            thr     = cond.threshold
+
+            # Convertiamo la funzione dell'operatore in stringa
+            op_str = 
+            op_fun === (<)  ? "<"  :
+            op_fun === (<=) ? "≤"  :
+            op_fun === (>)  ? ">"  :
+            op_fun === (>=) ? "≥"  :
+            string(op_fun)
+
+            # Esempio di formato: "V1 < 5.45"
+            push!(atom_strings, "V$(i_var) $(op_str) $(thr)")
+        end
+
+        # Una congiunzione di più atomi si unisce con " ∧ ",
+        # racchiusa in parentesi per chiarezza.
+        conj_str = "(" * join(atom_strings, " ∧ ") * ")"
+        push!(conjunctive_strings, conj_str)
+    end
+
+    # Infine uniamo tutte le congiunzioni con " ∨ "
+    return join(conjunctive_strings, " ∨ ")
+end

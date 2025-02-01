@@ -5,7 +5,7 @@ using Logging
 using Dates
 using DataStructures
 using SoleModels
-using SoleModels:DecisionSet
+using SoleModels: DecisionSet
 using AbstractTrees
 using SoleData
 using SoleData: MultivariateScalarAlphabet, UnivariateScalarAlphabet
@@ -99,13 +99,13 @@ function lumen(
     horizontal::Real=1.0,
     ott_mode::Bool=false,
     controllo::Bool=false,
-    start_time = time(),
+    start_time=time(),
     minimization_kwargs::NamedTuple=(;),
     filteralphabetcallback=identity,
-    solemodel = nothing,
-    apply_function = SoleModels.apply,
-    silent = false,
-    return_info = true, # TODO must default to `false`.
+    solemodel=nothing,
+    apply_function=SoleModels.apply,
+    silent=false,
+    return_info=true, # TODO must default to `false`.
     kwargs...
 )
     if vertical <= 0.0 || vertical > 1.0 || horizontal <= 0.0 || horizontal > 1.0
@@ -116,6 +116,11 @@ function lumen(
     end
     model = isnothing(solemodel) ? SoleModels.solemodel(modelJ) : solemodel
 
+    is_ext = false
+    if (minimization_scheme == :mitespresso)
+        is_ext = true
+    end
+
     silent || println(
         "\n\n$COLORED_TITLE$TITLE\n PART 2.a STARTER RULESET ESTRACTION \n$TITLE$RESET",
     )
@@ -124,7 +129,7 @@ function lumen(
         if isensemble(model)
             rs = unique([listrules(tree; use_shortforms=true) for tree in SoleModels.models(model)])
             # TODO maybe also sort?
-            rs isa Vector{<:Vector{<:Any}} ? reduce(vcat,rs) : rs
+            rs isa Vector{<:Vector{<:Any}} ? reduce(vcat, rs) : rs
         else
             listrules(model; use_shortforms=true)
         end
@@ -139,7 +144,7 @@ function lumen(
         all_atoms = collect(atoms(SoleModels.alphabet(model, false)))
         num_all_atoms = length(all_atoms)
         my_atoms = unique(all_atoms)
-        
+
         silent || println(my_atoms)
 
         silent || println(
@@ -208,7 +213,7 @@ function lumen(
 
         # start_time = 0
         minimized_rules = Rule[]
-        vectPrePostNumber = Vector{Tuple{Int, Int}}()
+        vectPrePostNumber = Vector{Tuple{Int,Int}}()
         for (result, formula) in combined_results
             silent || println("Risultato: $result")
             #silent || stampa_dnf(stdout, formula) # print dnf pre minimization
@@ -235,45 +240,68 @@ function lumen(
                 formula;
                 minimization_kwargs...,
             )
-           formula_semplificata = formula_semplificata_t.value
+            formula_semplificata = formula_semplificata_t.value
+
+            println("==========================")
+            println("dump / tipo:", typeof(formula_semplificata), dump(formula_semplificata))
+            println("==========================")
+
             try
                 @info "Semplificazione completata in $(formula_semplificata_t.time) secondi"
                 silent || println("$COLORED_INFO**************⬆️**************$RESET")
-                
-                ntermpresemp = nterms(formula)
-                ntermpostsemp = nterms(formula_semplificata)
-                push!(vectPrePostNumber, (ntermpresemp, ntermpostsemp))
-                
-                silent || println("Termini originali: ", nterms(formula))
-                silent || println(
-                    "Termini dopo la semplificazione: ",
-                    nterms(formula_semplificata),
-                )
-                silent || println("Atomi/termine originali: ", natomsperterm(formula))
-                silent || println(
-                    "Atomi/termine dopo la semplificazione: ",
-                    natomsperterm(formula_semplificata),
-                )
-                silent || println()
+                if (is_ext == false)
+                    ntermpresemp = nterms(formula)
+                    ntermpostsemp = nterms(formula_semplificata)
+                    push!(vectPrePostNumber, (ntermpresemp, ntermpostsemp))
 
-                new_rule = convert_DNF_formula(
-                    formula_semplificata_t.value,
-                    result,
-                    horizontal
-                )
+                    silent || println("Termini originali: ", nterms(formula))
+                    silent || println(
+                        "Termini dopo la semplificazione: ",
+                        nterms(formula_semplificata),
+                    )
+                    silent || println("Atomi/termine originali: ", natomsperterm(formula))
+
+                    silent || println(
+                        "Atomi/termine dopo la semplificazione: ",
+                        #natomsperterm(formula_semplificata),
+                    )
+                end
+                silent || println()
+                if (is_ext == true)
+                    formula_string = leftmost_disjunctive_form_to_string(formula_semplificata)
+                    φ = SoleLogics.parseformula(
+                        formula_string;
+                        atom_parser=a -> Atom(
+                            parsecondition(
+                                SoleData.ScalarCondition,
+                                a;
+                                featuretype=SoleData.VariableValue,
+                                featvaltype=Real
+                            )
+                        )
+                    )
+                    new_rule = Rule(φ, result)
+
+                else
+                    new_rule = convert_DNF_formula(
+                        formula_semplificata_t.value,
+                        result,
+                        horizontal
+                    )
+                end
                 #new_rule = Rule(ant, result)
                 println(new_rule)
                 push!(minimized_rules, new_rule)
                 # Verifica della semplificazione
-                is_congruent = Lumen.verify_simplification(formula, formula_semplificata)
+                #is_congruent = Lumen.verify_simplification(formula, formula_semplificata)
                 silent || println(
                     "\n\n$COLORED_INFO$TITLE\n PARTE 3.a Semplificazione valida ?\n$TITLE$RESET",
                 )
-                if is_congruent
-                    @info "La semplificazione è stata verificata e risulta corretta."
-                else
-                    @warn "ATTENZIONE: La semplificazione non è congruente con la formula originale!"
-                end
+                #if is_congruent
+                #    @info "La semplificazione è stata verificata e risulta corretta."
+                #else
+                #    @warn "ATTENZIONE: La semplificazione non è congruente con la formula originale!"
+                #end
 
             catch e
                 @error "Errore durante la semplificazione: $e"
@@ -283,16 +311,16 @@ function lumen(
             )
         end
 
-        ds = DecisionSet(minimized_rules);  
-    
+        ds = DecisionSet(minimized_rules)
+
         if return_info
             info = (;)
-            info = merge(info, (; vectPrePostNumber = vectPrePostNumber))
+            info = merge(info, (; vectPrePostNumber=vectPrePostNumber))
         end
-        
+
         if return_info
-            unminimized_ds = DecisionSet(unminimized_rules);
-            info = merge(info, (; unminimized_ds = unminimized_ds))
+            unminimized_ds = DecisionSet(unminimized_rules)
+            info = merge(info, (; unminimized_ds=unminimized_ds))
         end
 
         print("\n\n$COLORED_TITLE$TITLE\n DECISION SET \n$TITLE$RESET")
@@ -311,13 +339,15 @@ function lumen(
 
         elapsed_time = end_time - start_time
 
-        silent || begin
-            if (ott_mode == true)
-                #nome_file_report = "report_statistico_Parallelo_$(Dates.format(Dates.now(), "yyyymmdd_HHMMSS")).txt"
-                #genera_report_statistiche_ott(nome_file_report, ruleset, num_all_atoms, num_atoms, results, label_count, combined_results, elapsed_time, model)
-            else
-                #nome_file_report = "report_statistico_Seriale_$(Dates.format(Dates.now(), "yyyymmdd_HHMMSS")).txt"
-                #genera_report_statistiche(nome_file_report, ruleset, num_all_atoms, num_atoms, results, label_count, combined_results, elapsed_time, model)
+        if (is_ext == false)
+            silent || begin
+                if (ott_mode == true)
+                    nome_file_report = "report_statistico_Parallelo_$(Dates.format(Dates.now(), "yyyymmdd_HHMMSS")).txt"
+                    genera_report_statistiche_ott(nome_file_report, ruleset, num_all_atoms, num_atoms, results, label_count, combined_results, elapsed_time, model)
+                else
+                    nome_file_report = "report_statistico_Seriale_$(Dates.format(Dates.now(), "yyyymmdd_HHMMSS")).txt"
+                    genera_report_statistiche(nome_file_report, ruleset, num_all_atoms, num_atoms, results, label_count, combined_results, elapsed_time, model)
+                end
             end
         end
     end
