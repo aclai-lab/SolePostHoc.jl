@@ -26,11 +26,10 @@ The `TwoLevelDNFFormula` struct is a specialized data structure designed to repr
 ### Code Structure
 ```julia
 struct TwoLevelDNFFormula <: Formula
-    combinations::Vector{BitVector}
+    combinations::Vector{TritVector}
     num_atoms::Int
     thresholds_by_feature::Dict{Int,Vector{Float64}}
     atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}}
-    prime_mask::Vector{Vector{Int}}
 end
 ```
 
@@ -39,7 +38,7 @@ end
 TwoLevelDNFFormula
 │
 ├── combinations
-│   └── [BitVector, BitVector, BitVector, ...]
+│   └── [TritVector, TritVector, TritVector, ...]
 │
 ├── num_atoms: Int
 │
@@ -49,12 +48,10 @@ TwoLevelDNFFormula
 │   └── ...
 │
 ├── atoms_by_feature
-│   ├── 1 => [(Float64, Bool), (Float64, Bool), ...]
-│   ├── 2 => [(Float64, Bool), (Float64, Bool), ...]
-│   └── ...
-│
-└── prime_mask
-    └── [[Int, Int, ...], [Int, Int, ...], ...]
+    ├── 1 => [(Float64, Bool), (Float64, Bool), ...]
+    ├── 2 => [(Float64, Bool), (Float64, Bool), ...]
+    └── ...
+
 ```
 
 ### Formula Structure Visualization
@@ -71,13 +68,13 @@ TwoLevelDNFFormula
 ## Component Details
 
 ### 1. Combinations Vector
-Binary representation of AND terms using BitVectors:
+Trit representation of AND terms using TritVector:
 ```ascii
-[BitVector("0101"), BitVector("1100"), BitVector("0011"), ...]
-            │││└─ Atom 4 (<)   (LSB)
-            ││└── Atom 3 (≥)
-            │└─── Atom 2 (<)
-            └──── Atom 1 (≥)   (MSB)
+[TritVector("0101"), TritVector("1100"), TritVector("0011"), ...]
+             │││└─ Atom 4 (<)   (LSB)
+             ││└── Atom 3 (≥)
+             │└─── Atom 2 (<)
+             └──── Atom 1 (≥)   (MSB)
 ```
 
 Extended visualization:
@@ -110,7 +107,7 @@ Feature 1                 Feature 2
 └───────┴─────────┘
 ```
 
-### 4. Prime Mask Structure
+### 4. Prime Mask interpretation of combination Structure
 ```ascii
 Prime Mask Representation
 ┌─Combination 1─┐  ┌─Combination 2─┐
@@ -133,7 +130,7 @@ Input Features  ─────┐
             │
             v
 ┌────────────────────────────┐
-│    BitVector Combination   │
+│   TritVector Combination   │
 └────────────────────────────┘
             │
             v
@@ -167,7 +164,7 @@ Example structure:
 }
 ```
 
-### Prime Mask Structure
+### Combination Structure
 Example:
 ```julia
 [
@@ -205,7 +202,7 @@ Decision Boundary
 ## Core Functionalities
 1. **Formula Evaluation**
 ```ascii
-Input → Threshold Check → BitVector Match → Result
+Input → Threshold Check → TritVector Match → Result
   │           │               │                │
   └───────────┴───────────────┴────────────────┘
 ```
@@ -236,25 +233,29 @@ Combinations → Minimization → Essential Bits → Optimization
 ```
 """
 struct TwoLevelDNFFormula <: Formula 
-    combinations::Vector{BitVector}
+    combinations::Vector{TritVector}
     num_atoms::Int
     thresholds_by_feature::Dict{Int,Vector{Float64}}
     atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}}
-    prime_mask::Vector{Vector{Int}} 
 end
 
 eachcombination(f::TwoLevelDNFFormula) = f.combinations
-eachmaskedcombination(f::TwoLevelDNFFormula) = isempty(f.prime_mask) ? eachcombination(f) : f.prime_mask
+#eachmaskedcombination(f::TwoLevelDNFFormula) = isempty(f.prime_mask) ? eachcombination(f) : f.prime_mask
 function SoleLogics.atoms(f::TwoLevelDNFFormula)
     Atom.(conditions(f))
 end
 
 nterms(f::TwoLevelDNFFormula) = length(eachcombination(f))
 function natomsperterm(f::TwoLevelDNFFormula)
-    # print(eachcombination(f))
-    # sum(c->sum(!=(-1), c), eachcombination(f))/nterms(f) |> print
-    # readline()
-    sum(c->sum(!=(-1), c), eachmaskedcombination(f))/nterms(f)
+    sum = 0
+    for combination in eachcombination(f)
+        for i in 1:length(combination)
+            if combination[i] != -1  # Count non-don't-care trits
+                sum += 1
+            end
+        end
+    end
+    return sum / nterms(f)
 end
 
 function conditions(f::TwoLevelDNFFormula)
@@ -275,56 +276,47 @@ function conditions(f::TwoLevelDNFFormula)
     )
 end
 
-"""
-Provides a custom string representation for the `TwoLevelDNFFormula` struct, displaying the number of combinations it contains.
-"""
-Base.show(io::IO, f::TwoLevelDNFFormula) =
+function SoleLogics.atoms(f::TwoLevelDNFFormula)
+    Atom.(conditions(f))
+end
+
+function Base.show(io::IO, f::TwoLevelDNFFormula)
     print(io, "TwoLevelDNFFormula($(nterms(f)) combinations)")
+end
 
-"""
-Prints a human-readable representation of a `TwoLevelDNFFormula` to the specified output stream `io`.
-
-The representation includes the number of combinations in the formula, and then prints each OR-AND combination using the `stampa_dnf` function.
-"""
 function Base.show(io::IO, ::MIME"text/plain", f::TwoLevelDNFFormula)
     stampa_dnf(io, f)
 end
 
-
-"""
-Generate an AND formula based on the provided binary `combination` representing a combination of atoms. 
-Calculate conditions for each feature based on the thresholds and atom properties. Construct atoms with corresponding conditions and return the resulting AND formula.
-"""
 function generate_disjunct(
-    combination::BitVector,
+    combination::TritVector,
     num_atoms::Int,
     thresholds_by_feature::Dict{Int,Vector{Float64}},
     atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}},
 )
-    comb, _ =
-        process_combination(combination, num_atoms, thresholds_by_feature, atoms_by_feature)
     conditions_by_feature = Dict{Int,Dict{Bool,Float64}}()
-
-    for (feat, values) in comb
-        if haskey(atoms_by_feature, feat)
-            for (threshold, _) in atoms_by_feature[feat]
-                if values[1] < threshold
-                    # Condizione "<"
-                    if !haskey(conditions_by_feature, feat) ||
-                       !haskey(conditions_by_feature[feat], false) ||
-                       threshold < conditions_by_feature[feat][false]
-                        conditions_by_feature[feat] =
-                            get(conditions_by_feature, feat, Dict{Bool,Float64}())
-                        conditions_by_feature[feat][false] = threshold
-                    end
-                else
-                    # Condizione "≥"
+    
+    for (feat, atom_list) in atoms_by_feature
+        for (i, (threshold, is_less_than)) in enumerate(atom_list)
+            idx = findall(x -> x == feat, collect(keys(atoms_by_feature)))[1]
+            trit_val = combination[i]
+            
+            if trit_val != -1  # Skip don't care conditions
+                if trit_val == 0  # ≥ condition
                     if !haskey(conditions_by_feature, feat) ||
                        !haskey(conditions_by_feature[feat], true) ||
                        threshold > conditions_by_feature[feat][true]
-                        conditions_by_feature[feat] =
+                        conditions_by_feature[feat] = 
                             get(conditions_by_feature, feat, Dict{Bool,Float64}())
                         conditions_by_feature[feat][true] = threshold
+                    end
+                elseif trit_val == 1  # < condition
+                    if !haskey(conditions_by_feature, feat) ||
+                       !haskey(conditions_by_feature[feat], false) ||
+                       threshold < conditions_by_feature[feat][false]
+                        conditions_by_feature[feat] = 
+                            get(conditions_by_feature, feat, Dict{Bool,Float64}())
+                        conditions_by_feature[feat][false] = threshold
                     end
                 end
             end
@@ -340,7 +332,6 @@ function generate_disjunct(
         end
     end
 
-    # return isempty(atoms) ? ⊤ : (length(atoms) == 1 ? first(atoms) : ∧(atoms...))
     return isempty(atoms) ? ⊤ : LeftmostConjunctiveForm(atoms)
 end
 
@@ -351,7 +342,8 @@ using SoleLogics
 
 function Base.convert(::Type{SoleLogics.DNF}, f::TwoLevelDNFFormula)
     conjuncts = [
-        generate_disjunct(comb, f.num_atoms, f.thresholds_by_feature, f.atoms_by_feature) for comb in eachcombination(f)
+        generate_disjunct(comb, f.num_atoms, f.thresholds_by_feature, f.atoms_by_feature)
+        for comb in eachcombination(f)
     ]
     filter!(!istop, conjuncts)
     return LeftmostDisjunctiveForm{LeftmostConjunctiveForm{Atom}}(conjuncts, true)
@@ -371,7 +363,6 @@ function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.DNF)
         num_atoms,
         thresholds_by_feature,
         atoms_by_feature,
-        prime_mask,
     )
 end
 
@@ -503,18 +494,12 @@ function stampa_dnf(
         if i == max_combinations && nterms(formula) > max_combinations
             println(
                 io,
-                "  ... (altre $(nterms(formula) - max_combinations) combinazioni non mostrate)",
+                "  ... (other $(nterms(formula) - max_combinations) combinations not shown)",
             )
         end
     end
 end
 
-
-"""
-Prints the AND formula represented by the given `Formula` to the specified output stream `io`.
-
-If the `formula` is an `Atom`, it is printed as-is. If the `formula` is a conjunction (`SoleLogics.NamedConnective{:∧}`), it is printed with each conjunct separated by `∧`. For any other type of `Formula`, it is printed as-is.
-"""
 function stampa_disjunct(io::IO, formula::Formula)
     if formula isa Atom
         print(io, formula)
