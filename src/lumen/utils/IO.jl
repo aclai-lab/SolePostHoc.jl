@@ -87,7 +87,10 @@ Given a `TwoLevelDNFFormula` which uses TritVectors (`1` for <, `0` for ≥, `-1
 this function returns an array of conjunction-strings. Each entry in the returned array is one
 term of the DNF (the conjunction of conditions for that combination).
 """
-function my_syntaxstring(formula::TwoLevelDNFFormula, orizontal::Float64 = 1.0)
+function my_syntaxstring(
+    formula::TwoLevelDNFFormula,
+    orizontal::Float64 = 1.0
+    )
     # Number of features (horizontally) we want to consider
     num_orizontal = floor(Int, formula.thresholds_by_feature.count * orizontal)
     

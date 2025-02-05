@@ -5,16 +5,16 @@ end
 function minimizza_dnf(
     ::Val{:mitespresso},
     formula::TwoLevelDNFFormula;
-    silent = true,
+    silent = false,
     mitespresso_kwargs...,
 )
     formula = convert(SoleLogics.DNF, formula)
     silent || (println(); @show formula)
     formula = SoleData.espresso_minimize(formula, silent; mitespresso_kwargs...)
     silent || (println(); @show formula)
-    silent || println("===========================")
-    silent || println("dump:" * string(dump(formula)))
-    silent || println("===========================")
+    #silent || println("===========================")
+    #silent || println("dump:" * string(dump(formula)))
+    #silent || println("===========================")
     #formula = convert(TwoLevelDNFFormula, formula)   TODO
     #silent || (println(); @show formula)             TODO IN PROGRESS BY GIO
     return formula

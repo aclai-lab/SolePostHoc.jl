@@ -294,39 +294,46 @@ function generate_disjunct(
     thresholds_by_feature::Dict{Int,Vector{Float64}},
     atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}},
 )
-    conditions_by_feature = Dict{Int,Dict{Bool,Float64}}()
+    feature_conditions = Dict{Int,Dict{Bool,Float64}}()
+    current_atom_index = 1
     
-    for (feat, atom_list) in atoms_by_feature
-        for (i, (threshold, is_less_than)) in enumerate(atom_list)
-            idx = findall(x -> x == feat, collect(keys(atoms_by_feature)))[1]
-            trit_val = combination[i]
-            
-            if trit_val != -1  # Skip don't care conditions
-                if trit_val == 0  # ≥ condition
-                    if !haskey(conditions_by_feature, feat) ||
-                       !haskey(conditions_by_feature[feat], true) ||
-                       threshold > conditions_by_feature[feat][true]
-                        conditions_by_feature[feat] = 
-                            get(conditions_by_feature, feat, Dict{Bool,Float64}())
-                        conditions_by_feature[feat][true] = threshold
+    # Process each feature and its atoms
+    for (feature, atoms) in atoms_by_feature
+        for (threshold, _) in atoms
+            # Make sure we don't exceed TritVector length
+            if current_atom_index <= length(combination)
+                trit_value = combination[current_atom_index]
+                
+                # Only process if not a don't-care value (-1)
+                if trit_value != -1
+                    # Initialize nested dict if needed
+                    if !haskey(feature_conditions, feature)
+                        feature_conditions[feature] = Dict{Bool,Float64}()
                     end
-                elseif trit_val == 1  # < condition
-                    if !haskey(conditions_by_feature, feat) ||
-                       !haskey(conditions_by_feature[feat], false) ||
-                       threshold < conditions_by_feature[feat][false]
-                        conditions_by_feature[feat] = 
-                            get(conditions_by_feature, feat, Dict{Bool,Float64}())
-                        conditions_by_feature[feat][false] = threshold
+                    
+                    # trit_value: 1 => "< threshold" (is_greater_equal = false)
+                    # trit_value: 0 => "≥ threshold" (is_greater_equal = true)
+                    is_greater_equal = trit_value == 0
+                    
+                    # Keep only the most restrictive threshold for each operation:
+                    # For "<" (is_greater_equal = false) we want the smallest threshold
+                    # For "≥" (is_greater_equal = true) we want the largest threshold
+                    if !haskey(feature_conditions[feature], is_greater_equal) ||
+                       (!is_greater_equal && threshold < feature_conditions[feature][is_greater_equal]) ||
+                       (is_greater_equal && threshold > feature_conditions[feature][is_greater_equal])
+                        feature_conditions[feature][is_greater_equal] = threshold
                     end
                 end
             end
+            current_atom_index += 1
         end
     end
 
+    # Convert the conditions to Atoms
     atoms = Vector{Atom}()
-    for (feat, conditions) in conditions_by_feature
+    for (feature, conditions) in feature_conditions
         for (is_greater_equal, threshold) in conditions
-            mc = ScalarMetaCondition(VariableValue(feat), is_greater_equal ? (≥) : (<))
+            mc = ScalarMetaCondition(VariableValue(feature), is_greater_equal ? (≥) : (<))
             condition = ScalarCondition(mc, threshold)
             push!(atoms, Atom(condition))
         end
