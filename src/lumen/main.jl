@@ -94,7 +94,7 @@ lumen(model, :espresso)
 """
 function lumen(
     modelJ, # actualy truth_combinations usa model 
-    minimization_scheme::Symbol=:mitespresso;
+    minimization_scheme::Symbol=:espresso;
     vertical::Real=1.0,
     horizontal::Real=1.0,
     ott_mode::Bool=false,
@@ -115,7 +115,7 @@ function lumen(
     model = isnothing(solemodel) ? SoleModels.solemodel(modelJ) : solemodel
 
     #=
-        is_ext = false
+    is_ext = false
     if (minimization_scheme == :mitespresso)
         is_ext = true
     end
@@ -223,7 +223,7 @@ function lumen(
             formula_semplificata = formula_semplificata_t.value
 
             println("==========================")
-            println("dump / tipo:", typeof(formula_semplificata), dump(formula_semplificata))
+            println("comb:", formula_semplificata.combinations)
             println("==========================")
 
             try

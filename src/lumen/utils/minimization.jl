@@ -527,9 +527,19 @@ function minimizza_dnf(::Val{:quine_oldstyle}, formula::TwoLevelDNFFormula)
 end
 
 #CLASSIC ESPRESSO STABLE (LOCAL MINIMAL)
+
 function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula; minimization_method_kwargs...)
-    # Convert combinations to trit representations
-    terms = [Vector{Int}([x == 1 ? 1 : 0 for x in term]) for term in eachcombination(formula)]
+    # Convert TritVectors to the internal representation used by Espresso
+    # We'll map: 1 -> 1, 0 -> 0, -1 -> 0 (since we only care about positive terms)
+    terms = Vector{Vector{Int}}()
+    for tritvec in formula.combinations
+        term = Vector{Int}()
+        for i in 1:length(tritvec)
+            val = tritvec[i]
+            push!(term, val == 1 ? 1 : 0)
+        end
+        push!(terms, term)
+    end
 
     function copre(cube1, cube2)
         for (b1, b2) in zip(cube1, cube2)
@@ -576,8 +586,7 @@ function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula; minimizati
             found_new = false
             for i = 1:length(current_cubes)
                 for j = (i+1):length(current_cubes)
-                    can_combine, pos =
-                        possono_combinarsi(current_cubes[i], current_cubes[j])
+                    can_combine, pos = possono_combinarsi(current_cubes[i], current_cubes[j])
                     if can_combine
                         nuovo_cubo = combina_cubi(current_cubes[i], current_cubes[j], pos)
                         if nuovo_cubo ∉ result
@@ -662,31 +671,35 @@ function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula; minimizati
         return essential
     end
 
-    # Minimize terms
+    # Esegui la minimizzazione
     minimized_terms = espresso_minimize(terms; minimization_method_kwargs...)
 
-    # Convert to TritVector
+    # Converti il risultato in TritVector
     nuove_combinazioni = TritVector[]
-    seen = Set{TritVector}()
+    seen = Set{TritVector}()  # Set per tenere traccia dei termini già visti
 
     for term in minimized_terms
-        combo = TritVector(formula.num_atoms)
-        fill!(combo, 0)
+        # Create a new TritVector for this term
+        trit_combo = TritVector(formula.num_atoms)
+        
         for (i, val) in enumerate(term)
             if val == 1
-                combo[i] = 1
-            elseif val == 0
-                combo[i] = 0
+                trit_combo[i] = 1
+            elseif val == -1
+                trit_combo[i] = -1
+            else
+                trit_combo[i] = 0
             end
         end
 
-        if combo ∉ seen
-            push!(seen, combo)
-            push!(nuove_combinazioni, combo)
+        # Aggiungi il termine solo se non è già stato visto
+        if trit_combo ∉ seen
+            push!(seen, trit_combo)
+            push!(nuove_combinazioni, trit_combo)
         end
     end
 
-    sort!(nuove_combinazioni)
+    sort!(nuove_combinazioni)  # Assuming you have defined sorting for TritVector
     return TwoLevelDNFFormula(
         nuove_combinazioni,
         formula.num_atoms,
@@ -694,6 +707,7 @@ function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula; minimizati
         formula.atoms_by_feature
     )
 end
+
 #=
 function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula; minimization_method_kwargs...)
     terms = [Vector{Int}([x ? 1 : 0 for x in term]) for term in eachcombination(formula)]
