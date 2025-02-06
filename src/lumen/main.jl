@@ -5,7 +5,7 @@ using Logging
 using Dates
 using DataStructures
 using SoleModels
-using SoleModels:DecisionSet
+using SoleModels: DecisionSet
 using AbstractTrees
 using SoleData
 using SoleData: MultivariateScalarAlphabet, UnivariateScalarAlphabet
@@ -97,26 +97,24 @@ lumen(model, :espresso)
 ```
 """
 function lumen(
-    modelJ, # attualmente truth_combinations usa model 
-    minimization_scheme::Symbol=:mitespresso;
+    modelJ, # actualy truth_combinations usa model 
+    minimization_scheme::Symbol=:espresso;
     vertical::Real=1.0,
     horizontal::Real=1.0,
     ott_mode::Bool=false,
     controllo::Bool=false,
-    start_time = time(),
+    start_time=time(),
     minimization_kwargs::NamedTuple=(;),
     filteralphabetcallback=identity,
-    solemodel = nothing,
-    apply_function = nothing,
-    silent = false,
-    return_info = true, # TODO must default to `false`.
+    solemodel=nothing,
+    apply_function=nothing,
+    silent=false,
+    return_info=true, # TODO must default to `false`.
     kwargs...
 )
     if vertical <= 0.0 || vertical > 1.0 || horizontal <= 0.0 || horizontal > 1.0
-        @warn "Inserito parametri non validi"
-        @warn "Verranno settati entrambi a 1"
-        vertical = 1.0 # Agisce in truth_combinations
-        horizontal = 1.0 # Agisce in printIO_custom_or_formula TODO agire pre semplificazione ? 
+        @warn "Invalid parameters, setting both to 1"
+        vertical = horizontal = 1.0
     end
     model = isnothing(solemodel) ? SoleModels.solemodel(modelJ) : solemodel
 
@@ -131,12 +129,18 @@ function lumen(
     silent || println(
         "\n\n$COLORED_TITLE$TITLE\n PART 2.a STARTER RULESET ESTRACTION \n$TITLE$RESET",
     )
+    is_ext = minimization_scheme == :mitespresso
 
+    # PART 2.a: Starter Ruleset Extraction
+    silent || println(
+        "\n\n$COLORED_TITLE$TITLE\n PART 2.a STARTER RULESET ESTRACTION \n$TITLE$RESET"
+        )
+    
     ruleset = @time begin
         if isensemble(model)
             rs = unique([listrules(tree; use_shortforms=true) for tree in SoleModels.models(model)])
             # TODO maybe also sort?
-            rs isa Vector{<:Vector{<:Any}} ? reduce(vcat,rs) : rs
+            rs isa Vector{<:Vector{<:Any}} ? reduce(vcat, rs) : rs
         else
             listrules(model; use_shortforms=true)
         end
@@ -160,192 +164,152 @@ function lumen(
 
         # Get number of features from the maximum feature index in atoms
         n_features = maximum(atom.value.metacond.feature.i_variable for atom in my_atoms)
-        if !(n_features isa Integer)
-            error("Lumen does not currently support symbolic feature names. Please ensure that your i_variable are numeric.")
-        end
-        my_alphabet = Lumen.process_alphabet(my_atoms, n_features)
-
-
-        # @show my_alphabet
-        my_alphabet = filteralphabetcallback(my_alphabet)
-        # @show my_alphabet
-
+        !isa(n_features, Integer) && error("Symbolic feature names not supported")
+        
+        my_alphabet = filteralphabetcallback(process_alphabet(my_atoms, n_features))
+        
         all(x -> (x == (<)), SoleData.test_operator.(subalphabets(my_alphabet))) ||
-        error("Atoms with test operators other from < are not supported.")
-
-        #TODO feature isa variable value 
-
-        silent || println(my_alphabet)
+            error("Only < operator supported")
+        
         num_all_atoms, my_atoms, my_alphabet
     end
 
-    if (controllo == false)
-        silent || println("\n\n$COLORED_TITLE$TITLE\n PART 3 TABLE GENERATION \n$TITLE$RESET")
+    if !controllo
+        silent || println(
+            "\n\n$COLORED_TITLE$TITLE\n PART 3 TABLE GENERATION \n$TITLE$RESET"
+            )
 
-        if (ott_mode == true)
-            results, label_count = @time "Lumen: time taken for computing combinations" Lumen.truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
-        else
-            results, label_count = @time "Lumen: time taken for computing combinations" Lumen.truth_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+        # PART 3: Table Generation
+        results, label_count = @time "Lumen: computing combinations" begin
+            if ott_mode
+                truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+            else
+                truth_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+            end
         end
 
-        silent || println(
-            "\n\n$COLORED_TITLE$TITLE\n PART 3 GENERATION OF L-CLASS PATH FOREST & SIMPLIFICATION\n$TITLE$RESET",
-        )
-
+        # Feature Processing
         num_atoms = length(my_atoms)
-
         thresholds_by_feature = Dict(
-            subalpha.featcondition[1].feature.i_variable =>
-                sort(subalpha.featcondition[2]) for subalpha in my_alphabet.subalphabets
+            subalpha.featcondition[1].feature.i_variable => sort(subalpha.featcondition[2]) 
+            for subalpha in my_alphabet.subalphabets
         )
+        
         atoms_by_feature = Dict{Int,Vector{Tuple{Float64,Bool}}}()
         for atom in my_atoms
             feat = atom.value.metacond.feature.i_variable
             threshold = atom.value.threshold
             push!(
                 get!(Vector{Tuple{Float64,Bool}}, atoms_by_feature, feat),
-                (threshold, true),
-            )
+                 (threshold, true),
+                )
         end
         for (_, atom_list) in atoms_by_feature
             sort!(atom_list, by=first)
         end
 
+        # Results Processing
         combined_results =
             Lumen.concat_results(results, num_atoms, thresholds_by_feature, atoms_by_feature)
-
-        if return_info
-            unminimized_rules = Rule[]
-        end
-
-        # start_time = 0
+        
+        return_info && (unminimized_rules = Rule[])
         minimized_rules = Rule[]
-        vectPrePostNumber = Vector{Tuple{Int, Int}}()
+        vectPrePostNumber = Vector{Tuple{Int,Int}}()
+
+        # Process each result
         for (result, formula) in combined_results
             silent || println("Risultato: $result")
-            #silent || stampa_dnf(stdout, formula) # print dnf pre minimization
-            silent || println()
-            #silent || println("formula: $formula")
-
-            @info "Iniziando la semplificazione per il risultato $result"
-            # start_time = time()
-
+            
             if return_info
-                #dump(formula)
-                new_rule = convert_DNF_formula(
-                    formula,
-                    result,
-                    horizontal
-                )
-
-                #println(new_rule)
-                push!(unminimized_rules, new_rule)
+                push!(unminimized_rules, convert_DNF_formula(formula, result, horizontal))
             end
 
             formula_semplificata_t = @timed Lumen.minimizza_dnf(
                 Val(minimization_scheme),
                 formula;
                 minimization_kwargs...,
-            )
-           formula_semplificata = formula_semplificata_t.value
-            try
-                @info "Semplificazione completata in $(formula_semplificata_t.time) secondi"
-                silent || println("$COLORED_INFO**************⬆️**************$RESET")
-                
-                ntermpresemp = nterms(formula)
-                ntermpostsemp = nterms(formula_semplificata)
-                push!(vectPrePostNumber, (ntermpresemp, ntermpostsemp))
-                
-                silent || println("Termini originali: ", nterms(formula))
-                silent || println(
-                    "Termini dopo la semplificazione: ",
-                    nterms(formula_semplificata),
                 )
-                silent || println("Atomi/termine originali: ", natomsperterm(formula))
-                silent || println(
-                    "Atomi/termine dopo la semplificazione: ",
-                    natomsperterm(formula_semplificata),
-                )
-                silent || println()
+            formula_semplificata = formula_semplificata_t.value
 
-                new_rule = convert_DNF_formula(
-                    formula_semplificata_t.value,
-                    result,
-                    horizontal
-                )
+
+
+            try
+                @info "Simplification completed in $(formula_semplificata_t.time) seconds"
+                
+                if !is_ext
+                    silent || println("==========================")
+                    silent || println("comb:", formula_semplificata.combinations)
+                    silent || println("==========================")
+
+                    ntermpresemp = nterms(formula)
+                    ntermpostsemp = nterms(formula_semplificata)
+                    push!(vectPrePostNumber, (ntermpresemp, ntermpostsemp))
+                
+                    silent || println("Termini originali: ", nterms(formula))
+                    silent || println(
+                        "Termini dopo la semplificazione: ",
+                        nterms(formula_semplificata),
+                    )
+                    silent || println("Atomi/termine originali: ", natomsperterm(formula))
+
+                    silent || println(
+                        "Atomi/termine dopo la semplificazione: ",
+                        #natomsperterm(formula_semplificata),
+                    )
+                end
+                silent || println()
+                if is_ext
+                    formula_string = leftmost_disjunctive_form_to_string(formula_semplificata)
+                    φ = SoleLogics.parseformula(
+                        formula_string;
+                        atom_parser=a -> Atom(
+                            parsecondition(
+                                SoleData.ScalarCondition,
+                                a;
+                                featuretype=SoleData.VariableValue,
+                                featvaltype=Real
+                            )
+                        )
+                    )
+                    new_rule = Rule(φ, result)
+                else
+                    new_rule = convert_DNF_formula(
+                        formula_semplificata_t.value,
+                        result,
+                        horizontal
+                    )
+                end
                 #new_rule = Rule(ant, result)
                 println(new_rule)
                 push!(minimized_rules, new_rule)
-                # Verifica della semplificazione
-                is_congruent = Lumen.verify_simplification(formula, formula_semplificata)
-                silent || println(
-                    "\n\n$COLORED_INFO$TITLE\n PARTE 3.a Semplificazione valida ?\n$TITLE$RESET",
-                )
-                if is_congruent
-                    @info "La semplificazione è stata verificata e risulta corretta."
-                else
-                    @warn "ATTENZIONE: La semplificazione non è congruente con la formula originale!"
-                end
-
             catch e
-                @error "Errore durante la semplificazione: $e"
+                @error "Simplification error: $e"
             end
-            silent || println(
-                "----------------------------------------------------------------------------",
-            )
         end
 
-        ds = DecisionSet(minimized_rules);  
-    
-        if return_info
-            info = (;)
-            info = merge(info, (; vectPrePostNumber = vectPrePostNumber))
-        end
-        
-        if return_info
-            unminimized_ds = DecisionSet(unminimized_rules);
-            info = merge(info, (; unminimized_ds = unminimized_ds))
-        end
-
-        print("\n\n$COLORED_TITLE$TITLE\n DECISION SET \n$TITLE$RESET")
-        if return_info
-            return ds, info
-        else
+        # Return results
+        ds = DecisionSet(minimized_rules)
+        if !return_info
             return ds
         end
-
-        print("\n\n$COLORED_TITLE$TITLE$RESET")
-
-        end_time = time()
-
-        silent ||
-            println("\n\n$COLORED_TITLE$TITLE\n PART 4 DOCUMENTING RESULTS \n$TITLE$RESET")
-
-        elapsed_time = end_time - start_time
-
-        silent || begin
-            if (ott_mode == true)
-                #nome_file_report = "report_statistico_Parallelo_$(Dates.format(Dates.now(), "yyyymmdd_HHMMSS")).txt"
-                #genera_report_statistiche_ott(nome_file_report, ruleset, num_all_atoms, num_atoms, results, label_count, combined_results, elapsed_time, model)
-            else
-                #nome_file_report = "report_statistico_Seriale_$(Dates.format(Dates.now(), "yyyymmdd_HHMMSS")).txt"
-                #genera_report_statistiche(nome_file_report, ruleset, num_all_atoms, num_atoms, results, label_count, combined_results, elapsed_time, model)
-            end
-        end
+        
+        info = (;)
+        info = merge(info, (; vectPrePostNumber=vectPrePostNumber))
+        return_info && (info = merge(info, (; unminimized_ds=DecisionSet(unminimized_rules))))
+        
+        return ds, info
     end
 
-    if (controllo == true)
+    if controllo
         silent || println(
             "\n\n$COLORED_INFO$TITLE\n PARTE 2.d È un ottimizzazione valida?\n$TITLE$RESET",
         )
-
         are_results_equal =
-            Lumen.compare_truth_combinations(modelJ, my_alphabet, my_atoms, vertical; apply_function, silent, kwargs...)
-
+         Lumen.compare_truth_combinations(modelJ, my_alphabet, my_atoms, vertical; apply_function, silent, kwargs...)
         if are_results_equal
-            @info "\nL'ottimizzazione è valida: i risultati sono identici."
+            @info "\nOptimization valid: results are identical."
         else
-            @warn "\nATTENZIONE: L'ottimizzazione potrebbe non essere valida. Ci sono differenze nei risultati."
+            @warn "\nWARNING: Optimization might not be valid. Results differ."
         end
     end
 end
@@ -380,9 +344,7 @@ include("utils/core.jl")
 
 # Algoritmic-Optimization-Utils - core algoritmico del progetto se avviato in ott_mode
 include("utils/coreOttMode.jl")
-
 include("utils/minimization.jl")
-
 include("deprecate.jl")
 
 end

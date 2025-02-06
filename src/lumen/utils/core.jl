@@ -239,18 +239,17 @@ function concat_results(
     thresholds_by_feature::Dict{Int,Vector{Float64}},
     atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}},
 )
-    results = dict_to_bitvector(results, num_atoms)
+    results = dict_to_tritvector(results, num_atoms)
     res = Dict{Any,TwoLevelDNFFormula}()
     println("\nRisultati dettagliati:")
 
     for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
         println("[$result] ($(length(combinations)) combinazioni)")
         res[result] = TwoLevelDNFFormula(
-            Vector{BitVector}(combinations),
+            Vector{TritVector}(combinations),
             num_atoms,
             thresholds_by_feature,
-            atoms_by_feature,
-            Vector{Vector{Int}}(), # TODO nothing
+            atoms_by_feature
         )
     end
     return res
