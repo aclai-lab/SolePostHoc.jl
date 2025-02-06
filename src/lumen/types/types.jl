@@ -384,6 +384,9 @@ function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula)
         f = SoleLogics.dnf(f)
         atoms = unique(SoleLogics.atoms(f))
         conds = SoleLogics.value.(atoms)
+        # Remove duals.
+        conds = SoleData.removeduals(conds)
+        atoms = Atom.(conds)
         combinations = begin
             if f isa SoleLogics.LeftmostDisjunctiveForm{<:Union{Atom,Literal,LeftmostConjunctiveForm{<:Union{Atom,Literal}}}}
                 disjs = SoleLogics.disjuncts(f)
