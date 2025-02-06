@@ -239,8 +239,21 @@ struct TwoLevelDNFFormula <: Formula
     atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}}
 end
 
-function TwoLevelDNFFormula(f::AbstractVector)
+function TwoLevelDNFFormula(combinations::AbstractVector, atoms::AbstractVector{<:Atom} = [])
     if isempty(f)
+        # TODO @Marco
+        num_atoms = length(atoms)
+        thresholds_by_feature = Dict{Int,Vector{Float64}}()
+        atoms_by_feature = Dict{Int,Vector{Tuple{Float64,Bool}}}()
+        # TODO check that atoms are all < (or >, >=, <=?)
+        conds = SoleLogics.value.(atoms)
+        feats = unique(SoleLogics.feature.(atoms))
+        # TODO check that there are no dual conditions
+        for cond in conds
+            push!(thresholds_by_feature[findfirst(x->x==feature(cond), feats)], TODO)
+            push!(atoms_by_feature[findfirst(x->x==feature(cond), feats)], TODO)
+        end
+        TwoLevelDNFFormula(combinations, num_atoms, thresholds_by_feature, atoms_by_feature)
         # return TwoLevelDNFFormula(BitVector[], 0, Dict{Int,Vector{Float64}}(), Dict{Int,Vector{Tuple{Float64,Bool}}}(), Vector{Int}[])
     else
         error("TODO implement constructor.")
@@ -371,12 +384,10 @@ function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula)
         f = SoleLogics.dnf(f)
         atoms = unique(SoleLogics.atoms(f))
         conds = SoleLogics.value.(atoms)
-        if f isa SoleLogics.LeftmostDisjunctiveForm{<:Union{Atom,Literal,LeftmostConjunctiveForm{<:Union{Atom,Literal}}}}
-            disjs = SoleLogics.disjuncts(f)
-            # 
-            # TODO @Marco
-            combinations, num_atoms, thresholds_by_feature, atoms_by_feature = begin
-                num_atoms = length(atoms)
+        combinations = begin
+            if f isa SoleLogics.LeftmostDisjunctiveForm{<:Union{Atom,Literal,LeftmostConjunctiveForm{<:Union{Atom,Literal}}}}
+                disjs = SoleLogics.disjuncts(f)
+                # 
                 function disjunct_to_combination!(combination, disj::Atom, conds)
                     combination[findall(==(disj), conds)] .= 1
                     if SoleLogics.hasdual(disj)
@@ -407,22 +418,12 @@ function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula)
                     end
                     combination
                 end
-                # TODO test!
                 combinations = [disjunct_to_combination(disj, conds) for disj in disjs]
-                thresholds_by_feature = nothing
-                atoms_by_feature = nothing
-                # 
-                combinations, num_atoms, thresholds_by_feature, atoms_by_feature
+            else
+                error("Could not convert formula of type $(typeof(f)) to TwoLevelDNFFormula.")
             end
-        else
-            error("Could not convert formula of type $(typeof(f)) to TwoLevelDNFFormula.")
         end
-        return TwoLevelDNFFormula(
-            combinations,
-            num_atoms,
-            thresholds_by_feature,
-            atoms_by_feature,
-        )
+        return TwoLevelDNFFormula(combinations, atoms, )
     end
 end
 
