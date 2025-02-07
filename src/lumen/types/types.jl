@@ -293,9 +293,69 @@ end
 #################################################################################
 
 ############################ GETTER #############################################
+"""
+    eachcombination(f::TwoLevelDNFFormula) -> Vector{TritVector}
+
+Returns the vector of all combinations (AND terms) in the DNF formula.
+Each combination is represented as a TritVector where each position corresponds to an atom.
+
+# Example
+```julia
+for combination in eachcombination(formula)
+    println("Term complexity: \$(count(!iszero, combination))")
+end
+```
+"""
 eachcombination(f::TwoLevelDNFFormula) = f.combinations
+
+"""
+    eachthresholdsbyfeature(f::TwoLevelDNFFormula) -> Dict{Int,Vector{Float64}}
+
+Returns a dictionary mapping feature indices to their sorted threshold values.
+Each feature's thresholds are stored in ascending order.
+
+# Example
+```julia
+thresholds = eachthresholdsbyfeature(formula)
+for (feature, values) in thresholds
+    println("Feature \$feature ranges from \$(minimum(values)) to \$(maximum(values))")
+end
+```
+"""
 eachthresholdsbyfeature(f::TwoLevelDNFFormula) = f.thresholds_by_feature
+
+"""
+    eachatomsbyfeature(f::TwoLevelDNFFormula) -> Dict{Int,Vector{Tuple{Float64,Bool}}}
+
+Returns a dictionary mapping feature indices to their atomic propositions.
+Each atom is represented as a tuple (threshold, is_geq) where:
+- threshold: The numeric threshold value
+- is_geq: true if the operator is ≥, false if the operator is <
+
+# Example
+```julia
+atoms = eachatomsbyfeature(formula)
+for (feature, atom_list) in atoms
+    for (threshold, is_geq) in atom_list
+        op = is_geq ? "≥" : "<"
+        println("x\$feature \$op \$threshold")
+    end
+end
+```
+"""
 eachatomsbyfeature(f::TwoLevelDNFFormula) = f.atoms_by_feature
+
+"""
+    nuberofatoms(f::TwoLevelDNFFormula) -> Int
+
+Returns the total number of atomic propositions in the formula.
+
+# Example
+```julia
+n = nuberofatoms(formula)
+println("Formula contains \$n atomic propositions")
+```
+"""
 nuberofatoms(f::TwoLevelDNFFormula) = f.num_atoms
 #################################################################################
 
