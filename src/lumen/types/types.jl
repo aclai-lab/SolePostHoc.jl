@@ -1134,7 +1134,8 @@ function visualize_formula_complexity(formula::TwoLevelDNFFormula)
     return result
 end
 #################################################################################
-################## MAN Two Level DNF Formula ####################################
+################## MAN Two Level DNF Formula ###################################
+#=
 function manTwoLevelDNFFormula(use_ascii_art::Bool = false)
     # ANSI escape codes for blinking and colors
     BLINK = "\e[5m"
@@ -1246,7 +1247,8 @@ function manTwoLevelDNFFormula(use_ascii_art::Bool = false)
     println(BLUE, "║                                                                            ║")
     println(BLUE, "╚════════════════════════════════════════════════════════════════════════════╝", RESET)
 end
-#################################################################################
+=#
+################################################################################
 function SoleLogics.atoms(f::TwoLevelDNFFormula)
     Atom.(conditions(f))
 end
