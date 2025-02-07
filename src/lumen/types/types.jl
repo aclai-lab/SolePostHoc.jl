@@ -232,7 +232,7 @@ Combinations → Minimization → Essential Bits → Optimization
 └─ Careful Mapping Required
 ```
 """
-struct TwoLevelDNFFormula <: Formula 
+struct TwoLevelDNFFormula <: Formula
     combinations::Vector{TritVector}
     num_atoms::Int
     thresholds_by_feature::Dict{Int,Vector{Float64}}
@@ -240,56 +240,56 @@ struct TwoLevelDNFFormula <: Formula
 end
 
 ############################Constructs###########################################
-    # Costruttore che accetta atoms e combinations come TritVector
-    function TwoLevelDNFFormula(atoms::Vector, combinations::Vector{TritVector})
-        # Validate inputs
-        isempty(atoms) && throw(ArgumentError("Atoms vector cannot be empty"))
-        
-        # Process atoms
-        my_atoms = unique(atoms)
-        num_atoms = length(my_atoms)
-        
-        # Get number of features from the maximum feature index in atoms
-        n_features = maximum(atom.value.metacond.feature.i_variable for atom in my_atoms)
-        !isa(n_features, Integer) && error("Symbolic feature names not supported")
-        
-        # Create alphabet
-        my_alphabet = process_alphabet(my_atoms, n_features)
-        
-        # Create thresholds dictionary from alphabet
-        thresholds_by_feature = Dict(
-            subalpha.featcondition[1].feature.i_variable => sort(subalpha.featcondition[2]) 
-            for subalpha in my_alphabet.subalphabets
+# Costruttore che accetta atoms e combinations come TritVector
+function TwoLevelDNFFormula(atoms::Vector, combinations::Vector{TritVector})
+    # Validate inputs
+    isempty(atoms) && throw(ArgumentError("Atoms vector cannot be empty"))
+
+    # Process atoms
+    my_atoms = unique(atoms)
+    num_atoms = length(my_atoms)
+
+    # Get number of features from the maximum feature index in atoms
+    n_features = maximum(atom.value.metacond.feature.i_variable for atom in my_atoms)
+    !isa(n_features, Integer) && error("Symbolic feature names not supported")
+
+    # Create alphabet
+    my_alphabet = process_alphabet(my_atoms, n_features)
+
+    # Create thresholds dictionary from alphabet
+    thresholds_by_feature = Dict(
+        subalpha.featcondition[1].feature.i_variable => sort(subalpha.featcondition[2])
+        for subalpha in my_alphabet.subalphabets
+    )
+
+    # Create atoms by feature dictionary
+    atoms_by_feature = Dict{Int,Vector{Tuple{Float64,Bool}}}()
+    for atom in my_atoms
+        feat = atom.value.metacond.feature.i_variable
+        threshold = atom.value.threshold
+        push!(
+            get!(Vector{Tuple{Float64,Bool}}, atoms_by_feature, feat),
+            (threshold, true)
         )
-        
-        # Create atoms by feature dictionary
-        atoms_by_feature = Dict{Int,Vector{Tuple{Float64,Bool}}}()
-        for atom in my_atoms
-            feat = atom.value.metacond.feature.i_variable
-            threshold = atom.value.threshold
-            push!(
-                get!(Vector{Tuple{Float64,Bool}}, atoms_by_feature, feat),
-                (threshold, true)
-            )
-        end
-        
-        # Sort atoms within each feature
-        for (_, atom_list) in atoms_by_feature
-            sort!(atom_list, by=first)
-        end
-        
-        return TwoLevelDNFFormula(combinations, num_atoms, thresholds_by_feature, atoms_by_feature)
     end
 
-    # Costruttore che accetta atoms e combinations come BigInt
-    function TwoLevelDNFFormula(atoms::Vector, combinations::Vector{BigInt})
-        num_atoms = length(atoms)
-        # Converti i BigInt in TritVector usando la stessa logica di dict_to_tritvector
-        trit_combinations = [bigint_to_tritvector(comb, num_atoms) for comb in combinations]
-        
-        # Usa il costruttore con Vector{TritVector}
-        return TwoLevelDNFFormula(atoms, trit_combinations)
+    # Sort atoms within each feature
+    for (_, atom_list) in atoms_by_feature
+        sort!(atom_list, by=first)
     end
+
+    return TwoLevelDNFFormula(combinations, num_atoms, thresholds_by_feature, atoms_by_feature)
+end
+
+# Costruttore che accetta atoms e combinations come BigInt
+function TwoLevelDNFFormula(atoms::Vector, combinations::Vector{BigInt})
+    num_atoms = length(atoms)
+    # Converti i BigInt in TritVector usando la stessa logica di dict_to_tritvector
+    trit_combinations = [bigint_to_tritvector(comb, num_atoms) for comb in combinations]
+
+    # Usa il costruttore con Vector{TritVector}
+    return TwoLevelDNFFormula(atoms, trit_combinations)
+end
 #################################################################################
 
 ############################ GETTER #############################################
@@ -359,6 +359,210 @@ println("Formula contains \$n atomic propositions")
 nuberofatoms(f::TwoLevelDNFFormula) = f.num_atoms
 #################################################################################
 
+############################# SETTER ############################################ 
+# TODO SOME TO RE - WATCH 
+"""
+    set_combinations(formula::TwoLevelDNFFormula, new_combinations::Vector{TritVector}) -> TwoLevelDNFFormula
+
+Creates a new formula with modified combinations while preserving all other properties.
+All combinations must be compatible with the existing atomic structure.
+
+# Example
+```julia
+# Remove the first combination
+new_formula = set_combinations(formula, eachcombination(formula)[2:end])
+```
+
+# Throws
+- ArgumentError if new combinations are incompatible with existing atomic structure
+"""
+function set_combinations(formula::TwoLevelDNFFormula, new_combinations::Vector{TritVector})
+    if any(length(c) != nuberofatoms(formula) for c in new_combinations)
+        throw(ArgumentError("New combinations must have the same number of atoms as the original formula"))
+    end
+
+    return TwoLevelDNFFormula(
+        new_combinations,
+        nuberofatoms(formula),
+        eachthresholdsbyfeature(formula),
+        eachatomsbyfeature(formula)
+    )
+end
+
+"""
+    set_feature_thresholds(formula::TwoLevelDNFFormula, feature::Int, new_thresholds::Vector{Float64}) -> TwoLevelDNFFormula
+
+Creates a new formula with modified thresholds for a specific feature.
+Maintains consistency with atomic propositions.
+
+# Example
+```julia
+# Update thresholds for feature 1
+new_formula = set_feature_thresholds(formula, 1, [1.0, 2.0, 3.0])
+```
+
+# Throws
+- KeyError if feature doesn't exist in the formula
+- ArgumentError if new thresholds are incompatible with existing atoms
+"""
+function set_feature_thresholds(formula::TwoLevelDNFFormula, feature::Int, new_thresholds::Vector{Float64})
+    if !haskey(eachatomsbyfeature(formula), feature)
+        throw(KeyError("Feature $feature not found in formula"))
+    end
+
+    new_thresholds_by_feature = Dict(eachthresholdsbyfeature(formula))
+    new_thresholds_by_feature[feature] = sort(new_thresholds)
+
+    atoms = eachatomsbyfeature(formula)[feature]
+    if !all(t -> t[1] ∈ new_thresholds, atoms)
+        throw(ArgumentError("New thresholds must include all threshold values used in atomic propositions"))
+    end
+
+    return TwoLevelDNFFormula(
+        eachcombination(formula),
+        nuberofatoms(formula),
+        new_thresholds_by_feature,
+        eachatomsbyfeature(formula)
+    )
+end
+
+"""
+    set_feature_atoms(formula::TwoLevelDNFFormula, feature::Int, new_atoms::Vector{Tuple{Float64,Bool}}) -> TwoLevelDNFFormula
+
+Creates a new formula with modified atomic propositions for a specific feature.
+Updates combinations and thresholds accordingly.
+
+# Example
+```julia
+# Update atoms for feature 1
+new_atoms = [(1.0, true), (2.0, false)]
+new_formula = set_feature_atoms(formula, 1, new_atoms)
+```
+
+# Throws
+- KeyError if feature doesn't exist in the formula
+"""
+function set_feature_atoms(formula::TwoLevelDNFFormula, feature::Int, new_atoms::Vector{Tuple{Float64,Bool}})
+    if !haskey(eachatomsbyfeature(formula), feature)
+        throw(KeyError("Feature $feature not found in formula"))
+    end
+
+    new_atoms_by_feature = Dict(eachatomsbyfeature(formula))
+    new_atoms_by_feature[feature] = sort(new_atoms, by=first)
+
+    new_thresholds_by_feature = Dict(eachthresholdsbyfeature(formula))
+    new_thresholds_by_feature[feature] = sort(unique([t for (t, _) in new_atoms]))
+
+    old_atom_count = length(eachatomsbyfeature(formula)[feature])
+    new_atom_count = nuberofatoms(formula) - old_atom_count + length(new_atoms)
+
+    new_combinations = Vector{TritVector}()
+    for comb in eachcombination(formula)
+        new_comb = TritVector(zeros(Int8, new_atom_count))
+        # TODO: Map old combination values to new structure
+        push!(new_combinations, new_comb)
+    end
+
+    return TwoLevelDNFFormula(
+        new_combinations,
+        new_atom_count,
+        new_thresholds_by_feature,
+        new_atoms_by_feature
+    )
+end
+
+"""
+    add_feature(formula::TwoLevelDNFFormula, feature::Int, 
+               atoms::Vector{Tuple{Float64,Bool}}) -> TwoLevelDNFFormula
+
+Creates a new formula with an additional feature and its associated atomic propositions.
+
+# Example
+```julia
+# Add new feature 3 with two atoms
+new_atoms = [(1.5, true), (2.5, false)]
+new_formula = add_feature(formula, 3, new_atoms)
+```
+
+# Throws
+- ArgumentError if feature already exists
+"""
+function add_feature(formula::TwoLevelDNFFormula, feature::Int,
+    atoms::Vector{Tuple{Float64,Bool}})
+    if haskey(eachatomsbyfeature(formula), feature)
+        throw(ArgumentError("Feature $feature already exists in formula"))
+    end
+
+    new_atoms_by_feature = Dict(eachatomsbyfeature(formula))
+    new_atoms_by_feature[feature] = sort(atoms, by=first)
+
+    new_thresholds_by_feature = Dict(eachthresholdsbyfeature(formula))
+    new_thresholds_by_feature[feature] = sort(unique([t for (t, _) in atoms]))
+
+    new_num_atoms = nuberofatoms(formula) + length(atoms)
+    new_combinations = [
+        TritVector(vcat(Vector{Int8}(c), zeros(Int8, length(atoms))))
+        for c in eachcombination(formula)
+    ]
+
+    return TwoLevelDNFFormula(
+        new_combinations,
+        new_num_atoms,
+        new_thresholds_by_feature,
+        new_atoms_by_feature
+    )
+end
+
+"""
+    remove_feature(formula::TwoLevelDNFFormula, feature::Int) -> TwoLevelDNFFormula
+
+Creates a new formula with the specified feature removed.
+Updates all related structures accordingly.
+
+# Example
+```julia
+# Remove feature 2
+new_formula = remove_feature(formula, 2)
+```
+
+# Throws
+- KeyError if feature doesn't exist
+"""
+function remove_feature(formula::TwoLevelDNFFormula, feature::Int)
+    if !haskey(eachatomsbyfeature(formula), feature)
+        throw(KeyError("Feature $feature not found in formula"))
+    end
+
+    new_atoms_by_feature = Dict(
+        k => v for (k, v) in eachatomsbyfeature(formula)
+        if k != feature
+    )
+
+    new_thresholds_by_feature = Dict(
+        k => v for (k, v) in eachthresholdsbyfeature(formula)
+        if k != feature
+    )
+
+    feature_atoms = eachatomsbyfeature(formula)[feature]
+    remove_count = length(feature_atoms)
+    new_num_atoms = nuberofatoms(formula) - remove_count
+
+    new_combinations = Vector{TritVector}()
+    for comb in eachcombination(formula)
+        new_comb = TritVector(zeros(Int8, new_num_atoms))
+        # TODO: Map remaining combination values correctly
+        push!(new_combinations, new_comb)
+    end
+
+    return TwoLevelDNFFormula(
+        new_combinations,
+        new_num_atoms,
+        new_thresholds_by_feature,
+        new_atoms_by_feature
+    )
+end
+#################################################################################
+
 ################# Utils for TwoLevelDNFFormula ##################################
 # Utility functions for manipulating and analyzing TwoLevelDNFFormula
 
@@ -420,7 +624,7 @@ top_features = find_most_used_features(formula, 2)  # Returns [(1, 5), (3, 3)]
 """
 function find_most_used_features(formula::TwoLevelDNFFormula, top_n::Int=3)
     feature_counts = count_active_atoms(formula)
-    sorted_features = sort(collect(feature_counts), by=x->x[2], rev=true)
+    sorted_features = sort(collect(feature_counts), by=x -> x[2], rev=true)
     return sorted_features[1:min(top_n, length(sorted_features))]
 end
 
@@ -435,7 +639,7 @@ ranges = get_feature_ranges(formula)  # Returns {1 => (2.5, 4.2), 2 => (1.0, 2.0
 ```
 """
 function get_feature_ranges(formula::TwoLevelDNFFormula)
-    ranges = Dict{Int, Tuple{Float64, Float64}}()
+    ranges = Dict{Int,Tuple{Float64,Float64}}()
     for (feature, thresholds) in eachthresholdsbyfeature(formula)
         ranges[feature] = (minimum(thresholds), maximum(thresholds))
     end
@@ -464,14 +668,14 @@ function is_consistent(formula::TwoLevelDNFFormula)
     if any(length(c) != nuberofatoms(formula) for c in eachcombination(formula))
         return false
     end
-    
+
     # Check threshold ordering and uniqueness
     for thresholds in values(eachthresholdsbyfeature(formula))
         if !issorted(thresholds) || length(unique(thresholds)) != length(thresholds)
             return false
         end
     end
-    
+
     # Check atoms match thresholds
     for (feature, atoms) in eachatomsbyfeature(formula)
         if !haskey(eachthresholdsbyfeature(formula), feature)
@@ -482,7 +686,7 @@ function is_consistent(formula::TwoLevelDNFFormula)
             return false
         end
     end
-    
+
     return true
 end
 
@@ -500,18 +704,18 @@ println("Average term complexity: \$(stats.avg_term_complexity)")
 function get_formula_statistics(formula::TwoLevelDNFFormula)
     combinations = eachcombination(formula)
     atoms_by_feat = eachatomsbyfeature(formula)
-    
+
     # Calculate various statistics
     term_complexities = get_term_complexity(formula)
     return (
-        num_terms = length(combinations),
-        num_features = length(atoms_by_feat),
-        total_atoms = nuberofatoms(formula),
-        avg_term_complexity = mean(term_complexities),
-        max_term_complexity = maximum(term_complexities),
-        min_term_complexity = minimum(term_complexities),
-        feature_usage = count_active_atoms(formula),
-        complexity_distribution = countmap(term_complexities)
+        num_terms=length(combinations),
+        num_features=length(atoms_by_feat),
+        total_atoms=nuberofatoms(formula),
+        avg_term_complexity=mean(term_complexities),
+        max_term_complexity=maximum(term_complexities),
+        min_term_complexity=minimum(term_complexities),
+        feature_usage=count_active_atoms(formula),
+        complexity_distribution=countmap(term_complexities)
     )
 end
 
@@ -528,18 +732,18 @@ println(visualize_formula_structure(formula))
 function visualize_formula_structure(formula::TwoLevelDNFFormula)
     combinations = eachcombination(formula)
     atoms_by_feat = eachatomsbyfeature(formula)
-    
+
     # Create header
     result = "Formula Structure Visualization\n"
     result *= "═══════════════════════════\n\n"
-    
+
     # Add formula overview
     result *= "┌── Formula Overview ──┐\n"
     result *= "│ Terms: $(length(combinations))".ljust(20) * "│\n"
     result *= "│ Features: $(length(atoms_by_feat))".ljust(20) * "│\n"
     result *= "│ Atoms: $(nuberofatoms(formula))".ljust(20) * "│\n"
     result *= "└────────────────────┘\n\n"
-    
+
     # Visualize terms
     result *= "Term Structure:\n"
     for (i, combination) in enumerate(combinations)
@@ -547,13 +751,13 @@ function visualize_formula_structure(formula::TwoLevelDNFFormula)
         active_count = count(!iszero, combination)
         result *= "[$("█" ^ active_count)$(" " ^ (nuberofatoms(formula) - active_count))] ($active_count atoms)\n"
     end
-    
+
     # Feature distribution
     result *= "\nFeature Distribution:\n"
     for (feature, atoms) in sort(collect(atoms_by_feat))
         result *= "F$feature: $("•" ^ length(atoms)) ($(length(atoms)) atoms)\n"
     end
-    
+
     return result
 end
 
@@ -571,9 +775,9 @@ function analyze_feature_interactions(formula::TwoLevelDNFFormula)
     combinations = eachcombination(formula)
     atoms_by_feat = eachatomsbyfeature(formula)
     features = collect(keys(atoms_by_feat))
-    
-    interactions = Dict{Tuple{Int,Int}, Int}()
-    
+
+    interactions = Dict{Tuple{Int,Int},Int}()
+
     for combination in combinations
         active_features = Set{Int}()
         for (feature, atoms) in atoms_by_feat
@@ -581,7 +785,7 @@ function analyze_feature_interactions(formula::TwoLevelDNFFormula)
                 push!(active_features, feature)
             end
         end
-        
+
         # Count feature pairs
         for f1 in active_features
             for f2 in active_features
@@ -592,7 +796,7 @@ function analyze_feature_interactions(formula::TwoLevelDNFFormula)
             end
         end
     end
-    
+
     return interactions
 end
 
@@ -610,28 +814,28 @@ importance = get_feature_importance(formula)
 function get_feature_importance(formula::TwoLevelDNFFormula)
     combinations = eachcombination(formula)
     atoms_by_feat = eachatomsbyfeature(formula)
-    
+
     # Initialize scores
-    scores = Dict{Int, Float64}()
-    
+    scores = Dict{Int,Float64}()
+
     # Base score from direct usage
     usage_counts = count_active_atoms(formula)
     for (feature, count) in usage_counts
         scores[feature] = count
     end
-    
+
     # Add interaction scores
     interactions = analyze_feature_interactions(formula)
     for ((f1, f2), count) in interactions
         scores[f1] = get(scores, f1, 0.0) + count * 0.5
         scores[f2] = get(scores, f2, 0.0) + count * 0.5
     end
-    
+
     # Normalize scores
     max_score = maximum(values(scores))
-    scores = Dict(k => v/max_score for (k,v) in scores)
-    
-    return sort(collect(scores), by=x->x[2], rev=true)
+    scores = Dict(k => v / max_score for (k, v) in scores)
+
+    return sort(collect(scores), by=x -> x[2], rev=true)
 end
 
 """
@@ -648,9 +852,9 @@ function generate_latex_representation(formula::TwoLevelDNFFormula)
     thresholds_by_feat = eachthresholdsbyfeature(formula)
     atoms_by_feat = eachatomsbyfeature(formula)
     combinations = eachcombination(formula)
-    
+
     terms = String[]
-    
+
     for combination in combinations
         atoms = String[]
         for (feature, atom_list) in atoms_by_feat
@@ -664,7 +868,7 @@ function generate_latex_representation(formula::TwoLevelDNFFormula)
         term = length(atoms) > 1 ? "\\left($(join(atoms, " \\wedge "))\\right)" : atoms[1]
         push!(terms, term)
     end
-    
+
     return join(terms, " \\vee ")
 end
 
@@ -680,38 +884,253 @@ println(plot_feature_distribution(formula))
 """
 function plot_feature_distribution(formula::TwoLevelDNFFormula)
     thresholds_by_feat = eachthresholdsbyfeature(formula)
-    
+
     result = "Feature Threshold Distribution\n"
     result *= "═══════════════════════════\n\n"
-    
+
     max_thresholds = maximum(length(t) for t in values(thresholds_by_feat))
     width = 40
-    
+
     for (feature, thresholds) in sort(collect(thresholds_by_feat))
         # Feature label
         result *= "F$(feature): "
-        
+
         # Create scale
         min_val, max_val = minimum(thresholds), maximum(thresholds)
         range_val = max_val - min_val
-        
+
         # Plot thresholds
         positions = Int[]
         for threshold in thresholds
             pos = round(Int, ((threshold - min_val) / range_val) * (width - 1)) + 1
             push!(positions, pos)
         end
-        
+
         # Draw the line
         line = fill('─', width)
         for pos in positions
             line[pos] = '│'
         end
-        
+
         result *= join(line)
         result *= " [$(round(min_val, digits=2)), $(round(max_val, digits=2))]\n"
     end
-    
+
+    return result
+end
+
+"""
+    visualize_feature_coverage(formula::TwoLevelDNFFormula) -> String
+
+Creates an ASCII visualization showing how features are covered across terms.
+Uses a matrix-like representation where rows are terms and columns are features.
+
+# Example
+```julia
+println(visualize_feature_coverage(formula))
+```
+"""
+function visualize_feature_coverage(formula::TwoLevelDNFFormula)
+    combinations = eachcombination(formula)
+    atoms_by_feat = eachatomsbyfeature(formula)
+    features = sort(collect(keys(atoms_by_feat)))
+
+    result = "Feature Coverage Matrix\n"
+    result *= "════════════════════\n\n"
+
+    # Header
+    result *= "Term│"
+    for feature in features
+        result *= " F$(lpad(string(feature), 2)) "
+    end
+    result *= "\n"
+
+    # Separator
+    result *= "────┼"
+    result *= "────"^length(features)
+    result *= "\n"
+
+    # Matrix
+    for (i, combination) in enumerate(combinations)
+        result *= "$(lpad(string(i), 3)) │"
+
+        atom_idx = 1
+        for feature in features
+            atoms = atoms_by_feat[feature]
+            has_active = any(!iszero, combination[atom_idx:atom_idx+length(atoms)-1])
+            result *= " $(has_active ? "■" : "□") "
+            atom_idx += length(atoms)
+        end
+        result *= "\n"
+    end
+
+    return result
+end
+
+"""
+    visualize_threshold_density(formula::TwoLevelDNFFormula) -> String
+
+Creates an ASCII histogram showing the density of thresholds for each feature.
+Uses variable-width bars to represent different concentrations of thresholds.
+
+# Example
+```julia
+println(visualize_threshold_density(formula))
+```
+"""
+function visualize_threshold_density(formula::TwoLevelDNFFormula)
+    thresholds_by_feat = eachthresholdsbyfeature(formula)
+    max_width = 40
+
+    result = "Threshold Density Distribution\n"
+    result *= "══════════════════════════\n\n"
+
+    # Find overall range for normalization
+    all_thresholds = vcat(values(thresholds_by_feat)...)
+    global_min, global_max = minimum(all_thresholds), maximum(all_thresholds)
+    range_size = global_max - global_min
+
+    for (feature, thresholds) in sort(collect(thresholds_by_feat))
+        result *= "F$(lpad(string(feature), 2)) │"
+
+        # Create bins
+        n_bins = 10
+        bin_edges = range(global_min, global_max, length=n_bins + 1)
+        bin_counts = zeros(Int, n_bins)
+
+        # Count thresholds in each bin
+        for threshold in thresholds
+            bin = findlast(edge -> edge <= threshold, bin_edges)
+            bin === nothing && continue
+            bin > n_bins && continue
+            bin_counts[bin] += 1
+        end
+
+        # Normalize and display
+        max_count = maximum(bin_counts)
+        for count in bin_counts
+            bar_width = round(Int, (count / max_count) * max_width)
+            result *= "█"^bar_width * " "
+        end
+
+        result *= " ($(length(thresholds)) thresholds)\n"
+    end
+
+    # Add scale
+    result *= "\nScale: "
+    result *= "$(round(global_min, digits=2)) "
+    result *= "─"^(max_width - 20)
+    result *= " $(round(global_max, digits=2))\n"
+
+    return result
+end
+
+"""
+    visualize_term_network(formula::TwoLevelDNFFormula) -> String
+
+Creates an ASCII network visualization showing how terms are connected through shared features.
+Terms that share more features are drawn closer together in the visualization.
+
+# Example
+```julia
+println(visualize_term_network(formula))
+```
+"""
+function visualize_term_network(formula::TwoLevelDNFFormula)
+    combinations = eachcombination(formula)
+    atoms_by_feat = eachatomsbyfeature(formula)
+
+    result = "Term Relationship Network\n"
+    result *= "═════════════════════\n\n"
+
+    # Build adjacency matrix
+    n_terms = length(combinations)
+    adjacency = zeros(Int, n_terms, n_terms)
+
+    for i in 1:n_terms
+        for j in i+1:n_terms
+            shared_features = 0
+            atom_idx = 1
+
+            for (feature, atoms) in atoms_by_feat
+                range = atom_idx:atom_idx+length(atoms)-1
+                if any(!iszero, combinations[i][range]) && any(!iszero, combinations[j][range])
+                    shared_features += 1
+                end
+                atom_idx += length(atoms)
+            end
+
+            adjacency[i, j] = adjacency[j, i] = shared_features
+        end
+    end
+
+    # Create simple ASCII visualization
+    for i in 1:n_terms
+        result *= "T$i "
+        for j in 1:n_terms
+            if i == j
+                result *= "●"
+            else
+                strength = adjacency[i, j]
+                result *= strength == 0 ? "  " :
+                          strength == 1 ? "─ " :
+                          strength == 2 ? "═ " : "▓ "
+            end
+        end
+        result *= "\n"
+    end
+
+    # Add legend
+    result *= "\nLegend:\n"
+    result *= "● : Term\n"
+    result *= "─ : 1 shared feature\n"
+    result *= "═ : 2 shared features\n"
+    result *= "▓ : 3+ shared features\n"
+
+    return result
+end
+
+"""
+    visualize_formula_complexity(formula::TwoLevelDNFFormula) -> String
+
+Creates a detailed ASCII visualization of the formula's complexity metrics,
+including term sizes, feature distributions, and interaction patterns.
+
+# Example
+```julia
+println(visualize_formula_complexity(formula))
+```
+"""
+function visualize_formula_complexity(formula::TwoLevelDNFFormula)
+    stats = get_formula_statistics(formula)
+
+    result = "Formula Complexity Analysis\n"
+    result *= "════════════════════════\n\n"
+
+    # Complexity metrics
+    result *= "Complexity Metrics:\n"
+    result *= "├── Terms: $(stats.num_terms)\n"
+    result *= "├── Features: $(stats.num_features)\n"
+    result *= "├── Total Atoms: $(stats.total_atoms)\n"
+    result *= "├── Avg Term Size: $(round(stats.avg_term_complexity, digits=2))\n"
+    result *= "└── Size Range: [$(stats.min_term_complexity), $(stats.max_term_complexity)]\n\n"
+
+    # Term size distribution
+    result *= "Term Size Distribution:\n"
+    max_count = maximum(values(stats.complexity_distribution))
+    for (size, count) in sort(collect(stats.complexity_distribution))
+        bar = "█"^round(Int, (count / max_count) * 20)
+        result *= "Size $size: $bar ($count terms)\n"
+    end
+
+    # Feature usage
+    result *= "\nFeature Usage:\n"
+    max_usage = maximum(values(stats.feature_usage))
+    for (feature, usage) in sort(collect(stats.feature_usage))
+        bar = "█"^round(Int, (usage / max_usage) * 20)
+        result *= "F$feature: $bar ($usage atoms)\n"
+    end
+
     return result
 end
 #################################################################################
@@ -767,25 +1186,25 @@ function generate_disjunct(
 )
     feature_conditions = Dict{Int,Dict{Bool,Float64}}()
     current_atom_index = 1
-    
+
     # Process each feature and its atoms
     for (feature, atoms) in atoms_by_feature
         for (threshold, _) in atoms
             # Make sure we don't exceed TritVector length
             if current_atom_index <= length(combination)
                 trit_value = combination[current_atom_index]
-                
+
                 # Only process if not a don't-care value (-1)
                 if trit_value != -1
                     # Initialize nested dict if needed
                     if !haskey(feature_conditions, feature)
                         feature_conditions[feature] = Dict{Bool,Float64}()
                     end
-                    
+
                     # trit_value: 1 => "< threshold" (is_greater_equal = false)
                     # trit_value: 0 => "≥ threshold" (is_greater_equal = true)
                     is_greater_equal = trit_value == 0
-                    
+
                     # Keep only the most restrictive threshold for each operation:
                     # For "<" (is_greater_equal = false) we want the smallest threshold
                     # For "≥" (is_greater_equal = true) we want the largest threshold
@@ -954,7 +1373,7 @@ The representation includes the number of combinations in the formula, and then 
 function stampa_dnf(
     io::IO,
     formula::TwoLevelDNFFormula,
-    max_combinations::Int = nterms(formula),
+    max_combinations::Int=nterms(formula),
 )
     println(io, "TwoLevelDNFFormula with $(nterms(formula)) combinations:")
     for (i, combination) in enumerate(eachcombination(formula)[1:min(max_combinations, end)])
