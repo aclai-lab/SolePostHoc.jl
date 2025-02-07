@@ -1134,7 +1134,119 @@ function visualize_formula_complexity(formula::TwoLevelDNFFormula)
     return result
 end
 #################################################################################
+################## MAN Two Level DNF Formula ####################################
+function manTwoLevelDNFFormula(use_ascii_art::Bool = false)
+    # ANSI escape codes for blinking and colors
+    BLINK = "\e[5m"
+    BOLD = "\e[1m"
+    RESET = "\e[0m"
+    BLUE = "\e[34m"
+    CYAN = "\e[36m"
+    MAGENTA = "\e[35m"
+    GREEN = "\e[32m"
 
+    # Helper function for centered text
+    center(text, width) = lpad(text, div(width + length(text), 2)) * " "^(width - div(width + length(text), 2))
+
+    if use_ascii_art
+        # Title banner - each line printed separately for proper formatting
+        println(BLINK, BLUE, "╔════════════════════════════════════════════════════════════════════════════╗")
+        println(BLUE, "║                                                                            ║")
+        println(BLUE, "║   ████████╗██╗    ██╗ ██████╗ ██╗     ███████╗██╗   ██╗███████╗██╗         ║")
+        println(BLUE, "║   ╚══██╔══╝██║    ██║██╔═══██╗██║     ██╔════╝██║   ██║██╔════╝██║         ║")
+        println(BLUE, "║      ██║   ██║ █╗ ██║██║   ██║██║     █████╗  ██║   ██║█████╗  ██║         ║")
+        println(BLUE, "║      ██║   ██║███╗██║██║   ██║██║     ██╔══╝  ╚██╗ ██╔╝██╔══╝  ██║         ║")
+        println(BLUE, "║      ██║   ╚███╔███╔╝╚██████╔╝███████╗███████╗ ╚████╔╝ ███████╗███████╗    ║")
+        println(BLUE, "║      ╚═╝    ╚══╝╚══╝  ╚═════╝ ╚══════╝╚══════╝  ╚═══╝  ╚══════╝╚══════╝    ║")
+        println(BLUE, "║                                                                            ║")
+        println(CYAN, "║                    DNF Formula Documentation Manual                        ║")
+        println(BLUE, "║                                                                            ║")
+        println(BLUE, "╚════════════════════════════════════════════════════════════════════════════╝", RESET)
+    else
+        println(BOLD, BLUE, repeat("=", 80))
+        println(CYAN, center("TwoLevelDNFFormula Manual", 80))
+        println(BLUE, repeat("=", 80), RESET)
+    end
+
+    println()
+    # Structure Section - each line printed separately
+    println(MAGENTA, "┌─────────────────── STRUCTURE ────────────────────┐")
+    println(MAGENTA, "│                                                  │")
+    println(MAGENTA, "│   TwoLevelDNFFormula                             │")
+    println(MAGENTA, "│   ├── combinations: Vector{TritVector}           │")
+    println(MAGENTA, "│   ├── num_atoms: Int                             │")
+    println(MAGENTA, "│   ├── thresholds_by_feature: Dict{Int,Vector}    │")
+    println(MAGENTA, "│   └── atoms_by_feature: Dict{Int,Vector}         │")
+    println(MAGENTA, "│                                                  │")
+    println(MAGENTA, "└──────────────────────────────────────────────────┘", RESET)
+    
+    println()
+    # Analysis Functions - each line printed separately
+    println(BLUE, "┌────────── ANALYSIS FUNCTIONS ───────────────┐")
+    println(BLUE, "│                                             │")
+    println(BLUE, "│   Feature Interactions:                     │")
+    println(BLUE, "│   F1 ⟷ F2 ⟷ F3                              │")
+    println(BLUE, "│   ↕    ↕    ↕                               │")
+    println(BLUE, "│   F4 ⟷ F5 ⟷ F6                              │")
+    println(BLUE, "│                                             │")
+    println(BLUE, "│   Feature Importance:                       │")
+    println(BLINK, "│   F1: ████████ 80%                          │")
+    println(BLINK, "│   F2: ██████   60%                          │")
+    println(BLINK, "│   F3: ████     40%                          │")
+    println(BLUE, "│                                             │")
+    println(BLUE, "└─────────────────────────────────────────────┘", RESET)
+
+    println()
+    # Evaluation Process - each line printed separately
+    println(CYAN, "┌─────────── EVALUATION PROCESS ─────────────────┐")
+    println(CYAN, "│                                                │")
+    println(CYAN, "│   Input ➜ Evaluate Atoms ➜ Process ➜ Output    │")
+    println(CYAN, "│     ↓           ↓            ↓        ↑        │")
+    println(CYAN, "│   Parse       Check        Combine    │        │")
+    println(CYAN, "│     ↓           ↓            ↓        │        │")
+    println(CYAN, "│   Validate    Apply     Optimize ─────┘        │")
+    println(CYAN, "│                                                │")
+    println(CYAN, "└────────────────────────────────────────────────┘", RESET)
+
+    println()
+    # Visualization Functions - each line printed separately
+    println(GREEN, "┌────────── VISUALIZATION FUNCTIONS ─────────┐")
+    println(GREEN, "│                                            │")
+    println(GREEN, "│   Structure View:                          │")
+    println(BLINK, "│   ┌─────┐                                  │")
+    println(BLINK, "│   │ F1  ├─────┐                            │")
+    println(BLINK, "│   └─────┘     │                            │")
+    println(BLINK, "│   ┌─────┐   ┌─┴───┐                        │")
+    println(BLINK, "│   │ F2  ├───┤ AND ├───┐                    │")
+    println(BLINK, "│   └─────┘   └─────┘   │                    │")
+    println(BLINK, "│                     ┌─┴───┐                │")
+    println(BLINK, "│                     │ OR  │                │")
+    println(BLINK, "│                     └─────┘                │")
+    println(GREEN, "│                                            │")
+    println(GREEN, "└────────────────────────────────────────────┘", RESET)
+
+    println()
+    # Conversion Methods - each line printed separately
+    println(MAGENTA, "┌──────────── CONVERSION METHODS ────────────┐")
+    println(MAGENTA, "│                                            │")
+    println(MAGENTA, "│    TwoLevelDNFFormula ⟺ SoleLogics.DNF     │")
+    println(MAGENTA, "│                                            │")
+    println(MAGENTA, "│    ┌──────────┐        ┌──────────┐        │")
+    println(MAGENTA, "│    │ TwoLevel │ ─────⟶ │  Logic   │        │")
+    println(MAGENTA, "│    │   DNF    │ ⟵───── │   DNF    │        │")
+    println(MAGENTA, "│    └──────────┘        └──────────┘        │")
+    println(MAGENTA, "│                                            │")
+    println(MAGENTA, "└────────────────────────────────────────────┘", RESET)
+
+    println()
+    # Footer - each line printed separately
+    println(BLUE, "╔════════════════════════════════════════════════════════════════════════════╗")
+    println(BLUE, "║                                                                            ║")
+    println(CYAN, "║                     End of Documentation Manual                            ║")
+    println(BLUE, "║                                                                            ║")
+    println(BLUE, "╚════════════════════════════════════════════════════════════════════════════╝", RESET)
+end
+#################################################################################
 function SoleLogics.atoms(f::TwoLevelDNFFormula)
     Atom.(conditions(f))
 end
