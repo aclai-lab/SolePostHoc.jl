@@ -154,7 +154,7 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
         seen = Set{BitVector}()  # Set per evitare duplicati
 
         for term in minimized_terms
-            combo = falses(formula.num_atoms)
+            combo = falses(nuberofatoms(formula))
             for (i, val) in enumerate(term)
                 if val == Int8(1)
                     combo[i] = true
@@ -169,9 +169,9 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
         sort!(nuove_combinazioni)
         return TwoLevelDNFFormula(
             nuove_combinazioni,
-            formula.num_atoms,
-            formula.thresholds_by_feature,
-            formula.atoms_by_feature,
+            nuberofatoms(formula),
+            eachthresholdsbyfeature(formula),
+            eachatomsbyfeature(formula),
             collect(minimized_terms),
         )
     catch e
@@ -184,7 +184,7 @@ end
 #=MINIMI CHE NON MI SEMBRANO GLOBALI=#
 function minimizza_dnf(::Val{:quine_naive}, formula::TwoLevelDNFFormula)
     # Converti i termini in vettori binari
-    terms = [Vector{Int}([x ? 1 : 0 for x in term]) for term in formula.combinations]
+    terms = [Vector{Int}([x ? 1 : 0 for x in term]) for term in eachcombination(formula)]
     
     if isempty(terms)
         return formula
@@ -323,7 +323,7 @@ function minimizza_dnf(::Val{:quine_naive}, formula::TwoLevelDNFFormula)
         seen = Set{BitVector}()
         
         for term in min_cover
-            combo = falses(formula.num_atoms)
+            combo = falses(nuberofatoms(formula))
             for (i, val) in enumerate(term)
                 if val == 1
                     combo[i] = true
@@ -339,9 +339,9 @@ function minimizza_dnf(::Val{:quine_naive}, formula::TwoLevelDNFFormula)
         sort!(result_combinations)
         return TwoLevelDNFFormula(
             result_combinations,
-            formula.num_atoms,
-            formula.thresholds_by_feature,
-            formula.atoms_by_feature,
+            nuberofatoms(formula),
+            eachthresholdsbyfeature(formula),
+            eachatomsbyfeature(formula),
             collect(min_cover)
         )
     catch e
@@ -500,7 +500,7 @@ function minimizza_dnf(::Val{:quine_oldstyle}, formula::TwoLevelDNFFormula)
         seen = Set{BitVector}()  # Set per evitare duplicati
 
         for term in minimized_terms
-            combo = falses(formula.num_atoms)
+            combo = falses(nuberofatoms(formula))
             for (i, val) in enumerate(term)
                 if val == Int8(1)
                     combo[i] = true
@@ -515,9 +515,9 @@ function minimizza_dnf(::Val{:quine_oldstyle}, formula::TwoLevelDNFFormula)
         sort!(nuove_combinazioni)
         return TwoLevelDNFFormula(
             nuove_combinazioni,
-            formula.num_atoms,
-            formula.thresholds_by_feature,
-            formula.atoms_by_feature,
+            nuberofatoms(formula),
+            eachthresholdsbyfeature(formula),
+            eachatomsbyfeature(formula),
             collect(minimized_terms),
         )
     catch e
@@ -532,7 +532,7 @@ function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula; minimizati
     # Convert TritVectors to the internal representation used by Espresso
     # We'll map: 1 -> 1, 0 -> 0, -1 -> 0 (since we only care about positive terms)
     terms = Vector{Vector{Int}}()
-    for tritvec in formula.combinations
+    for tritvec in eachcombination(formula)
         term = Vector{Int}()
         for i in 1:length(tritvec)
             val = tritvec[i]
@@ -680,7 +680,7 @@ function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula; minimizati
 
     for term in minimized_terms
         # Create a new TritVector for this term
-        trit_combo = TritVector(formula.num_atoms)
+        trit_combo = TritVector(nuberofatoms(formula))
         
         for (i, val) in enumerate(term)
             if val == 1
@@ -702,9 +702,9 @@ function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula; minimizati
     sort!(nuove_combinazioni)  # Assuming you have defined sorting for TritVector
     return TwoLevelDNFFormula(
         nuove_combinazioni,
-        formula.num_atoms,
-        formula.thresholds_by_feature,
-        formula.atoms_by_feature
+        nuberofatoms(formula),
+        eachthresholdsbyfeature(formula),
+        eachatomsbyfeature(formula),
     )
 end
 
@@ -873,7 +873,7 @@ function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula; minimizati
         nuove_combinazioni,
         formula.num_atoms,
         formula.thresholds_by_feature,
-        formula.atoms_by_feature,
+        eachatomsbyfeature(formula),
         collect(minimized_terms),
     )
 end
@@ -1047,7 +1047,7 @@ function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
         
         risultato = Vector{BitVector}(undef, length(minimized))
         for (i, term) in enumerate(minimized)
-            combo = falses(formula.num_atoms)
+            combo = falses(nuberofatoms(formula))
             for (j, val) in enumerate(term)
                 if val == Int8(1)
                     combo[j] = true
@@ -1058,9 +1058,9 @@ function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
         
         return TwoLevelDNFFormula(
             risultato,
-            formula.num_atoms,
-            formula.thresholds_by_feature,
-            formula.atoms_by_feature,
+            nuberofatoms(formula),
+            eachthresholdsbyfeature(formula),
+            eachatomsbyfeature(formula),
             minimized
         )
         
@@ -1073,7 +1073,7 @@ end
 
 #prova risoluzione#
 function minimizza_dnf(::Val{:quine_petrick}, formula::TwoLevelDNFFormula)
-    terms = formula.combinations
+    terms = eachcombination(formula)
 
     if isempty(terms)
         return formula
@@ -1184,7 +1184,7 @@ function minimizza_dnf(::Val{:quine_petrick}, formula::TwoLevelDNFFormula)
     # Crea una nuova lista di combinazioni minimizzate
     minimized_combinations = BitVector[]
     for prime in minimized_cover
-        bitvec = falses(formula.num_atoms)
+        bitvec = falses(nuberofatoms(formula))
         for (i, val) in enumerate(prime)
             if val == 1
                 bitvec[i] = true
@@ -1195,9 +1195,9 @@ function minimizza_dnf(::Val{:quine_petrick}, formula::TwoLevelDNFFormula)
 
     return TwoLevelDNFFormula(
         minimized_combinations,
-        formula.num_atoms,
-        formula.thresholds_by_feature,
-        formula.atoms_by_feature,
+        nuberofatoms(formula),
+        eachthresholdsbyfeature(formula),
+        eachatomsbyfeature(formula),
         minimized_cover
     )
 end
@@ -1383,7 +1383,7 @@ function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
                 if i % 1000 == 0
                     show_progress("Conversione risultati", i, length(final_terms))
                 end
-                combo = falses(formula.num_atoms)
+                combo = falses(nuberofatoms(formula))
                 for (i, val) in enumerate(term)
                     if val == Int8(1)
                         combo[i] = true
@@ -1396,9 +1396,9 @@ function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
             
             return TwoLevelDNFFormula(
                 result_combinations,
-                formula.num_atoms,
-                formula.thresholds_by_feature,
-                formula.atoms_by_feature,
+                nuberofatoms(formula),
+                eachthresholdsbyfeature(formula),
+                eachatomsbyfeature(formula),
                 final_terms
             )
             
@@ -1563,7 +1563,7 @@ function minimizza_dnf(::Val{:pina_interrupted}, formula::TwoLevelDNFFormula)
                 if i % 1000 == 0
                     show_progress("Conversione risultati", i, length(final_terms))
                 end
-                combo = falses(formula.num_atoms)
+                combo = falses(nuberofatoms(formula))
                 for (i, val) in enumerate(term)
                     if val == Int8(1)
                         combo[i] = true
@@ -1576,9 +1576,9 @@ function minimizza_dnf(::Val{:pina_interrupted}, formula::TwoLevelDNFFormula)
 
             return TwoLevelDNFFormula(
                 result_combinations,
-                formula.num_atoms,
-                formula.thresholds_by_feature,
-                formula.atoms_by_feature,
+                nuberofatoms(formula),
+                eachthresholdsbyfeature(formula),
+                eachatomsbyfeature(formula),
                 final_terms
             )
 
@@ -1844,7 +1844,7 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
     function positions_of_feature(feat::Int, formula::TwoLevelDNFFormula)
         out = Int[]
         offset = 0
-        for (f, atoms) in sort(collect(formula.atoms_by_feature))
+        for (f, atoms) in sort(collect(eachatomsbyfeature(formula)))
             for _ in atoms
                 offset += 1
                 if f == feat
@@ -1857,7 +1857,7 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
 
     function find_feature_op_threshold(idx::Int, formula::TwoLevelDNFFormula)
         offset = 0
-        for (feat, atoms) in sort(collect(formula.atoms_by_feature))
+        for (feat, atoms) in sort(collect(eachatomsbyfeature(formula)))
             for (thr, op) in atoms
                 offset += 1
                 if offset == idx
@@ -1876,7 +1876,7 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
         ########################################################################
         nuove_combinazioni = Vector{BitVector}()
         for cube in copertura_finale_unified
-            combo = falses(formula.num_atoms)
+            combo = falses(nuberofatoms(formula))
             for (i, val) in enumerate(cube)
                 if val == Int8(1)
                     combo[i] = true
@@ -1888,9 +1888,9 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
 
         return TwoLevelDNFFormula(
             nuove_combinazioni,
-            formula.num_atoms,
-            formula.thresholds_by_feature,
-            formula.atoms_by_feature,
+            nuberofatoms(formula),
+            eachthresholdsbyfeature(formula),
+            eachatomsbyfeature(formula),
             copertura_finale_unified,
         )
 end
@@ -2197,7 +2197,7 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
         out = Int[]
         offset = 0
         # Scorriamo formula.atoms_by_feature in ordine, come in find_feature_op_threshold
-        for (f, atoms) in sort(collect(formula.atoms_by_feature))
+        for (f, atoms) in sort(collect(eachatomsbyfeature(formula)))
             for _ in atoms
                 offset += 1
                 if f == feat
@@ -2211,7 +2211,7 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
     # Restituisce (feature, threshold, op) per un indice di bit `idx` (1-based).
     function find_feature_op_threshold(idx::Int, formula::TwoLevelDNFFormula)
         offset = 0
-        for (feat, atoms) in sort(collect(formula.atoms_by_feature))
+        for (feat, atoms) in sort(collect(eachatomsbyfeature(formula)))
             for (thr, op) in atoms
                 offset += 1
                 if offset == idx
@@ -2232,7 +2232,7 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
     ########################################################################
     nuove_combinazioni = Vector{BitVector}()
     for cube in copertura_finale_unified
-        combo = falses(formula.num_atoms)
+        combo = falses(nuberofatoms(formula))
         for (i, val) in enumerate(cube)
             if val == Int8(1)
                 combo[i] = true
@@ -2245,9 +2245,9 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
     # Ritorno finale
     return TwoLevelDNFFormula(
         nuove_combinazioni,
-        formula.num_atoms,
-        formula.thresholds_by_feature,
-        formula.atoms_by_feature,
+        nuberofatoms(formula),
+        eachthresholdsbyfeature(formula),
+        eachatomsbyfeature(formula),
         copertura_finale_unified,
     )
 end
@@ -2525,7 +2525,7 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
     function positions_of_feature(feat::Int, formula::TwoLevelDNFFormula)
         out = Int[]
         offset = 0
-        for (f, atoms) in sort(collect(formula.atoms_by_feature))
+        for (f, atoms) in sort(collect(eachatomsbyfeature(formula)))
             for _ in atoms
                 offset += 1
                 if f == feat
@@ -2538,7 +2538,7 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
 
     function find_feature_op_threshold(idx::Int, formula::TwoLevelDNFFormula)
         offset = 0
-        for (feat, atoms) in sort(collect(formula.atoms_by_feature))
+        for (feat, atoms) in sort(collect(eachatomsbyfeature(formula)))
             for (thr, op) in atoms
                 offset += 1
                 if offset == idx
@@ -2573,7 +2573,7 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
     ########################################################################
     nuove_combinazioni = Vector{BitVector}()
     for cube in copertura_finale_unified
-        combo = falses(formula.num_atoms)
+        combo = falses(nuberofatoms(formula))
         for (i, val) in enumerate(cube)
             if val == Int8(1)
                 combo[i] = true
@@ -2585,9 +2585,9 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
 
     return TwoLevelDNFFormula(
         nuove_combinazioni,
-        formula.num_atoms,
-        formula.thresholds_by_feature,
-        formula.atoms_by_feature,
+        nuberofatoms(formula),
+        eachthresholdsbyfeature(formula),
+        eachatomsbyfeature(formula),
         copertura_finale_unified,
     )
 end
