@@ -98,7 +98,7 @@ lumen(model, :espresso)
 """
 function lumen(
     modelJ, # actualy truth_combinations usa model 
-    minimization_scheme::Symbol=:espresso;
+    minimization_scheme::Symbol=:mitespresso;
     vertical::Real=1.0,
     horizontal::Real=1.0,
     ott_mode::Bool=false,
@@ -189,28 +189,34 @@ function lumen(
         end
 
         # Feature Processing
-        num_atoms = length(my_atoms)
-        thresholds_by_feature = Dict(
-            subalpha.featcondition[1].feature.i_variable => sort(subalpha.featcondition[2]) 
-            for subalpha in my_alphabet.subalphabets
-        )
-        
-        atoms_by_feature = Dict{Int,Vector{Tuple{Float64,Bool}}}()
-        for atom in my_atoms
-            feat = atom.value.metacond.feature.i_variable
-            threshold = atom.value.threshold
-            push!(
-                get!(Vector{Tuple{Float64,Bool}}, atoms_by_feature, feat),
-                 (threshold, true),
-                )
-        end
-        for (_, atom_list) in atoms_by_feature
-            sort!(atom_list, by=first)
-        end
+        #= OLD CODE NO Constructor
 
+            num_atoms = length(my_atoms)
+            thresholds_by_feature = Dict(
+                subalpha.featcondition[1].feature.i_variable => sort(subalpha.featcondition[2]) 
+                for subalpha in my_alphabet.subalphabets
+            )
+            
+            atoms_by_feature = Dict{Int,Vector{Tuple{Float64,Bool}}}()
+            for atom in my_atoms
+                feat = atom.value.metacond.feature.i_variable
+                threshold = atom.value.threshold
+                push!(
+                    get!(Vector{Tuple{Float64,Bool}}, atoms_by_feature, feat),
+                    (threshold, true),
+                    )
+            end
+            for (_, atom_list) in atoms_by_feature
+                sort!(atom_list, by=first)
+            end
+            
+            # Results Processing
+            combined_results =
+                Lumen.concat_results(results, num_atoms, thresholds_by_feature, atoms_by_feature)
+        =#
         # Results Processing
-        combined_results =
-            Lumen.concat_results(results, num_atoms, thresholds_by_feature, atoms_by_feature)
+        combined_results = 
+            Lumen.concat_results(results, my_atoms)
         
         return_info && (unminimized_rules = Rule[])
         minimized_rules = Rule[]
@@ -238,7 +244,7 @@ function lumen(
                 
                 if !is_ext
                     silent || println("==========================")
-                    silent || println("comb:", formula_semplificata.combinations)
+                    silent || println("comb:", eachcombination(formula_semplificata))
                     silent || println("==========================")
 
                     ntermpresemp = nterms(formula)

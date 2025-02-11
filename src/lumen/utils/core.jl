@@ -255,6 +255,19 @@ function concat_results(
     return res
 end
 
+function concat_results(results::Any, my_atoms::Vector)
+    num_atoms = length(my_atoms)
+    results = dict_to_tritvector(results, num_atoms)
+    res = Dict{Any,TwoLevelDNFFormula}()
+    println("\nRisultati dettagliati:")
+
+    for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
+        println("[$result] ($(length(combinations)) combinazioni)")
+        res[result] = TwoLevelDNFFormula(Vector{TritVector}(combinations), my_atoms)
+    end
+    return res
+end
+
 """
     verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLevelDNFFormula)
 
@@ -290,7 +303,7 @@ function verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLeve
 
         # Aggiungi alcune assegnazioni casuali per aumentare la copertura
         while length(assignments) < num_samples
-            random_assignment = Dict(i => rand(Bool) for i = 1:formula.num_atoms)
+            random_assignment = Dict(i => rand(Bool) for i = 1:nuberofatoms(formula))
             push!(assignments, random_assignment)
         end
         return collect(assignments)
@@ -300,7 +313,7 @@ function verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLeve
     function evaluate_custom_or_formula(formula, assignment)
         for combination in eachcombination(formula)
             all_true = true
-            for (feat, atom_list) in formula.atoms_by_feature
+            for (feat, atom_list) in eachatomsbyfeature(formula)
                 feat_value = get(assignment, feat, false)
                 for (threshold, is_less_than) in atom_list
                     if is_less_than ? (feat_value >= threshold) : (feat_value < threshold)
@@ -320,7 +333,7 @@ function verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLeve
     end
 
     # Genera un set di assegnazioni "intelligenti" basate sulle combinazioni esistenti
-    num_samples = min(1000, 2^original.num_atoms)  # Limita il numero di campioni per input molto grandi
+    num_samples = min(1000, 2^nuberofatoms(original))  # Limita il numero di campioni per input molto grandi
     assignments = generate_smart_assignments(original, num_samples)
 
     # Verifica le formule utilizzando le assegnazioni generate

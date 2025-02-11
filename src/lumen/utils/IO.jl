@@ -92,18 +92,18 @@ function my_syntaxstring(
     orizontal::Float64 = 1.0
     )
     # Number of features (horizontally) we want to consider
-    num_orizontal = floor(Int, formula.thresholds_by_feature.count * orizontal)
+    num_orizontal = floor(Int, eachthresholdsbyfeature(formula).count * orizontal)
     
     # We'll accumulate each distinct conjunction-string in a Set to avoid duplicates
     result = Set{String}()
 
     # For each TritVector (one per conjunction)
-    for combination in formula.combinations
+    for combination in eachcombination(formula)
         feature_conditions = Dict{Int,Dict{String,Float64}}()
         current_atom_index = 1
         
         # For each feature and its sorted list of (threshold, bool), in ascending threshold order
-        for (feature, atoms) in formula.atoms_by_feature
+        for (feature, atoms) in eachatomsbyfeature(formula)
             if feature <= num_orizontal
                 for (threshold, _) in atoms
                     # Make sure we do not exceed the length of the TritVector
