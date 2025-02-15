@@ -258,11 +258,12 @@ function TwoLevelDNFFormula(combinations::AbstractVector, atoms::AbstractVector{
         TwoLevelDNFFormula(combinations, num_atoms, thresholds_by_feature, atoms_by_feature)
         # return TwoLevelDNFFormula(BitVector[], 0, Dict{Int,Vector{Float64}}(), Dict{Int,Vector{Tuple{Float64,Bool}}}(), Vector{Int}[])
     else
-        error("TODO implement constructor.")
+        error("TODO implement constructor.") # NOW if we use convert we are in this... BYPASS IS FOR NOW IN USE
     end
 end
 
-function TwoLevelDNFFormula(combinations::AbstractVector, atoms::AbstractVector{<:Atom} = [])
+#TODO talk about that for now we use this in BYPASS
+function TwoLevelDNFFormula(atoms::Vector, combinations::Vector{TritVector})
     # Validate inputs
     !isempty(combinations) && isempty(atoms) && throw(ArgumentError("Atoms vector cannot be empty"))
 
@@ -303,13 +304,13 @@ function TwoLevelDNFFormula(combinations::AbstractVector, atoms::AbstractVector{
 end
 
 # Costruttore che accetta atoms e combinations come BigInt
-function TwoLevelDNFFormula(combinations::Vector{BigInt}, atoms::Vector)
+function TwoLevelDNFFormula(atoms::Vector, combinations::Vector{BigInt})
     num_atoms = length(atoms)
     # Converti i BigInt in TritVector usando la stessa logica di dict_to_tritvector
     trit_combinations = [bigint_to_tritvector(comb, num_atoms) for comb in combinations]
 
     # Usa il costruttore con Vector{TritVector}
-    return TwoLevelDNFFormula(trit_combinations, atoms)
+    return TwoLevelDNFFormula(atoms, trit_combinations)
 end
 #################################################################################
 
@@ -594,7 +595,7 @@ Returns the number of AND terms (combinations) in the DNF formula.
 
 # Example
 ```julia
-formula = TwoLevelDNFFormula(combinations, atoms)
+formula = TwoLevelDNFFormula(atoms, combinations)
 num_terms = count_terms(formula)  # Returns number of AND terms
 ```
 """
@@ -609,7 +610,7 @@ Returns a dictionary mapping feature indices to the number of atoms using that f
 
 # Example
 ```julia
-formula = TwoLevelDNFFormula(combinations, atoms)
+formula = TwoLevelDNFFormula(atoms, combinations)
 atom_counts = count_active_atoms(formula)  # Returns {1 => 3, 2 => 2, ...}
 ```
 """
@@ -1381,13 +1382,13 @@ function Base.convert(::Type{SoleLogics.DNF}, f::TwoLevelDNFFormula)
     return LeftmostDisjunctiveForm{LeftmostConjunctiveForm{Atom}}(conjuncts, true)
 end
 
-function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula)
+function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula) # TODO IM NOT SURE OF THAT... Now we Use BYPASS
     if SoleLogics.istop(f)
         TwoLevelDNFFormula(TritVector[])
     else
         f = SoleLogics.dnf(f)
-        atoms = unique(SoleLogics.atoms(f))
-        conds = SoleLogics.value.(atoms)
+    atoms = unique(SoleLogics.atoms(f))
+    conds = SoleLogics.value.(atoms)
         # Remove duals.
         conds = SoleData.removeduals(conds)
         atoms = Atom.(conds)
@@ -1430,7 +1431,7 @@ function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula)
                 error("Could not convert formula of type $(typeof(f)) to TwoLevelDNFFormula.")
             end
         end
-        return TwoLevelDNFFormula(combinations, atoms, )
+        return TwoLevelDNFFormula(combinations, atoms, ) # TODO talk about that
     end
 end
 

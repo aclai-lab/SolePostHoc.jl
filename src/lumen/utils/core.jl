@@ -263,7 +263,7 @@ function concat_results(results::Any, my_atoms::Vector)
 
     for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
         println("[$result] ($(length(combinations)) combinazioni)")
-        res[result] = TwoLevelDNFFormula(Vector{TritVector}(combinations), my_atoms)
+        res[result] = TwoLevelDNFFormula(my_atoms, Vector{TritVector}(combinations)) # if we resolve "constructs" we cane also use -> res[result] = TwoLevelDNFFormula(Vector{TritVector}(combinations), my_atoms)
     end
     return res
 end

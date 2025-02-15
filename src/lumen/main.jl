@@ -9,12 +9,15 @@ using SoleModels: DecisionSet
 using AbstractTrees
 using SoleData
 using SoleData: MultivariateScalarAlphabet, UnivariateScalarAlphabet
+using DecisionTree: load_data, build_forest, apply_forest
+using ModalDecisionTrees
 using SoleLogics
 using BenchmarkTools, StatProfilerHTML
 using Base: intersect
 using Base.Threads: @threads
 using Base.Threads: Atomic, atomic_add!
 using Profile
+using ConcurrentCollections
 using ProgressMeter
 
 import DecisionTree as DT
@@ -107,7 +110,7 @@ function lumen(
     minimization_kwargs::NamedTuple=(;),
     filteralphabetcallback=identity,
     solemodel=nothing,
-    apply_function=nothing,
+    apply_function=SoleModels.apply,
     silent=false,
     return_info=true, # TODO must default to `false`.
     kwargs...
@@ -126,10 +129,7 @@ function lumen(
         end
     end
 
-    silent || println(
-        "\n\n$COLORED_TITLE$TITLE\n PART 2.a STARTER RULESET ESTRACTION \n$TITLE$RESET",
-    )
-    is_ext = minimization_scheme == :mitespresso
+    is_minimization_scheme_espresso = minimization_scheme == :mitespresso # TODO we use this only for BYPASS in the code
 
     # PART 2.a: Starter Ruleset Extraction
     silent || println(
@@ -189,7 +189,7 @@ function lumen(
         end
 
         # Feature Processing
-        #= OLD CODE NO Constructor
+        #= OLD CODE were we haven't Constructor
 
             num_atoms = length(my_atoms)
             thresholds_by_feature = Dict(
@@ -242,7 +242,7 @@ function lumen(
             try
                 @info "Simplification completed in $(formula_semplificata_t.time) seconds"
                 
-                if !is_ext
+                if !is_minimization_scheme_espresso
                     silent || println("==========================")
                     silent || println("comb:", eachcombination(formula_semplificata))
                     silent || println("==========================")
@@ -264,7 +264,7 @@ function lumen(
                     )
                 end
                 silent || println()
-                if is_ext
+                if is_minimization_scheme_espresso
                     formula_string = leftmost_disjunctive_form_to_string(formula_semplificata)
                     φ = SoleLogics.parseformula(
                         formula_string;

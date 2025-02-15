@@ -15,7 +15,7 @@ function minimizza_dnf(
     silent || (println(); @show formula)
     # @infiltrate
     # @show syntaxstring(formula)
-    formula = convert(TwoLevelDNFFormula, formula)
+    #formula = convert(TwoLevelDNFFormula, formula) # TODO FOR NOW WE USE BYPASS... FIX THIS WHEN WE KNOW HOW TO CONVERT 
     silent || (println(); @show formula)
     return formula
 end
