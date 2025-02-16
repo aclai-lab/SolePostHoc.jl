@@ -94,8 +94,9 @@ function extractrules(::LumenRuleExtractor, m, args...; kwargs...)
   return listrules(dl)
 end
 
-include("BA-Trees/main.jl")
-@reexport using .BATrees
+#=
+include("BA-Trees/src/main.jl")
+@reexport using BATrees
 
 
 """$(_get_rule_extractor_docstring("BATreesRuleExtractor", batrees))"""
@@ -105,5 +106,6 @@ function extractrules(::BATreesRuleExtractor, m, args...; kwargs...)
   dl = batrees(m, args...; kwargs...)
   return listrules(dl)
 end
+=#
 
 end
