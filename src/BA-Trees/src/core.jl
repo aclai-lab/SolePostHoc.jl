@@ -732,8 +732,21 @@ function prepare_and_run_ba_trees(;
     dataset_name::String = "iris", 
     num_trees::Int = 10, 
     max_depth::Int = 3, 
-    forest = nothing
+    forest = nothing,
+    mode_obj = 0
  )
+    # Check if mode_obj is valid
+    if !(mode_obj in [0, 1, 2, 4])
+        println("""
+        ERROR: Invalid mode_obj value: $mode_obj
+        Valid options for -obj parameter are:
+        0 = Depth
+        1 = NbLeaves
+        2 = Depth then NbLeaves
+        4 = Heuristic BA-Tree
+        """)
+        return
+    end
     # <-- PATH FIX: usa @__DIR__ invece di pwd()
     base_dir = @__DIR__
     dataset_path = joinpath(base_dir, dataset_name * ".csv")
@@ -826,7 +839,7 @@ function prepare_and_run_ba_trees(;
  
             TODO more parameterization
         =#
-        cmd = `$executable_path $input_file $output_base -trees $num_trees -obj 0`
+        cmd = `$executable_path $input_file $output_base -trees $num_trees -obj $mode_obj`
         println("Executing command: ", cmd)
         run(cmd)
  
