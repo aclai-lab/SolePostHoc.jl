@@ -3,19 +3,6 @@
 # SolePostHoc.jl – Post-Hoc Analysis for Symbolic Learning
 🚧 This package is under construction. 🚧
 
-<<<<<<< HEAD
-TODO:
-* Rule extraction
-	[ ] A clean Rule extraction interface (`SolePostHoc.extractrules`)
-	[ ] LUMEN <!-- TODO link and cite papers -->
-	[ ] InTrees
-	[ ] BATrees
-	[ ] BELLATREX
-	[ ] ModalETEL
-	[ ] binding to intrees
-	[ ] binding to RuleCOSI(+)
-* Documentation
-=======
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://aclai-lab.github.io/SolePostHoc.jl/stable)
 [![Build Status](https://api.cirrus-ci.com/github/aclai-lab/SolePostHoc.jl.svg?branch=main)](https://cirrus-ci.com/github/aclai-lab/SolePostHoc.jl)
@@ -67,7 +54,7 @@ using MLJ
 🌳 = load_model("your_model.jl")
 
 # Extract rules
-🍃 = extractrules(🌳, method = :LUMEN)
+🍃 = extractrules(RuleExtractor = LumenRuleExtractor,🌳)
 
 # View metrics
 printmetrics(🍃)
@@ -77,7 +64,6 @@ printmetrics(🍃)
 ## Want to know more?
 For the theoretical foundations of Sole framework, refer to:
 [*Modal Symbolic Learning: from theory to practice*, G. Pagliarini (2024)](https://scholar.google.com/citations?view_op=view_citation&hl=en&user=FRo4yrcAAAAJ&citation_for_view=FRo4yrcAAAAJ:LkGwnXOMwfcC)
->>>>>>> @{-1}
 
 ## About
 
