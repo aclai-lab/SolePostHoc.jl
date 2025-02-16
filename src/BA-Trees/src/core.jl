@@ -733,12 +733,42 @@ function prepare_and_run_ba_trees(;
     num_trees::Int = 10, 
     max_depth::Int = 3, 
     forest = nothing
-)
+ )
     # <-- PATH FIX: usa @__DIR__ invece di pwd()
     base_dir = @__DIR__
     dataset_path = joinpath(base_dir, dataset_name * ".csv")
     @show dataset_path
-
+ 
+    # Check if born_again_db exists
+    db_path = joinpath(base_dir, "born_again_db")
+    if !isdir(db_path)
+        println("""
+        ERROR: The 'born_again_db' directory is missing!
+        Please follow these steps:
+        1. Clone the BA-Trees repository: git clone https://github.com/vidalt/BA-Trees.git
+        2. Follow the installation instructions in the README
+        3. Make sure the 'born_again_db' directory is present in the same folder as this script
+        
+        For more details, visit: https://github.com/vidalt/BA-Trees
+        """)
+        return
+    end
+ 
+    # Check if bornAgain executable exists
+    executable_path = joinpath(base_dir, "bornAgain")
+    if !isfile(executable_path)
+        println("""
+        ERROR: The 'bornAgain' executable is missing!
+        Please follow these steps:
+        1. If you haven't already, clone the BA-Trees repository: git clone https://github.com/vidalt/BA-Trees.git
+        2. Follow the compilation instructions in the README to build the executable
+        3. Make sure the 'bornAgain' executable is present in the same folder as this script
+        
+        For more details, visit: https://github.com/vidalt/BA-Trees
+        """)
+        return
+    end
+ 
     # Check if the dataset exists
     if !isfile(dataset_path)
         println("ERROR: Dataset file not found: $dataset_path")
@@ -753,25 +783,25 @@ function prepare_and_run_ba_trees(;
         end
         return
     end
-
+ 
     # Carica il dataset
     dataset = DataFrame(CSV.File(dataset_path))
-
+ 
     # <-- PATH FIX: cartella temporanea affiancata a main.jl
     temp_dir = joinpath(base_dir, "temp_ba_trees")
     isdir(temp_dir) || mkdir(temp_dir)
-
+ 
     input_file   = joinpath(temp_dir, "forest.txt")
     output_base  = joinpath(temp_dir, "result.txt")
     output_stats = output_base * ".out"
     output_tree  = output_base * ".tree"
-
+ 
     # <-- PATH FIX: if "bornAgain" is in the same folder
     executable_path = joinpath(base_dir, "bornAgain")
-
+ 
     try
         println("Preparing random forest data...")
-
+ 
         forest_content = ""
         if forest === nothing
             forest, model, start_time = learn_and_convert(num_trees, "iris", max_depth)
@@ -779,10 +809,10 @@ function prepare_and_run_ba_trees(;
         else
             forest_content = create_random_forest_input_from_model(forest)
         end
-
+ 
         # Write the content to file
         write(input_file, forest_content)
-
+ 
         # number of tree you are interesad
         num_trees = length(forest.models)
         # Comando per eseguire l'analisi Born-Again
@@ -793,13 +823,13 @@ function prepare_and_run_ba_trees(;
             -obj X	       Objective used in the algorithm: 0 = Depth ; 1 = NbLeaves ; 2 = Depth then NbLeaves ; 4 = Heuristic BA-Tree (defaults to 4)
             -trees X      Limits the number of trees read by the algorithm from the input file (X in 3 to 10, defaults to 10)
             -seed X       Defines the random seed (defaults to 1)
-
+ 
             TODO more parameterization
         =#
         cmd = `$executable_path $input_file $output_base -trees $num_trees -obj 0`
         println("Executing command: ", cmd)
         run(cmd)
-
+ 
         # Read results
         if isfile(output_stats)
             println("\nBorn-Again Tree Analysis Results:")
@@ -814,7 +844,7 @@ function prepare_and_run_ba_trees(;
         else
             println("Statistics file not found: $output_stats")
         end
-
+ 
     catch e
         println("\nError during execution:")
         println(e)
@@ -835,7 +865,7 @@ function prepare_and_run_ba_trees(;
             # rm(temp_dir, recursive = true, force = true) its better if not do that for now 
         end
     end
-end
+ end
 
 function WRAP_batrees(f, max_depth=10; dataset_name="iris", num_trees=10)
     println("Born-Again Tree Analysis")
