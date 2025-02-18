@@ -752,15 +752,16 @@ function prepare_and_run_ba_trees(;
     dataset_path = joinpath(base_dir, dataset_name * ".csv")
     @show dataset_path
  
-    # Check if born_again_db exists
-    db_path = joinpath(base_dir, "born_again_db")
+    # Check if born_again_dp exists
+    db_path = joinpath(base_dir,"born_again_dp")
+    println(db_path)
     if !isdir(db_path)
         println("""
-        ERROR: The 'born_again_db' directory is missing!
+        ERROR: The 'born_again_dp' directory is missing!
         Please follow these steps:
         1. Clone the BA-Trees repository: git clone https://github.com/vidalt/BA-Trees.git
         2. Follow the installation instructions in the README
-        3. Make sure the 'born_again_db' directory is present in the same folder as this script
+        3. Make sure the 'born_again_dp' directory is present in the same folder as this script
         
         For more details, visit: https://github.com/vidalt/BA-Trees
         """)

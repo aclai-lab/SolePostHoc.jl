@@ -91,7 +91,7 @@ struct LumenRuleExtractor <: RuleExtractor end
 
 function extractrules(::LumenRuleExtractor, m, args...; kwargs...)
   dl = lumen(m, args...; kwargs...)
-  return listrules(dl)
+  return dl
 end
 
 #= TODO: Include BATrees =#
@@ -103,9 +103,8 @@ include("BA-Trees/src/main.jl")
 struct BATreesRuleExtractor <: RuleExtractor end
 
 function extractrules(::BATreesRuleExtractor, m, args...; kwargs...)
-  dl = batrees(m, args...; kwargs...)
-  return listrules(dl)
+  dl = batrees(m, dsOutput = true, args...; kwargs...)
+  return dl
 end
-#==#
 
 end
