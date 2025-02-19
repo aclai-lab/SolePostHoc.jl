@@ -27,7 +27,6 @@
 - Implementation of state-of-the-art algorithms:
   - LUMEN (L: Logic-driven U: Unified M: Minimal E: Extractor of N: Notions)
   - InTrees (Interpret Tree Ensembles)
-  - BELLATRIX
 - have binding with other state-of-the-art algorithms
 	- ModalETEL
 	- binding to intrees
