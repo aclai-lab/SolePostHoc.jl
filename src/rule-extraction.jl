@@ -56,24 +56,24 @@ function extractrules(::InTreesRuleExtractor, m, args...; kwargs...)
   return listrules(dl)
 end
 
+#= IS NOT RULE EXTRACTION BUT MAYBE IN FUTURE 
+  export BellatrexRuleExtractor
+  export bellatrex
+  include("bellatrex.jl")
 
-export BellatrexRuleExtractor
-export bellatrex
-include("bellatrex.jl")
 
+  """$(_get_rule_extractor_docstring("BellatrexRuleExtractor", bellatrex))"""
+  @kwdef struct BellatrexRuleExtractor <: RuleExtractor
+      ntrees::Float64
+      ndims::Union{Nothing,Int}
+      nclusters::Int
+  end
 
-"""$(_get_rule_extractor_docstring("BellatrexRuleExtractor", bellatrex))"""
-@kwdef struct BellatrexRuleExtractor <: RuleExtractor
-    ntrees::Float64
-    ndims::Union{Nothing,Int}
-    nclusters::Int
-end
-
-function extractrules(::BellatrexRuleExtractor, m, args...; kwargs...)
-  dl = bellatrex(m, args...; kwargs...)
-  return listrules(dl)
-end
-
+  function extractrules(::BellatrexRuleExtractor, m, args...; kwargs...)
+    dl = bellatrex(m, args...; kwargs...)
+    return listrules(dl)
+  end
+=#
 
 export lumen, Lumen
 export LumenRuleExtractor
