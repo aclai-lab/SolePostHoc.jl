@@ -13,7 +13,7 @@ TODO docstring
 - Dedja, Klest, et al. "BELLATREX: Building explanations through a locally accurate rule extractor." Ieee Access 11 (2023): 41348-41367.
 - https://github.com/Klest94/Bellatrex
 
-See also [`extractrules`](@ref), [`bellatrex`](@ref), [`RuleExtractor`](@ref).
+See also [`modalextractrules`](@ref), [`bellatrex`](@ref), [`RuleExtractor`](@ref).
 """
 function bellatrex(
     m::Union{AbstractModel,DecisionForest,DForest},

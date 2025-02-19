@@ -27,12 +27,12 @@ using SoleModels: bestguess, evaluaterule
 # using Statistics: cor
 
 using SoleModels: RuleExtractor
-import SoleModels: isexact, extractrules
+import SoleModels: isexact, modalextractrules
 
 function _get_rule_extractor_docstring(ruleextractorname::String, method)
     return """Extract rules from a symbolic model using [`$(string(method))`](ref).""" *
     "\n\n" *
-    """See also [`extractrules`](@ref), [`RuleExtractor`](@ref)."""
+    """See also [`modalextractrules`](@ref), [`RuleExtractor`](@ref)."""
 end
 
 export InTreesRuleExtractor
@@ -51,7 +51,7 @@ include("intrees/intrees.jl")
     min_coverage::Union{Float64,Nothing} = nothing
 end
 
-function extractrules(::InTreesRuleExtractor, m, args...; kwargs...)
+function modalextractrules(::InTreesRuleExtractor, m, args...; kwargs...)
   dl = intrees(m, args...; kwargs...)
   return listrules(dl)
 end
@@ -70,7 +70,7 @@ end
         nclusters::Int
     end
 
-    function extractrules(::BellatrexRuleExtractor, m, args...; kwargs...)
+    function modalextractrules(::BellatrexRuleExtractor, m, args...; kwargs...)
       dl = bellatrex(m, args...; kwargs...)
       return listrules(dl)
     end
@@ -82,7 +82,7 @@ export LumenRuleExtractor
 export batrees, BATrees
 
 using SoleModels: RuleExtractor
-import SoleModels: isexact, extractrules
+import SoleModels: isexact, modalextractrules
 
 include("lumen/main.jl")
 @reexport using .Lumen
@@ -90,7 +90,7 @@ include("lumen/main.jl")
 """$(_get_rule_extractor_docstring("LumenRuleExtractor", lumen))"""
 struct LumenRuleExtractor <: RuleExtractor end
 
-function extractrules(::LumenRuleExtractor, m, args...; kwargs...)
+function modalextractrules(::LumenRuleExtractor, m, args...; kwargs...)
   dl = lumen(m, args...; kwargs...)
   return dl
 end
@@ -103,7 +103,7 @@ include("BA-Trees/src/main.jl")
 """$(_get_rule_extractor_docstring("BATreesRuleExtractor", batrees))"""
 struct BATreesRuleExtractor <: RuleExtractor end
 
-function extractrules(::BATreesRuleExtractor, m, args...; kwargs...)
+function modalextractrules(::BATreesRuleExtractor, m, args...; kwargs...)
   dl = batrees(m, dsOutput = true, args...; kwargs...)
   return dl
 end

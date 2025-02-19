@@ -55,9 +55,9 @@ end
 @test_nowarn SolePostHoc.InTreesRuleExtractor()(solem, X, y; silent = true)
 @test_broken SolePostHoc.InTreesRuleExtractor()(solem, X, y; silent = true, normalize = true)
 @test_broken SolePostHoc.RuleExtraction.intrees(solem, X, y; silent = true, normalize = true)
-@test_nowarn SolePostHoc.extractrules(SolePostHoc.RuleExtraction.InTreesRuleExtractor(), solem, X, y)
-@test_nowarn SolePostHoc.extractrules(SolePostHoc.RuleExtraction.InTreesRuleExtractor(), solem, X, y; silent = true)
-@test_broken SolePostHoc.extractrules(SolePostHoc.RuleExtraction.InTreesRuleExtractor(), solem, X, y; silent = true, normalize = true)
+@test_nowarn SolePostHoc.modalextractrules(SolePostHoc.RuleExtraction.InTreesRuleExtractor(), solem, X, y)
+@test_nowarn SolePostHoc.modalextractrules(SolePostHoc.RuleExtraction.InTreesRuleExtractor(), solem, X, y; silent = true)
+@test_broken SolePostHoc.modalextractrules(SolePostHoc.RuleExtraction.InTreesRuleExtractor(), solem, X, y; silent = true, normalize = true)
 
 @test_broken SolePostHoc.LumenRuleExtractor(solem)
 @test_broken SolePostHoc.LumenRuleExtractor(solemodel(fitted_params(mach).forest; classlabels), apply_function = DT.apply_forest)
@@ -65,30 +65,30 @@ ds = SolePostHoc.LumenRuleExtractor(fitted_params(mach).forest, apply_function =
 ds = @test_nowarn SolePostHoc.LumenRuleExtractor(fitted_params(mach).forest, apply_function = DT.apply_forest, silent = true)
 
 @test_nowarn SolePostHoc.LumenRuleExtractor()(solem)
-@test_nowarn SolePostHoc.extractrules(LumenRuleExtractor(), solem)
+@test_nowarn SolePostHoc.modalextractrules(LumenRuleExtractor(), solem)
 @test_nowarn SolePostHoc.BellatrexRuleExtractor(solem)
 @test_nowarn SolePostHoc.BellatrexRuleExtractor()(solem)
-@test_nowarn SolePostHoc.extractrules(BellatrexRuleExtractor(), solem)
+@test_nowarn SolePostHoc.modalextractrules(BellatrexRuleExtractor(), solem)
 
 
-@test SolePostHoc.extractrules(solem; method = :lumen, vertical = 1.0)
-@test SolePostHoc.extractrules(solem; method = :lumenmit, vertical = 1.0)
-@test SolePostHoc.extractrules(solem; method = :lumenexact, vertical = 1.0)
+@test SolePostHoc.modalextractrules(solem; method = :lumen, vertical = 1.0)
+@test SolePostHoc.modalextractrules(solem; method = :lumenmit, vertical = 1.0)
+@test SolePostHoc.modalextractrules(solem; method = :lumenexact, vertical = 1.0)
 
-@test SolePostHoc.extractrules(solem, method = Lumen(; vertical = 1.0, horizontal = 0.7), kwargs...)
+@test SolePostHoc.modalextractrules(solem, method = Lumen(; vertical = 1.0, horizontal = 0.7), kwargs...)
 
 @test SolePostHoc.listrules(solem)
 
 kwargs = (; max_nrules = 10)
 
 for basemethod in [:lumen, Lumen()]
-    @test SolePostHoc.extractrules(solem, method = basemethod, kwargs...)
+    @test SolePostHoc.modalextractrules(solem, method = basemethod, kwargs...)
 end
 
-function extractrules(solem, method, kwargs...)
+function modalextractrules(solem, method, kwargs...)
   method(solem, kwargs...)
 end
 
-function extractrules(solem, method::Symbol, kwargs...)
+function modalextractrules(solem, method::Symbol, kwargs...)
   method(solem, kwargs...)
 end

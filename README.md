@@ -23,7 +23,7 @@
 - Support for various source models:
   - Decision trees and random forests
   - Black-box models
-- A clean Rule extraction interface (`SolePostHoc.extractrules`)
+- A clean Rule extraction interface (`SolePostHoc.modalextractrules`)
 - Implementation of state-of-the-art algorithms:
   - LUMEN (L: Logic-driven U: Unified M: Minimal E: Extractor of N: Notions)
   - InTrees (Interpret Tree Ensembles)
@@ -53,7 +53,7 @@ using MLJ
 🌳 = load_model("your_model.jl")
 
 # Extract rules
-🍃 = extractrules(RuleExtractor = LumenRuleExtractor,🌳)
+🍃 = modalextractrules(RuleExtractor = LumenRuleExtractor,🌳)
 
 # View metrics
 printmetrics(🍃)
