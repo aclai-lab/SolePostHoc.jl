@@ -192,7 +192,7 @@ function intrees(
             info = merge(info, (; unselected_ruleset = ruleset))
         end
         if rule_selection_method == :CBC
-            matrixrulemetrics = Matrix{Float6464}(undef,length(ruleset),3)
+            matrixrulemetrics = Matrix{Float64}(undef,length(ruleset),3)
             afterselectionruleset = Vector{BitVector}(undef, length(ruleset))
             Threads.@threads for (i,rule) in collect(enumerate(ruleset))
                 eval_result = rulemetrics(rule, X, y)
@@ -258,7 +258,7 @@ function STEL(ruleset, X, y; min_coverage, rule_complexity_metric = :natoms, rng
 
     # Rules with a frequency less than min_coverage
     S = begin
-        rules_coverage = Vector{Float6464}(undef, length(S))
+        rules_coverage = Vector{Float64}(undef, length(S))
         Threads.@threads for (i,s) in collect(enumerate(S))
             rules_coverage[i] = rulemetrics(s,X,y)[:coverage]
         end
@@ -271,8 +271,8 @@ function STEL(ruleset, X, y; min_coverage, rule_complexity_metric = :natoms, rng
     silent || println("# rules in R: $(length(R))")
 
     # Metrics update based on remaining instances
-    rules_coverage = Vector{Float6464}(undef, length(S))
-    rules_error = Vector{Float6464}(undef, length(S))
+    rules_coverage = Vector{Float64}(undef, length(S))
+    rules_error = Vector{Float64}(undef, length(S))
     rules_length = Vector{Int}(undef, length(S))
 
     while true
