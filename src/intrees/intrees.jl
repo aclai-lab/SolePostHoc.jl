@@ -255,14 +255,23 @@ function STEL(ruleset, X, y; min_coverage, rule_complexity_metric = :natoms, rng
     R = Rule[]      # Ordered rule list
     # S is the vector of rules left
     S = [deepcopy(ruleset)..., Rule(bestguess(y; suppress_parity_warning = true))]
-
     # Rules with a frequency less than min_coverage
     S = begin
         rules_coverage = Vector{Float64}(undef, length(S))
+        
         Threads.@threads for (i,s) in collect(enumerate(S))
-            rules_coverage[i] = rulemetrics(s,X,y)[:coverage]
+            if isa(antecedent(s), BooleanTruth)
+                # Se l'antecedente è BooleanTruth, verifica il valore
+                if antecedent(s) == BooleanTruth(true) || string(antecedent(s)) == "⊤"
+                    rules_coverage[i] = 1.0
+                else
+                    rules_coverage[i] = 0.0
+                end
+            else
+                rules_coverage[i] = rulemetrics(s,X,y)[:coverage]
+            end
         end
-
+        
         idxs_undeleted = findall(rules_coverage .>= min_coverage)
         S[idxs_undeleted]
     end
@@ -287,11 +296,30 @@ function STEL(ruleset, X, y; min_coverage, rule_complexity_metric = :natoms, rng
         silent || println("Rules left: $(length(rules_coverage)).")
 
         Threads.@threads for (i,s) in collect(enumerate(S))
-            metrics = rulemetrics(s,D,L)
-            rules_coverage[i] = metrics[:coverage]
-            rules_error[i] = metrics[:error]
-            rules_length[i] = metrics[rule_complexity_metric]
-            # @show metrics
+            if isa(antecedent(s), BooleanTruth)                                             #TODO ASK MICHI {}
+                # Gestione speciale per BooleanTruth
+                if antecedent(s) == BooleanTruth(true) || string(antecedent(s)) == "⊤"
+                    rules_coverage[i] = 1.0
+                    # Calcola l'errore basato sulla distribuzione delle classi
+                    pred_model = consequent(s)
+                    # Estrai il valore effettivo dal modello
+                    if isa(pred_model, ConstantModel)
+                        pred_class = pred_model.outcome  # Assumo che il valore sia accessibile con .value
+                    else
+                        pred_class = string(pred_model)
+                    end
+                    rules_error[i] = sum(L .!= pred_class) / length(L)
+                else
+                    rules_coverage[i] = 0.0
+                    rules_error[i] = 1.0  # Errore massimo per false
+                end
+                rules_length[i] = 1  # Lunghezza minima per BooleanTruth
+            else # TODO ASK MICHI }
+                metrics = rulemetrics(s,D,L)
+                rules_coverage[i] = metrics[:coverage]
+                rules_error[i] = metrics[:error]
+                rules_length[i] = metrics[rule_complexity_metric]
+            end # TODO ASK MICHI ~
         end
         silent || println("Rules error:")
         silent || println(rules_error)
@@ -353,9 +381,19 @@ function STEL(ruleset, X, y; min_coverage, rule_complexity_metric = :natoms, rng
 
         # Indices of the remaining instances
         idx_remaining = begin
-            sat_unsat = evaluaterule(S[idx_best], D, L)[:checkmask,]
-            # Remain in D the rule that not satisfying the best rule's pruning_s condition
-            findall(sat_unsat .== false)
+            if isa(antecedent(S[idx_best]), BooleanTruth)                                                       # TODO ASK MICHI {
+                if antecedent(S[idx_best]) == BooleanTruth(true) || string(antecedent(S[idx_best])) == "⊤"
+                    # Se l'antecedente è true, nessuna istanza rimane
+                    Int[]
+                else
+                    # Se l'antecedente è false, tutte le istanze rimangono
+                    collect(1:length(L))
+                end
+            else                                                                                                # TODO ASK MICHI  }                                
+                sat_unsat = evaluaterule(S[idx_best], D, L)[:checkmask,]
+                # Remain in D the rule that not satisfying the best rule's pruning_s condition
+                findall(sat_unsat .== false)
+            end                                                                                                 # TODO ASK MICHI ~
         end
 
         # Exit condition
