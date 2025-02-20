@@ -111,9 +111,9 @@ function modalextractrules(::BATreesRuleExtractor, m, args...; kwargs...)
   return ds
 end
 
-#=
-include("REFNE/src/main.jl")
-include("REFNE/src/apiREFNESole.jl")
+#
+include("Refne/src/main.jl")
+include("Refne/src/apiREFNESole.jl")
 @reexport using .REFNE
 
 
@@ -125,5 +125,5 @@ function modalextractrules(::REFNERuleExtractor, m, args...; kwargs...)
   ds = convertApi(dl)
   return ds
 end
-=#
+
 end

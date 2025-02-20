@@ -98,6 +98,12 @@ model = load_decision_tree_model()
 start_time = time()
 lumen(model, :espresso)
 ```
+
+See also
+[`AbstractModel`](@ref),
+[`DecisionList`](@ref),
+[`listrules`](@ref),
+[`rulemetrics`](@ref).
 """
 function lumen(
     modelJ, # actualy truth_combinations usa model 
