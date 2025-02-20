@@ -56,7 +56,7 @@ function modalextractrules(::InTreesRuleExtractor, m, args...; kwargs...)
   dl = intrees(m, args...; kwargs...)
   rules_obj = convert_classification_rules(dl)
   ds = DecisionSet(rules_obj)
-  return listrules(ds)
+  return ds
 end
 
 #= 
