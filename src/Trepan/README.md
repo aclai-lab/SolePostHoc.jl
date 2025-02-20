@@ -10,8 +10,6 @@ TREPAN (Rule Extraction From Neural Network Ensemble) is a Julia implementation 
 📦 TREPAN
 ┣━━ MAIN FUNCTION
 ┃   ┗━━ TREPAN
-┣━━ UTILITIES
-┃   ┗━━ generate_univers_of_combinations
 ┗━━ API INTERFACE
     ┗━━ apiTREPANSole
 ```
@@ -32,9 +30,7 @@ Required Julia packages:
 ```julia
 TREPAN(
     f,                            # trained model
-    Xmin,                         # minimum feature values
-    Xmax;                         # maximum feature values
-    L=100,                        # number of samples
+    X                             # complate dataset (test + training)
     perc=1.0,                     # sample percentage
     max_depth=-1,                 # maximum tree depth
     n_subfeatures=-1,             # features per split

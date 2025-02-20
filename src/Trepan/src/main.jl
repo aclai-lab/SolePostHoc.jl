@@ -20,7 +20,7 @@ include("apiTREPANSole.jl")
 export trepan
 
 """
-add 
+- Mark W. Craven, et al. "Extracting Thee-Structured Representations of Thained Networks"
 """
 function trepan(f, X; max_depth=-1, n_subfeatures=-1, partial_sampling=0.7, min_samples_leaf=5, min_samples_split=2, min_purity_increase=0.0, seed=3)
 
