@@ -38,6 +38,7 @@ end
 export InTreesRuleExtractor
 export intrees
 include("intrees/intrees.jl")
+include("intrees/apiIntrees.jl")
 
 
 """$(_get_rule_extractor_docstring("InTreesRuleExtractor", intrees))"""
@@ -53,7 +54,9 @@ end
 
 function modalextractrules(::InTreesRuleExtractor, m, args...; kwargs...)
   dl = intrees(m, args...; kwargs...)
-  return listrules(dl)
+  rules_obj = convert_classification_rules(dl)
+  ds = DecisionSet(rules_obj)
+  return listrules(ds)
 end
 
 #= 
