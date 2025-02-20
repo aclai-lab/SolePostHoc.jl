@@ -1,19 +1,19 @@
-# REFNE 🧠
+# TREPAN 🧠
 
 ## Overview
 
-REFNE (Rule Extraction From Neural Network Ensemble) is a Julia implementation for extracting interpretable rules from trained neural network ensembles using decision tree approximation.
+TREPAN (Rule Extraction From Neural Network Ensemble) is a Julia implementation for extracting interpretable rules from trained neural network ensembles using decision tree approximation.
 
 ## Function Index
 
 ```.jl
-📦 REFNE
+📦 TREPAN
 ┣━━ MAIN FUNCTION
-┃   ┗━━ refne
+┃   ┗━━ TREPAN
 ┣━━ UTILITIES
 ┃   ┗━━ generate_univers_of_combinations
 ┗━━ API INTERFACE
-    ┗━━ apiREFNESole
+    ┗━━ apiTREPANSole
 ```
 
 ## Dependencies
@@ -30,7 +30,7 @@ Required Julia packages:
 ## Main Function
 
 ```julia
-refne(
+TREPAN(
     f,                            # trained model
     Xmin,                         # minimum feature values
     Xmax;                         # maximum feature values
@@ -48,9 +48,8 @@ refne(
 
 ### Parameters
 - `f`: Trained neural network model
-- `Xmin`, `Xmax`: Feature value bounds
-- `L`: Sample size for synthetic dataset
-- `perc`: Percentage of samples to use
+- `X`: All dataset (NOT ONLY TRAINNIG)
+
 - `max_depth`: Maximum decision tree depth
 - `n_subfeatures`: Number of features per split
 - `partial_sampling`: Sample fraction per tree
@@ -65,12 +64,10 @@ refne(
 # Load or create your model
 model = load_neural_network_model()
 
-# Define feature bounds
-Xmin = [0.0, 0.0, 0.0]  # Minimum values for each feature
-Xmax = [1.0, 1.0, 1.0]  # Maximum values for each feature
+X = compleate_dataset()
 
 # Extract rules
-tree = refne(model, Xmin, Xmax, L=200, max_depth=5)
+tree = TREPAN(model, X)
 ```
 
 ## Algorithm Steps
@@ -82,21 +79,18 @@ tree = refne(model, Xmin, Xmax, L=200, max_depth=5)
 
 ## References
 
-- Zhou, Zhi-Hua, et al. "Extracting Symbolic Rules from Trained Neural Network Ensembles"
+- Mark W. Craven, et al. "Extracting Thee-Structured Representations of Thained Networks"
 
 > [!NOTE]
 > ### Note
-> REFNE is particularly useful for understanding and interpreting complex neural network behavior through simpler decision tree rules.
+> TREPAN is particularly useful for understanding and interpreting complex neural network behavior through simpler decision tree rules.
 
 > [!TIP]
 > ### Optimization Tips
-> - Adjust `L` based on input space complexity
 > - Tune `max_depth` for rule complexity vs. accuracy
 > - Use `partial_sampling` to control overfitting
 > - Experiment with `min_samples_leaf` for rule stability
 
 > [!IMPORTANT]
 > ### Performance Considerations
-> - Large `L` values increase computation time but improve accuracy
-> - Consider memory usage with high-dimensional input spaces
 - More complex neural networks may require larger synthetic datasets

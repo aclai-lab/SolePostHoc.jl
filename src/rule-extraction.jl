@@ -126,4 +126,19 @@ function modalextractrules(::REFNERuleExtractor, m, args...; kwargs...)
   return ds
 end
 
+# TODO see and test this
+include("Trepan/src/main.jl")
+include("Trepan/src/apiTREPANSole.jl")
+@reexport using .TREPAN
+
+
+"""$(_get_rule_extractor_docstring("TREPANRuleExtractor", TREPAN))"""
+struct TREPANRuleExtractor <: RuleExtractor end
+
+function modalextractrules(::TREPANRuleExtractor, m, args...; kwargs...)
+  dl = trepan(m, args...; kwargs...)
+  ds = convertApi(dl)
+  return ds
+end
+
 end
