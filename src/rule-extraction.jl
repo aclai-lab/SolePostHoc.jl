@@ -94,8 +94,8 @@ include("lumen/main.jl")
 struct LumenRuleExtractor <: RuleExtractor end
 
 function modalextractrules(::LumenRuleExtractor, m, args...; kwargs...)
-  dl = lumen(m, args...; kwargs...)
-  return dl
+  ds = lumen(m, args...; kwargs...)
+  return ds
 end
 
 #= TODO: Include BATrees =#
@@ -107,8 +107,8 @@ include("BA-Trees/src/main.jl")
 struct BATreesRuleExtractor <: RuleExtractor end
 
 function modalextractrules(::BATreesRuleExtractor, m, args...; kwargs...)
-  dl = batrees(m, dsOutput = true, args...; kwargs...)
-  return dl
+  ds = batrees(m, dsOutput = true, args...; kwargs...)
+  return ds
 end
 
 end
