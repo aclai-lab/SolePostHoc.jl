@@ -2,7 +2,7 @@
 
 ## Overview
 
-BATrees (Binary Adaptive Trees) is a Julia module for building and training adaptive binary decision trees. It provides a flexible framework for creating decision tree ensembles with customizable parameters.
+BATrees (Born Again Trees) is a Julia module for building and training adaptive binary decision trees. It provides a flexible framework for creating decision tree ensembles with customizable parameters.
 
 ## Function Index
 
