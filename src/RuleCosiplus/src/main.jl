@@ -363,7 +363,7 @@ function rulecosiplus(ensemble::Any)
     copy!(sklearn, pyimport("sklearn.ensemble"))
     
     current_dir = dirname(@__FILE__)
-    csv_path = joinpath(current_dir, "data", "wisconsin.csv") # Change this to generic dataset path in param
+    csv_path = joinpath(current_dir,"..","data","wisconsin.csv") # TODO Change this to generic dataset path in param
     data = CSV.read(csv_path, DataFrame)
     X = select(data, Not(:Class))
     y = data.Class
