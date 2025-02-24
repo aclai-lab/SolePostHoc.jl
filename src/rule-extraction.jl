@@ -121,12 +121,13 @@ include("Refne/src/apiREFNESole.jl")
 struct REFNERuleExtractor <: RuleExtractor end
 
 function modalextractrules(::REFNERuleExtractor, m, args...; kwargs...)
-  dl = REFNE(m, args...; kwargs...)
+  dl = refne(m, args...; kwargs...)
   ds = convertApi(dl)
   return ds
 end
 
 # TODO see and test this
+#==============================================================================#
 include("Trepan/src/main.jl")
 include("Trepan/src/apiTREPANSole.jl")
 @reexport using .TREPAN
@@ -138,6 +139,20 @@ struct TREPANRuleExtractor <: RuleExtractor end
 function modalextractrules(::TREPANRuleExtractor, m, args...; kwargs...)
   dl = trepan(m, args...; kwargs...)
   ds = convertApi(dl)
+  return ds
+end
+
+include("RuleCosiplus/src/main.jl")
+include("RuleCosiplus/src/apiRuleCosi.jl")
+@reexport using .RULECOSIPLUS
+
+
+"""$(_get_rule_extractor_docstring("RULECOSIPLUSRuleExtractor", RULECOSIPLUS))"""
+struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
+
+function modalextractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
+  dl = rulecosiplus(m, args...; kwargs...)
+  ds = convertApiRCP(dl)
   return ds
 end
 
