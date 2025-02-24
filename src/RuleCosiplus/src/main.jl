@@ -23,7 +23,7 @@ if !@isdefined sklearn
 end
 
 ##############################
-# 1) Struttura e BFS/DFS
+# 1) Struct & BFS/DFS
 ##############################
 
 mutable struct SkNode
@@ -37,8 +37,8 @@ end
 """
 build_sklearnlike_arrays(branch, n_classes, class_to_idx)
 
-Esegue DFS post-order su un Branch{String} (o ConstantModel{String}),
-creando children_left, children_right, feature, threshold, value, n_nodes.
+Performs post-order DFS on a Branch{String} (or ConstantModel{String}),
+creating children_left, children_right, feature, threshold, value, n_nodes.
 """
 function build_sklearnlike_arrays(branch, n_classes::Int, class_to_idx::Dict{String,Int})
     nodes = SkNode[]
@@ -61,7 +61,7 @@ function build_sklearnlike_arrays(branch, n_classes::Int, class_to_idx::Dict{Str
                 nodes[i+1].counts[c] = nodes[left_i+1].counts[c] + nodes[right_i+1].counts[c]
             end
         else
-            error("Tipo di nodo sconosciuto: $(typeof(b))")
+            error("Unknown node type: $(typeof(b))")
         end
         return i
     end
@@ -105,9 +105,9 @@ end
 """
 serialize_julia_ensemble(ensemble, classes)
 
-Crea un dizionario con:
-  "classes" => classes,
-  "trees"   => [<tree_state1>, <tree_state2>, ...]
+Creates a dictionary with:
+    "classes" => classes,
+    "trees"   => [<tree_state1>, <tree_state2>, ...]
 """
 function serialize_julia_ensemble(ensemble, classes::Vector{String})
     class_to_idx = Dict{String,Int}()
@@ -313,12 +313,12 @@ function convertToDecisionList(raw_rules::Vector{String})
 end
 
 ##############################
-# 4) COSTRUZIONE DEL DECISION SET IN DNF
+# 4) CONSTRUCTION OF THE DECISION SET IN DNF
 ##############################
 
-# Utilizziamo il tipo Rule di SoleModels per costruire un DecisionSet.
+# Use the Rule type from SoleModels to build a DecisionSet.
 struct MyRule
-    formula::Formula   # La formula parsata simbolicamente
+    formula::Formula   # The parsed symbolic formula
     outcome::String
 end
 
@@ -337,7 +337,7 @@ function build_dnf_rules(decision_list::Vector{Tuple{String,String}})
                 )
             )
         )
-        # Se SoleModels.symbolize è disponibile, usala; altrimenti, usa φ direttamente.
+        # If SoleModels.symbolize is available, use it; otherwise, use φ directly.
         #sym_φ = SoleModels.symbolize(φ)
         push!(minimized_rules, Rule(φ, out))
     end
@@ -351,7 +351,7 @@ function convertApi(decision_list::Vector{Tuple{String,String}})
 end
 
 ##############################
-# 5) FUNZIONE __init__
+# 5) FUNCTION __init__
 ##############################
 
 function rulecosiplus(ensemble::Any)
@@ -363,7 +363,7 @@ function rulecosiplus(ensemble::Any)
     copy!(sklearn, pyimport("sklearn.ensemble"))
     
     current_dir = dirname(@__FILE__)
-    csv_path = joinpath(current_dir, "data", "wisconsin.csv")
+    csv_path = joinpath(current_dir, "data", "wisconsin.csv") # Change this to generic dataset path in param
     data = CSV.read(csv_path, DataFrame)
     X = select(data, Not(:Class))
     y = data.Class
@@ -388,137 +388,133 @@ function rulecosiplus(ensemble::Any)
     base_ensemble = builder(dict_model)
     
     println("======================")
-    println("Ensemble serializzato", dict_model)
+    println("Ensemble serialize", dict_model)
     println("======================")
     
     num_estimators = pycall(pybuiltin("len"), Int, base_ensemble["estimators_"])
-    println("Numero di alberi caricati in base_ensemble:", num_estimators)
+    println("Number of trees loaded in base_ensemble:", num_estimators)
     
 #=
             RuleCOSIExtractor
 
-        Estrae, combina e semplifica regole da ensemble di alberi di decisione,
-        producendo un singolo modello basato su regole interpretabili.
-        Supporta diversi tipi di ensemble binari (es. RandomForest, GradientBoosting, ecc.)
-        e restituisce regole adatte a essere utilizzate per la classificazione.
+        Extracts, combines, and simplifies rules from decision tree ensembles,
+        producing a single interpretable rule-based model.
+        Supports various types of binary ensembles (e.g., RandomForest, GradientBoosting, etc.)
+        and returns rules suitable for classification.
 
-        Parametri
+        Parameters
         ----------
-        base_ensemble : BaseEnsemble o None, opzionale (default=None)
-            Istanza di un ensemble già addestrato o da addestrare. Sono supportati:
+        base_ensemble : BaseEnsemble or None, optional (default=None)
+            Instance of an already trained or to be trained ensemble. Supported:
             - sklearn.ensemble.RandomForestClassifier
             - sklearn.ensemble.BaggingClassifier
             - sklearn.ensemble.GradientBoostingClassifier
             - xgboost.XGBClassifier
             - catboost.CatBoostClassifier
             - lightgbm.LGBMClassifier
-            Se None, verrà creato (e addestrato) un ensemble di default (ad es. GradientBoostingClassifier).
+            If None, a default ensemble (e.g., GradientBoostingClassifier) will be created (and trained).
 
-        metric : str, opzionale (default="f1")
-            Metrica utilizzata per ottimizzare la combinazione/simplificazione delle regole.
-            Opzioni comuni:
+        metric : str, optional (default="f1")
+            Metric used to optimize the combination/simplification of rules.
+            Common options:
             - "f1"
             - "roc_auc"
             - "accuracy"
 
-        n_estimators : int, opzionale (default=5)
-            Numero di stimatori (alberi) da addestrare se `base_ensemble` non è già addestrato.
+        n_estimators : int, optional (default=5)
+            Number of estimators (trees) to train if `base_ensemble` is not already trained.
 
-        tree_max_depth : int, opzionale (default=3)
-            Profondità massima degli alberi all’interno dell’ensemble.  
-            Un valore più alto consente alberi più complessi e regole più numerose.
+        tree_max_depth : int, optional (default=3)
+            Maximum depth of the trees within the ensemble.
+            A higher value allows more complex trees and more rules.
 
-        conf_threshold : float, opzionale (default=0.5)
-            Soglia di confidenza (o accuratezza) sotto la quale le regole vengono
-            scartate durante la fase di combinazione. Più è alta la soglia,
-            minore sarà il numero di regole finali.
+        conf_threshold : float, optional (default=0.5)
+            Confidence threshold below which rules are discarded during the combination phase.
+            The higher the threshold, the fewer the final rules.
 
-        cov_threshold : float, opzionale (default=0.0)
-            Soglia di copertura (coverage): esclude le regole che coprono meno
-            campioni di quanto indicato. Con 0.0 si scartano solo le regole che
-            non coprono alcun campione.
+        cov_threshold : float, optional (default=0.0)
+            Coverage threshold: excludes rules that cover fewer samples than indicated.
+            With 0.0, only rules that cover no samples are discarded.
 
-        c : float, opzionale (default=0.25)
-            Livello di confidenza statistica usato per la stima dell’errore
-            della regola (correzione di Laplace o simile). Serve a evitare
-            overfitting nelle regole.
+        c : float, optional (default=0.25)
+            Statistical confidence level used for rule error estimation (Laplace correction or similar).
+            Helps to avoid overfitting in rules.
 
-        percent_training : float o None, opzionale (default=None)
-            Percentuale del dataset di training da usare per la
-            combinazione/selezione delle regole. Se None, usa tutti i dati.
+        percent_training : float or None, optional (default=None)
+            Percentage of the training dataset to use for rule combination/selection.
+            If None, uses all data.
 
-        early_stop : float, opzionale (default=0)
-            Se > 0, consente di interrompere l’algoritmo di combinazione se
-            per un certo numero di iterazioni (pari a `n_estimators * early_stop`)
-            non si osservano miglioramenti nella metrica indicata in `metric`.
+        early_stop : float, optional (default=0)
+            If > 0, allows the combination algorithm to stop if no improvements in the metric
+            indicated in `metric` are observed for a certain number of iterations (equal to `n_estimators * early_stop`).
 
-        rule_order : str, opzionale (default="supp")
-            Criterio di ordinamento iniziale delle regole (nella fase iterativa di combinazione).
-            Opzioni tipiche: 
-            - "cov" (ordina per coverage), 
-            - "conf" (ordina per confidenza), 
-            - "supp" (ordina per supporto).
+        rule_order : str, optional (default="supp")
+            Initial sorting criterion for rules (in the iterative combination phase).
+            Typical options:
+            - "cov" (sort by coverage),
+            - "conf" (sort by confidence),
+            - "supp" (sort by support).
 
-        sort_by_class : bool o list o None, opzionale (default=None)
-            Se True, ordina il set di regole finali in base alla classe (in ordine lessicografico).
-            Se è una lista, l’ordine delle classi è quello specificato dall’utente.
-            Se None, non forza un ordinamento per classe.
+        sort_by_class : bool or list or None, optional (default=None)
+            If True, sorts the final rule set by class (in lexicographic order).
+            If a list, the class order is as specified by the user.
+            If None, does not enforce class sorting.
 
-        column_names : list di str o None, opzionale (default=None)
-            Nomi delle colonne/feature del dataset. Se forniti, le regole estratte useranno
-            questi nomi invece di indici numerici.
+        column_names : list of str or None, optional (default=None)
+            Names of the dataset columns/features. If provided, the extracted rules will use
+            these names instead of numerical indices.
 
-        random_state : int, RandomState o None, opzionale (default=None)
-            Semenza (seed) per controllare la riproducibilità di alcuni processi stocastici
-            (es. l’addestramento di un ensemble se non è già addestrato).
+        random_state : int, RandomState or None, optional (default=None)
+            Seed to control the reproducibility of some stochastic processes
+            (e.g., training an ensemble if not already trained).
 
-        verbose : int, opzionale (default=0)
-            Livello di verbosità dell’output:
-            - 0 = nessun output
-            - 1 = stampe generali
-            - 2 = informazioni dettagliate di ogni iterazione di combinazione
+        verbose : int, optional (default=0)
+            Verbosity level of the output:
+            - 0 = no output
+            - 1 = general prints
+            - 2 = detailed information of each combination iteration
 
-        df : pandas.DataFrame o None, opzionale (default=None)
-            Se fornisci direttamente un DataFrame (ad es. delle feature), la classe
-            può utilizzarlo per estrarre `column_names` o altre informazioni.
-            Se None, si presume che le feature (X) e il vettore obiettivo (y) verranno
-            passati in fase di `fit` come array/serie separate.
+        df : pandas.DataFrame or None, optional (default=None)
+            If you directly provide a DataFrame (e.g., of features), the class
+            can use it to extract `column_names` or other information.
+            If None, it is assumed that the features (X) and target vector (y) will be
+            passed during `fit` as separate arrays/series.
 
-        Attributi
-        ---------
-        X_ : numpy.ndarray di shape (n_samples, n_features)
-            Feature di training usate durante :meth:`fit`.
+        Attributes
+        ----------
+        X_ : numpy.ndarray of shape (n_samples, n_features)
+            Training features used during :meth:`fit`.
 
-        y_ : numpy.ndarray di shape (n_samples,)
-            Label/target di training usate durante :meth:`fit`.
+        y_ : numpy.ndarray of shape (n_samples,)
+            Training labels/targets used during :meth:`fit`.
 
-        classes_ : numpy.ndarray di shape (n_classes,)
-            Le classi incontrate in :meth:`fit`.
+        classes_ : numpy.ndarray of shape (n_classes,)
+            Classes encountered in :meth:`fit`.
 
-        original_rulesets_ : list di RuleSet, shape (n_estimators,)
-            Insieme delle regole estratte direttamente dall’ensemble base,
-            prima della combinazione/simplificazione.
+        original_rulesets_ : list of RuleSet, shape (n_estimators,)
+            Set of rules extracted directly from the base ensemble,
+            before combination/simplification.
 
         simplified_ruleset_ : RuleSet
-            Set di regole finale, combinato e semplificato.
+            Final rule set, combined and simplified.
 
         n_combinations_ : int
-            Numero di iterazioni o “passi” di combinazione effettuati dall’algoritmo.
+            Number of iterations or "steps" of combination performed by the algorithm.
 
         combination_time_ : float
-            Tempo speso nella fase di estrazione, combinazione e semplificazione.
+            Time spent in the extraction, combination, and simplification phase.
 
         ensemble_training_time_ : float
-            Tempo speso per addestrare l’ensemble (se non era già addestrato).
-            Se l’ensemble era già pronto, rimane 0.
+            Time spent training the ensemble (if not already trained).
+            If the ensemble was already ready, remains 0.
 
-        Riferimenti
-        -----------
-        .. [1] Obregon, J., Kim, A., & Jung, J. Y., 
+        References
+        ----------
+        .. [1] Obregon, J., Kim, A., & Jung, J. Y.,
             "RuleCOSI: Combination and simplification of production rules from boosted
             decision trees for imbalanced classification", 2019.
 
-        Esempi
+        Examples
         -------
         >>> from sklearn.datasets import make_classification
         >>> X, y = make_classification(n_samples=1000, n_features=4, random_state=0)
@@ -543,7 +539,7 @@ function rulecosiplus(ensemble::Any)
     @time rc.fit(X_train, y_train)
     
     raw_rules = py"get_simplified_rules"(rc, 4, 1)
-    println("Regole grezze:")
+    println("Raw rules:")
     for r in raw_rules
         println(r)
     end
