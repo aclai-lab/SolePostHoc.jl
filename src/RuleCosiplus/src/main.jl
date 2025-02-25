@@ -106,8 +106,8 @@ end
 serialize_julia_ensemble(ensemble, classes)
 
 Creates a dictionary with:
-    "classes" => classes,
-    "trees"   => [<tree_state1>, <tree_state2>, ...]
+  "classes" => classes,
+  "trees"   => [<tree_state1>, <tree_state2>, ...]
 """
 function serialize_julia_ensemble(ensemble, classes::Vector{String})
     class_to_idx = Dict{String,Int}()
@@ -285,7 +285,7 @@ function build_rule_list(decision_list::Vector{Tuple{String,String}}, default_ou
                     )
                 )
             )
-            
+
             push!(rules, Rule(φ, out))
         catch e
             println("Warning: Failed to parse rule: $cond_str")
@@ -320,34 +320,6 @@ end
 struct MyRule
     formula::Formula   # The parsed symbolic formula
     outcome::String
-end
-
-function build_dnf_rules(decision_list::Vector{Tuple{String,String}})
-    minimized_rules = Rule[]
-    for (out, cond_str) in decision_list
-        cond_str = replace(cond_str, "˄" => "∧")
-        φ = SoleLogics.parseformula(
-            cond_str;
-            atom_parser = a -> Atom(
-                parsecondition(
-                    ScalarCondition,
-                    a;
-                    featuretype = VariableValue,
-                    featvaltype = Real
-                )
-            )
-        )
-        # If SoleModels.symbolize is available, use it; otherwise, use φ directly.
-        #sym_φ = SoleModels.symbolize(φ)
-        push!(minimized_rules, Rule(φ, out))
-    end
-    return minimized_rules
-end
-
-function convertApi(decision_list::Vector{Tuple{String,String}})
-    minimized_rules = build_dnf_rules(decision_list)
-    ds = DecisionSet(minimized_rules)
-    return ds
 end
 
 ##############################
@@ -510,7 +482,7 @@ function rulecosiplus(ensemble::Any)
 
         References
         ----------
-        .. [1] Obregon, J., Kim, A., & Jung, J. Y.,
+        .. [1] Obregon, J., Kim, A., & Jung, J. Y., 
             "RuleCOSI: Combination and simplification of production rules from boosted
             decision trees for imbalanced classification", 2019.
 
@@ -530,8 +502,8 @@ function rulecosiplus(ensemble::Any)
         metric="fi",
         n_estimators=100,
         tree_max_depth=100,
-        conf_threshold=0.1,
-        cov_threshold=0.0,
+        conf_threshold=0.25, # α
+        cov_threshold=0.1, # β
         random_state=3,
         column_names=names(X)
     )
@@ -546,9 +518,9 @@ function rulecosiplus(ensemble::Any)
     
     dl = convertToDecisionList(raw_rules)
 
-    return dl
-    #ds = convertApi(dl)
-    #return ds
+    
+    ds = convertApi(dl)
+    return ds
 end
 
 end

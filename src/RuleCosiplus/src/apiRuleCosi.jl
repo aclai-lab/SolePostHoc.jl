@@ -2,7 +2,7 @@ using SoleLogics
 using SoleData
 
 """
-    condition_to_stringRCP(cond)
+    condition_to_string(cond)
 
 Converts a scalar condition to a string representation.
 Returns a string in the format "(Vx op val)" where:
@@ -10,7 +10,7 @@ Returns a string in the format "(Vx op val)" where:
 - op is the operator (>, ≥, <, ≤, ==)
 - val is the threshold value
 """
-function condition_to_stringRCP(cond)
+function condition_to_string(cond)
     if cond isa SoleData.RangeScalarCondition
         i_var = cond.feature.i_variable
         # Remove any existing 'V' prefix to avoid duplication
@@ -38,62 +38,62 @@ end
 # [Il resto del codice rimane invariato...]
 
 """
-    element_to_stringRCP(x)
+    element_to_string(x)
 
 Recursively converts a decision tree element to a string representation.
 Handles Atoms, SyntaxBranches, and structures with grandchildren.
 """
-function element_to_stringRCP(x)
+function element_to_string(x)
     if x isa Atom
-        return condition_to_stringRCP(x.value)
+        return condition_to_string(x.value)
     elseif x isa SyntaxBranch
         t = string(x.token)
-        children_strs = map(element_to_stringRCP, x.children)
+        children_strs = map(element_to_string, x.children)
         if t == "¬"
             return "¬ " * children_strs[1]
         else
             return "(" * join(children_strs, " " * t * " ") * ")"
         end
     elseif hasproperty(x, :grandchildren)
-        return "(" * join(map(element_to_stringRCP, x.grandchildren), " ∧ ") * ")"
+        return "(" * join(map(element_to_string, x.grandchildren), " ∧ ") * ")"
     else
         return string(x)
     end
 end
 
 """
-    rule_to_stringRCP(rule)
+    rule_to_string(rule)
 
 Converts a classification rule to a string representation.
 Returns a string in the format "antecedent ↣ outcome"
 """
-function rule_to_stringRCP(rule)
-    antecedent_str = element_to_stringRCP(rule.antecedent)
+function rule_to_string(rule)
+    antecedent_str = element_to_string(rule.antecedent)
     return "$(antecedent_str) ↣ $(rule.consequent.outcome)"
 end
 
 """
-    decision_list_to_stringRCP(dl)
+    decision_list_to_string(dl)
 
 Converts an entire decision list to a formatted string representation.
 Includes rule numbering and default consequent.
 """
-function decision_list_to_stringRCP(dl)
+function decision_list_to_string(dl)
     result = "▣\n"
     for (i, rule) in enumerate(dl.rulebase)
-        result *= "├[$i/$(length(dl.rulebase))]┐ $(rule_to_stringRCP(rule)) : NamedTuple()\n"
+        result *= "├[$i/$(length(dl.rulebase))]┐ $(rule_to_string(rule)) : NamedTuple()\n"
     end
     result *= "└✘ $(dl.defaultconsequent.outcome) : NamedTuple()"
     return result
 end
 
 """
-    parse_rule_stringRCP(rule_str)
+    parse_rule_string(rule_str)
 
 Parses a rule string back into a formula.
-Accepts strings in the format created by rule_to_stringRCP.
+Accepts strings in the format created by rule_to_string.
 """
-function parse_rule_stringRCP(rule_str)
+function parse_rule_string(rule_str)
     parts = split(rule_str, "↣")
     if length(parts) != 2
         error("Invalid rule format: $rule_str")
@@ -118,21 +118,21 @@ function parse_rule_stringRCP(rule_str)
 end
 
 """
-    convertApiRCP(ds::DecisionList)
+    convertApi(ds::DecisionList)
 
 Converts a DecisionList to a DecisionSet by grouping rules by outcome.
 Returns a new DecisionSet with one rule per class in DNF form.
 """
-function convertApiRCP(ds::DecisionList)
+function convertApi(ds::DecisionList)
     # Get list of rules
-    rules_list = listrules(ds)
+    rules_list = listrules(ds, use_shortforms=true)
     
     # Group antecedents by outcome
     class_to_antecedents = Dict{String, Vector{String}}()
     
     for r in rules_list
         c = r.consequent.outcome
-        ant_str = element_to_stringRCP(r.antecedent)
+        ant_str = element_to_string(r.antecedent)
         push!(get!(class_to_antecedents, c, String[]), ant_str)
     end
     
@@ -156,8 +156,10 @@ function convertApiRCP(ds::DecisionList)
                 )
             )
         )
-
+        println("pre : ",φ)
+        φ = dnf(φ)
         push!(minimized_rules, Rule(φ, c))
+        println("post :",φ)
     end
     
     return DecisionSet(minimized_rules)

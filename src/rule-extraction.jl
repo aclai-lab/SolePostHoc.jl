@@ -54,8 +54,9 @@ end
 
 function modalextractrules(::InTreesRuleExtractor, m, args...; kwargs...)
   dl = intrees(m, args...; kwargs...)
-  rules_obj = convert_classification_rules(dl)
-  ds = DecisionSet(rules_obj)
+  ll = listrules(dl) # decision list to list of rules
+  rules_obj = convert_classification_rules(ll)
+  ds = DecisionSet(rules_obj)  
   return ds
 end
 
@@ -142,8 +143,9 @@ function modalextractrules(::TREPANRuleExtractor, m, args...; kwargs...)
   return ds
 end
 
+#=
 include("RuleCosiplus/src/main.jl")
-include("RuleCosiplus/src/apiRuleCosi.jl")
+#include("RuleCosiplus/src/apiRuleCosi.jl")
 @reexport using .RULECOSIPLUS
 
 
@@ -151,9 +153,9 @@ include("RuleCosiplus/src/apiRuleCosi.jl")
 struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
 
 function modalextractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
-  dl = rulecosiplus(m, args...; kwargs...)
-  ds = convertApiRCP(dl)
+  ds = rulecosiplus(m, args...; kwargs...)  # for now we return directly decision set object
   return ds
 end
+=#
 
 end
