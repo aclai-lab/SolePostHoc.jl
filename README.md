@@ -53,7 +53,7 @@ using MLJ
 🌳 = load_model("your_model.jl")
 
 # Extract rules
-🍃 = modalextractrules(RuleExtractor = LumenRuleExtractor,🌳)
+🍃 = modalextractrules(RuleExtractor = LumenRuleExtractor, 🌳)
 
 # View metrics
 printmetrics(🍃)
