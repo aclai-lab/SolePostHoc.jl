@@ -22,7 +22,7 @@ export trepan
 """
 - Mark W. Craven, et al. "Extracting Thee-Structured Representations of Thained Networks"
 """
-function trepan(f, X; max_depth=-1, n_subfeatures=-1, partial_sampling=0.7, min_samples_leaf=5, min_samples_split=2, min_purity_increase=0.0, seed=3)
+function trepan(f, X; max_depth=-1, n_subfeatures=-1, partial_sampling=0.5, min_samples_leaf=5, min_samples_split=2, min_purity_increase=0.0, seed=42)
 
     y_pred = apply(
         f,
@@ -36,7 +36,7 @@ function trepan(f, X; max_depth=-1, n_subfeatures=-1, partial_sampling=0.7, min_
 
     model = build_forest(
         y_pred,
-        ddf,
+        X,
         n_subfeatures,
         n_trees,
         partial_sampling,
