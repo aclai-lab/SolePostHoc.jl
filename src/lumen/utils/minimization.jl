@@ -6,7 +6,7 @@ end
 function minimizza_dnf(
     ::Val{:mitespresso},
     formula::TwoLevelDNFFormula;
-    silent = false,
+    silent = true,
     mitespresso_kwargs...,
 )
     formula = convert(SoleLogics.DNF, formula)

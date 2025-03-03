@@ -38,8 +38,10 @@ function batrees(f=nothing; dataset_name="iris", num_trees=10, max_depth=10, dsO
         end
     else
         if (dsOutput)
-            WRAP_batrees(f,max_depth)
-            ds = BAinDS()
+            class_map = WRAP_batrees(f,max_depth)
+
+            println("FINITO WRAPPPP======>",class_map)
+            ds = BAinDS(class_map)
             t = BAinSoleTree()
             println("=========================")
             println("ds: ", ds)

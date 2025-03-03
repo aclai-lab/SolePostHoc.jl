@@ -157,13 +157,8 @@ function antecedent_to_string(antecedent)
 end
 
 
-function build_dnf_rules(rules)
+function build_dnf_rules(rules,class_map)
     # Map: from integer (0,1,2) to string with the name of the iris
-    class_map = Dict(
-        0 => "Iris-setosa",
-        1 => "Iris-versicolor",
-        2 => "Iris-virginica"
-    )
     
     # 1) Group antecedent strings (conjunctions) by class
     class_to_antecedents = Dict{Int, Vector{String}}()
@@ -173,11 +168,10 @@ function build_dnf_rules(rules)
         push!(get!(class_to_antecedents, c, String[]), ant_str)
     end
     
-    # 2) Create a vector of rules (Rule). 
-    #    'Rule' is defined in SoleLogics with constructor `Rule(formula, label)`.
-    minimized_rules = Rule[]  # an empty "Vector{Rule}"
+    # 2) Create a vector of rules (Rule)
+    minimized_rules = Rule[]
 
-    # Sort the classes to have a repeatable order (optional)
+    # Sort the classes to have a repeatable order
     sorted_classes = sort(collect(keys(class_to_antecedents)))
     for c in sorted_classes
         # All conjunctions for class c
@@ -218,13 +212,16 @@ function BAinSoleTree()
 end
 
 
-function BAinDS()
+function BAinDS(class_map)
     println("Converting the tree in : ", joinpath(@__DIR__, "temp_ba_trees", "result.txt.tree"))
     tree = convert_tree(joinpath(@__DIR__,"temp_ba_trees", "result.txt.tree"))
     t = solemodel(tree)
 
     ll = listrules(t)
-    minimized_rules = build_dnf_rules(ll)
+    println("Rules: ", ll)
+    inverted_map = Dict(value => key for (key, value) in class_map)
+    println("Inverted map: ", inverted_map)
+    minimized_rules = build_dnf_rules(ll,inverted_map)
     ds = DecisionSet(minimized_rules)
     return ds
 end

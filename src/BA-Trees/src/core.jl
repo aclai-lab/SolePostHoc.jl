@@ -336,8 +336,8 @@ function create_random_forest_input_from_model(
     f::DecisionEnsemble{String};
     output_file::String="forest.txt",
     feature_offset::Int=1
-)::String
-
+)
+    class_map = nothing
     # 1) Number of trees
     num_trees = length(f.models)
 
@@ -407,7 +407,7 @@ function create_random_forest_input_from_model(
         write(io, output_str)
     end
 
-    return output_str
+    return output_str,class_map
 end
 
 function convert_tree_structure(node, depth=0, node_counter=Ref(0), node_map=Dict())::Vector{String}
@@ -735,6 +735,7 @@ function prepare_and_run_ba_trees(;
     forest = nothing,
     mode_obj = 0
  )
+    class_map = nothing
     # Check if mode_obj is valid
     if !(mode_obj in [0, 1, 2, 4])
         println("""
@@ -749,6 +750,12 @@ function prepare_and_run_ba_trees(;
     end
     # <-- PATH FIX: usa @__DIR__ invece di pwd()
     base_dir = @__DIR__
+
+    println("=============================================")
+    println("__@dir__ ",base_dir)
+    println(" pwd(): ",pwd()) 
+    println("=============================================")
+       
     dataset_path = joinpath(base_dir, dataset_name * ".csv")
     @show dataset_path
  
@@ -819,12 +826,14 @@ function prepare_and_run_ba_trees(;
         forest_content = ""
         if forest === nothing
             forest, model, start_time = learn_and_convert(num_trees, "iris", max_depth)
-            forest_content = create_random_forest_input_from_model(forest)
+            forest_content,class_map = create_random_forest_input_from_model(forest)
         else
-            forest_content = create_random_forest_input_from_model(forest)
+            forest_content,class_map = create_random_forest_input_from_model(forest)
         end
  
         # Write the content to file
+        #write(output_tree, "")
+        #write(output_stats, "")
         write(input_file, forest_content)
  
         # number of tree you are interesad
@@ -875,6 +884,7 @@ function prepare_and_run_ba_trees(;
         end
     finally
         if !@isdefined(e)
+            return class_map
             # Example: final cleanup (if desired)
             # rm(temp_dir, recursive = true, force = true) its better if not do that for now 
         end
@@ -892,20 +902,21 @@ function WRAP_batrees(f, max_depth=10; dataset_name="iris", num_trees=10)
 
     # is indifferent if i have to create a new f ora f is passed
     if (isnothing(f))
-        prepare_and_run_ba_trees(
+        class_map = prepare_and_run_ba_trees(
             dataset_name = dataset_name,
             num_trees    = num_trees,
             max_depth    = max_depth,
             forest = nothing,
         )
     else
-        prepare_and_run_ba_trees(
+        class_map = prepare_and_run_ba_trees(
             dataset_name = dataset_name, # is indifferent
             num_trees    = length(f.models),
             max_depth    = max_depth,    # is indifferent ? 
             forest       = f,
         )
     end
+    return class_map
 end
 
 end
