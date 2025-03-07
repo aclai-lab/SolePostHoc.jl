@@ -25,6 +25,7 @@ and sequential covering (STEL).
 - `pruning_decay_threshold::Union{Float64,Nothing}=nothing`: threshold used in pruning to remove or not a joint from the rule
 - `rule_selection_method::Symbol=:CBC`: rule selection method. Currently only supports `:CBC`
 - `rule_complexity_metric::Symbol=:natoms`: Metric to use for estimating a rule complexity measure
+- `max_rules::Int=-1`: maximum number of rules in the final decision list (excluding default rule). Use -1 for unlimited rules.
 - `min_coverage::Union{Float64,Nothing}=nothing`: minimum rule coverage for STEL
 - See [`modalextractrules`](@ref) keyword arguments...
 
@@ -49,6 +50,8 @@ function intrees(
     rule_complexity_metric::Symbol = :natoms,
 # - `accuracy_rule_selection::Union{Float64,Nothing}=nothing`: percentage of rules that rule selection must follow
     # accuracy_rule_selection = nothing,
+    # New parameter to limit the number of rules
+    max_rules::Int = -1,
     min_coverage::Union{Float64,Nothing} = nothing,
     silent = false,
     rng::AbstractRNG = MersenneTwister(1),
@@ -203,7 +206,7 @@ function intrees(
             end
             #M = hcat([evaluaterule(rule, X, y)[:checkmask,] for rule in ruleset]...)
             M = hcat(afterselectionruleset...)
-
+            
             #best_idxs = findcorrelation(Statistics.cor(M); threshold = accuracy_rule_selection) using Statistics
             #best_idxs = cfs(M,y)
             
@@ -221,7 +224,13 @@ function intrees(
                 # @show selected_features
                 ruleSetPrunedRRF = hcat(matrixrulemetrics[selected_features,:],importances[selected_features],selected_features)
                 finalmatrix = sortslices(ruleSetPrunedRRF, dims=1, by=x->(x[4],x[2],x[3]), rev=true)
-                best_idxs = Int.(finalmatrix[:,5])
+                
+                # Get all selected rules indices or limit if max_rules is specified
+                if max_rules > 0
+                    best_idxs = Int.(finalmatrix[1:min(max_rules, size(finalmatrix, 1)), 5])
+                else
+                    best_idxs = Int.(finalmatrix[:,5])
+                end
             end
             # @show best_idxs
             ruleset[best_idxs]
@@ -236,7 +245,7 @@ function intrees(
     ########################################################################################
     silent || println("Applying STEL...")
     
-    dl = STEL(ruleset, X, y; min_coverage, rule_complexity_metric, rng, silent)
+    dl = STEL(ruleset, X, y; max_rules, min_coverage, rule_complexity_metric, rng, silent)
 
     if return_info
         return dl, info
@@ -249,7 +258,7 @@ end
 
 
 
-function STEL(ruleset, X, y; min_coverage, rule_complexity_metric = :natoms, rng::AbstractRNG = MersenneTwister(1), silent = false)
+function STEL(ruleset, X, y; max_rules::Int = -1, min_coverage, rule_complexity_metric = :natoms, rng::AbstractRNG = MersenneTwister(1), silent = false)
     D = deepcopy(X) # Copy of the original dataset
     L = deepcopy(y)
     R = Rule[]      # Ordered rule list
@@ -288,6 +297,12 @@ function STEL(ruleset, X, y; min_coverage, rule_complexity_metric = :natoms, rng
         silent || println()
         silent || println()
         silent || println()
+        
+        # Check if we've reached the maximum number of rules (excluding the default rule)
+        if max_rules > 0 && length(R) >= max_rules - 1
+            silent || println("Maximum number of rules reached ($(max_rules-1) + default rule).")
+            return DecisionList(R, bestguess(L; suppress_parity_warning = true))
+        end
         
         resize!(rules_coverage, length(S))
         resize!(rules_error, length(S))
