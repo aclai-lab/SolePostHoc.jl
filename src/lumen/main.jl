@@ -119,6 +119,7 @@ function lumen(
     apply_function=SoleModels.apply,
     silent=false,
     return_info=true, # TODO must default to `false`.
+    vetImportance=[],
     kwargs...
 )
     if vertical <= 0.0 || vertical > 1.0 || horizontal <= 0.0 || horizontal > 1.0
@@ -233,7 +234,7 @@ function lumen(
             silent || println("Risultato: $result")
             
             if return_info
-                push!(unminimized_rules, convert_DNF_formula(formula, result, horizontal))
+                push!(unminimized_rules, convert_DNF_formula(formula, result, 1.0))
             end
 
             formula_semplificata_t = @timed Lumen.minimizza_dnf(
@@ -271,7 +272,7 @@ function lumen(
                 end
                 silent || println()
                 if is_minimization_scheme_espresso
-                    formula_string = leftmost_disjunctive_form_to_string(formula_semplificata)
+                    formula_string = leftmost_disjunctive_form_to_string(formula_semplificata,horizontal,vetImportance)
                     φ = SoleLogics.parseformula(
                         formula_string;
                         atom_parser=a -> Atom(

@@ -203,7 +203,7 @@ end
 
 Given a `LeftmostDisjunctiveForm{LeftmostConjunctiveForm}`, returns a string in DNF form.
 """
-function leftmost_disjunctive_form_to_string(ldf)
+function leftmost_disjunctive_form_to_string(ldf, c=1.0, vetImportance=[])
     # Helper: extract the list of atoms from either a ConjunctiveForm or a single Atom
     function get_atoms(cf)
         if cf isa LeftmostConjunctiveForm
@@ -212,6 +212,22 @@ function leftmost_disjunctive_form_to_string(ldf)
             return [cf]
         else
             error("Unknown type in leftmost_disjunctive_form_to_string: $(typeof(cf))")
+        end
+    end
+
+    # If c is 1.0 (100%) or vetImportance is empty, use all variables
+    include_all_vars = (c == 1.0 || isempty(vetImportance))
+    
+    # Calculate which variables to include based on importance
+    included_vars = Set{Int}()
+    if !include_all_vars
+        # Determine how many variables to include based on c
+        num_vars_to_include = max(1, ceil(Int, length(vetImportance) * c))
+        
+        # Get the most important variables
+        sorted_indices = sortperm(1:length(vetImportance), by=i -> findfirst(==(i), vetImportance))
+        for i in 1:num_vars_to_include
+            push!(included_vars, sorted_indices[i])
         end
     end
 
@@ -225,6 +241,12 @@ function leftmost_disjunctive_form_to_string(ldf)
         for atom in these_atoms
             cond = atom.value
             i_var = cond.metacond.feature.i_variable
+            
+            # Skip this atom if the variable is not in the included set
+            if !include_all_vars && !(i_var in included_vars)
+                continue
+            end
+            
             op_fun = cond.metacond.test_operator
             thr = cond.threshold
 
@@ -238,9 +260,19 @@ function leftmost_disjunctive_form_to_string(ldf)
             push!(atom_strings, "V$(i_var) $(op_str) $(thr)")
         end
 
+        # Skip empty conjunctions (when all atoms were filtered out)
+        if isempty(atom_strings)
+            continue
+        end
+        
         # Join all atoms in this conjunction
         conj_str = "(" * join(atom_strings, " ∧ ") * ")"
         push!(conjunctive_strings, conj_str)
+    end
+    
+    # Skip if all conjunctions were filtered out
+    if isempty(conjunctive_strings)
+        return "∅"  # Empty set symbol to indicate no conditions remain
     end
 
     # Finally, join all conjunctions with " ∨ "
