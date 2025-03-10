@@ -36,11 +36,11 @@ model = build_forest(
 @test_broken @test_nowarn Lumen.lumen(model; silent = true)
 @test_logs (:info,) Lumen.lumen(model)
 
-# ds = @test_logs (:warn,) extractrules(LumenRuleExtractor(), model, )
-ds = @test_logs (:warn,) extractrules(LumenRuleExtractor(), model; silent = true)
+# ds = @test_logs (:warn,) modalextractrules(LumenRuleExtractor(), model, )
+ds = @test_logs (:warn,) modalextractrules(LumenRuleExtractor(), model; silent = true)
 apply_function = SoleModels.apply,
 
-@test_broken @test_nowarn extractrules(InTreesRuleExtractor(), model, X, y)
+@test_broken @test_nowarn modalextractrules(InTreesRuleExtractor(), model, X, y)
 
-@test_nowarn extractrules(InTreesRuleExtractor(), model, DataFrame((X), ["V$(i)" for i in 1:size(X, 2)]), y)
+@test_nowarn modalextractrules(InTreesRuleExtractor(), model, DataFrame((X), ["V$(i)" for i in 1:size(X, 2)]), y)
 

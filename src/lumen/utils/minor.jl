@@ -60,6 +60,16 @@ function dict_to_bitvector(d::Dict{Any,Vector{BigInt}}, np::Int)
     Dict(k => [digits(v, base = 2, pad = np) |> BitVector for v in vals] for (k, vals) in d)
 end
 
+function dict_to_tritvector(d::Dict{Any,Vector{BigInt}}, np::Int)
+    # Similar to BitVector version but creates TritVectors
+    Dict(k => [let bits = digits(v, base = 2, pad = np)
+               trit = TritVector(np)
+               for (i, bit) in enumerate(bits)
+                   trit[i] = bit
+               end
+               trit
+               end for v in vals] for (k, vals) in d)
+end
 
 # """
 #     create_table(labels::Vector{String}, features::Matrix{Float64})

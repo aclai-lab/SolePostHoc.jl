@@ -1,11 +1,12 @@
 module TradModule
-export trad
+export BAinDS
+export BAinSoleTree
 
 using DecisionTree
 using SoleModels
 using SoleLogics
 
-# Struttura per rappresentare un nodo dell'albero di input
+# Structure to represent an input tree node
 mutable struct TreeNode
     id::Int
     node_type::String
@@ -61,12 +62,12 @@ function parse_tree_file(filename::String)
     return nodes
 end
 
-# Funzione ricorsiva per convertire il nodo nel formato DecisionTree.jl
+# Recursive function to convert the node into DecisionTree.jl format
 function convert_to_decision_tree_node(nodes::Dict{Int, TreeNode}, node_id::Int)
     node = nodes[node_id]
     
     if node.node_type == "LN"  # Leaf node
-        # Creiamo un vettore con un singolo elemento per la classe maggioritaria
+        # Create a vector with a single element for the majority class
         return Leaf(node.majority_class, [node.majority_class])
     else  # Internal node
         left = convert_to_decision_tree_node(nodes, node.left_child)
@@ -79,15 +80,15 @@ function convert_to_decision_tree_node(nodes::Dict{Int, TreeNode}, node_id::Int)
     end
 end
 
-# Funzione principale che legge il file e converte l'albero
+# Main function that reads the file and converts the tree
 function convert_tree(filename::String)
     nodes = parse_tree_file(filename)
-    # Converti partendo dal nodo radice (id = 0)
+    # Convert starting from the root node (id = 0)
     root = convert_to_decision_tree_node(nodes, 0)
     return root
 end
 
-# Funzione per testare l'albero convertito
+# Function to test the converted tree
 function test_converted_tree(tree::Node, X::Matrix{Float64})
     n_samples = size(X, 1)
     predictions = zeros(Int, n_samples)
@@ -102,18 +103,37 @@ end
 using SoleLogics
 using SoleData
 
-# Definisci un "contenitore" personalizzato per formula + outcome
+# Define a custom "container" for formula + outcome
 struct MyRule
-    formula::Formula   # Qui salva la formula parsata
-    outcome::Int       # Qui salva la classe/etichetta
+    formula::Formula   # Here the parsed formula is saved
+    outcome::Int       # Here the class/label is saved
 end
 
+function antecedent_to_string(antecedent)
+    atoms = antecedent.grandchildren
+    parts = String[]
+    for atom in atoms
+        cond = atom.value
+        feat = cond.metacond.feature.i_variable
+        op   = cond.metacond.test_operator
+        thr  = cond.threshold
+
+        op_str = op === (<)  ? "<" :
+                  op === (<=) ? "≤" :
+                  op === (>)  ? ">" :
+                  op === (>=) ? "≥" : 
+                  string(op)
+
+        push!(parts, "(V$feat $op_str $thr)")
+    end
+    return join(parts, " ∧ ")
+end
 
 using SoleLogics
 using SoleData
 
 """
-Converte l'antecedente in una stringa tipo
+Converts the antecedent into a string like
 (V4 < 0.75) ∧ (V3 < 4.85) ∧ (V4 < 0.7)
 """
 function antecedent_to_string(antecedent)
@@ -136,37 +156,30 @@ function antecedent_to_string(antecedent)
     return join(parts, " ∧ ")
 end
 
-"""
-Costruisce un VETTORE di regole (Rule) in cui ogni regola ha:
- - un'unica formula DNF che unisce (con "∨") tutte le congiunzioni associate a quella classe
- - l'outcome corrispondente
 
-Al termine puoi fare:
-    ds = DecisionSet(minimized_rules)
-"""
-function build_dnf_rules(rules)
-    # 1) Raggruppiamo le stringhe di antecedenti (congiunzioni) per classe
+function build_dnf_rules(rules,class_map)
+    # Map: from integer (0,1,2) to string with the name of the iris
+    
+    # 1) Group antecedent strings (conjunctions) by class
     class_to_antecedents = Dict{Int, Vector{String}}()
     for r in rules
-        c = r.consequent.outcome
+        c = r.consequent.outcome   # es. 0,1,2
         ant_str = antecedent_to_string(r.antecedent)
         push!(get!(class_to_antecedents, c, String[]), ant_str)
     end
     
-    # 2) Creiamo un vettore di Rule. 
-    #    ATTENZIONE: 'Rule' è definito in SoleLogics, con costruttore `Rule(formula, label)`.
-    #    (Verifica che il tipo e i parametri coincidano con la tua versione di SoleLogics.)
-    minimized_rules = Rule[]  # un "Vector{Rule}" vuoto
+    # 2) Create a vector of rules (Rule)
+    minimized_rules = Rule[]
 
-    # Ordiniamo le classi per avere un ordine ripetibile (facoltativo)
+    # Sort the classes to have a repeatable order
     sorted_classes = sort(collect(keys(class_to_antecedents)))
     for c in sorted_classes
-        # Tutte le congiunzioni per la classe c
+        # All conjunctions for class c
         all_conjunctions = class_to_antecedents[c]
-        # Uniamo con " ∨ "
+        # Join with " ∨ "
         big_dnf_str = join(all_conjunctions, " ∨ ")
         
-        # Parsiamo la stringa in una formula di SoleLogics
+        # Parse the string into a SoleLogics formula
         φ = SoleLogics.parseformula(
             big_dnf_str;
             atom_parser = a -> Atom(
@@ -179,31 +192,36 @@ function build_dnf_rules(rules)
             )
         )
 
-        # Creiamo una regola (formula + outcome)
-        push!(minimized_rules, Rule(φ, c))
+        # NOTE: Convert the numeric class c to the corresponding string name
+        class_label = class_map[c]
+
+        # Create the rule (formula + outcome as string)
+        push!(minimized_rules, Rule(φ, class_label))
     end
     
     return minimized_rules
 end
 
 
-# --------------------------------------------
-# Esempio di utilizzo (supponendo che 'll' sia il vettore di ClassificationRule):
-#
-# my_rules = build_dnf_rules(ll)
-# ds = DecisionSet(my_rules)
-#
-# # Ora 'ds' è un DecisionSet contenente una singola regola DNF per ogni classe.
+
+function BAinSoleTree()
+    println("Converting the tree in : ", joinpath(@__DIR__, "temp_ba_trees", "result.txt.tree"))
+    tree = convert_tree(joinpath(@__DIR__, "temp_ba_trees", "result.txt.tree"))
+    t = solemodel(tree)
+    return t
+end
 
 
-
-# Salva il tuo file come "tree.txt"
-function trad()
-    tree = convert_tree(joinpath(@__DIR__,"..", "temp_ba_trees", "result.txt.tree"))
+function BAinDS(class_map)
+    println("Converting the tree in : ", joinpath(@__DIR__, "temp_ba_trees", "result.txt.tree"))
+    tree = convert_tree(joinpath(@__DIR__,"temp_ba_trees", "result.txt.tree"))
     t = solemodel(tree)
 
     ll = listrules(t)
-    minimized_rules = build_dnf_rules(ll)
+    println("Rules: ", ll)
+    inverted_map = Dict(value => key for (key, value) in class_map)
+    println("Inverted map: ", inverted_map)
+    minimized_rules = build_dnf_rules(ll,inverted_map)
     ds = DecisionSet(minimized_rules)
     return ds
 end

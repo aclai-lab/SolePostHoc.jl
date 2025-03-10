@@ -198,3 +198,40 @@ function Base.:(-)(arr::TritVector)
     end
     return result
 end
+
+# Aggiungere questo dopo le altre definizioni di Base.
+import Base: isless
+
+function Base.isless(a::TritVector, b::TritVector)
+    if length(a) != length(b)
+        throw(DimensionMismatch("Vectors have different lengths"))
+    end
+    
+    # Prima confronta per numero di elementi non-zero
+    a_nonzero = count(x -> x != 0, a)
+    b_nonzero = count(x -> x != 0, b)
+    
+    if a_nonzero != b_nonzero
+        return a_nonzero < b_nonzero
+    end
+    
+    # Se hanno lo stesso numero di elementi non-zero, confronta elemento per elemento
+    for i in 1:length(a)
+        if a[i] != b[i]
+            # Definisce un ordine: -1 < 0 < 1
+            return a[i] < b[i]
+        end
+    end
+    
+    # Se tutti gli elementi sono uguali, i vettori sono uguali
+    return false
+end
+
+# Per completezza, aggiungiamo anche l'operatore ==
+function Base.:(==)(a::TritVector, b::TritVector)
+    length(a) == length(b) || return false
+    for i in 1:length(a)
+        a[i] == b[i] || return false
+    end
+    return true
+end

@@ -25,8 +25,9 @@ and sequential covering (STEL).
 - `pruning_decay_threshold::Union{Float64,Nothing}=nothing`: threshold used in pruning to remove or not a joint from the rule
 - `rule_selection_method::Symbol=:CBC`: rule selection method. Currently only supports `:CBC`
 - `rule_complexity_metric::Symbol=:natoms`: Metric to use for estimating a rule complexity measure
+- `max_rules::Int=-1`: maximum number of rules in the final decision list (excluding default rule). Use -1 for unlimited rules.
 - `min_coverage::Union{Float64,Nothing}=nothing`: minimum rule coverage for STEL
-- See [`extractrules`](@ref) keyword arguments...
+- See [`modalextractrules`](@ref) keyword arguments...
 
 Although the method was originally presented for forests it is hereby extended to work with any symbolic models.
 
@@ -49,6 +50,8 @@ function intrees(
     rule_complexity_metric::Symbol = :natoms,
 # - `accuracy_rule_selection::Union{Float64,Nothing}=nothing`: percentage of rules that rule selection must follow
     # accuracy_rule_selection = nothing,
+    # New parameter to limit the number of rules
+    max_rules::Int = -1,
     min_coverage::Union{Float64,Nothing} = nothing,
     silent = false,
     rng::AbstractRNG = MersenneTwister(1),
@@ -192,7 +195,7 @@ function intrees(
             info = merge(info, (; unselected_ruleset = ruleset))
         end
         if rule_selection_method == :CBC
-            matrixrulemetrics = Matrix{Float6464}(undef,length(ruleset),3)
+            matrixrulemetrics = Matrix{Float64}(undef,length(ruleset),3)
             afterselectionruleset = Vector{BitVector}(undef, length(ruleset))
             Threads.@threads for (i,rule) in collect(enumerate(ruleset))
                 eval_result = rulemetrics(rule, X, y)
@@ -203,7 +206,7 @@ function intrees(
             end
             #M = hcat([evaluaterule(rule, X, y)[:checkmask,] for rule in ruleset]...)
             M = hcat(afterselectionruleset...)
-
+            
             #best_idxs = findcorrelation(Statistics.cor(M); threshold = accuracy_rule_selection) using Statistics
             #best_idxs = cfs(M,y)
             
@@ -221,7 +224,13 @@ function intrees(
                 # @show selected_features
                 ruleSetPrunedRRF = hcat(matrixrulemetrics[selected_features,:],importances[selected_features],selected_features)
                 finalmatrix = sortslices(ruleSetPrunedRRF, dims=1, by=x->(x[4],x[2],x[3]), rev=true)
-                best_idxs = Int.(finalmatrix[:,5])
+                
+                # Get all selected rules indices or limit if max_rules is specified
+                if max_rules > 0
+                    best_idxs = Int.(finalmatrix[1:min(max_rules, size(finalmatrix, 1)), 5])
+                else
+                    best_idxs = Int.(finalmatrix[:,5])
+                end
             end
             # @show best_idxs
             ruleset[best_idxs]
@@ -236,7 +245,7 @@ function intrees(
     ########################################################################################
     silent || println("Applying STEL...")
     
-    dl = STEL(ruleset, X, y; min_coverage, rule_complexity_metric, rng, silent)
+    dl = STEL(ruleset, X, y; max_rules, min_coverage, rule_complexity_metric, rng, silent)
 
     if return_info
         return dl, info
@@ -249,20 +258,29 @@ end
 
 
 
-function STEL(ruleset, X, y; min_coverage, rule_complexity_metric = :natoms, rng::AbstractRNG = MersenneTwister(1), silent = false)
+function STEL(ruleset, X, y; max_rules::Int = -1, min_coverage, rule_complexity_metric = :natoms, rng::AbstractRNG = MersenneTwister(1), silent = false)
     D = deepcopy(X) # Copy of the original dataset
     L = deepcopy(y)
     R = Rule[]      # Ordered rule list
     # S is the vector of rules left
     S = [deepcopy(ruleset)..., Rule(bestguess(y; suppress_parity_warning = true))]
-
     # Rules with a frequency less than min_coverage
     S = begin
-        rules_coverage = Vector{Float6464}(undef, length(S))
+        rules_coverage = Vector{Float64}(undef, length(S))
+        
         Threads.@threads for (i,s) in collect(enumerate(S))
-            rules_coverage[i] = rulemetrics(s,X,y)[:coverage]
+            if isa(antecedent(s), BooleanTruth)
+                # Se l'antecedente è BooleanTruth, verifica il valore
+                if antecedent(s) == BooleanTruth(true) || string(antecedent(s)) == "⊤"
+                    rules_coverage[i] = 1.0
+                else
+                    rules_coverage[i] = 0.0
+                end
+            else
+                rules_coverage[i] = rulemetrics(s,X,y)[:coverage]
+            end
         end
-
+        
         idxs_undeleted = findall(rules_coverage .>= min_coverage)
         S[idxs_undeleted]
     end
@@ -271,14 +289,20 @@ function STEL(ruleset, X, y; min_coverage, rule_complexity_metric = :natoms, rng
     silent || println("# rules in R: $(length(R))")
 
     # Metrics update based on remaining instances
-    rules_coverage = Vector{Float6464}(undef, length(S))
-    rules_error = Vector{Float6464}(undef, length(S))
+    rules_coverage = Vector{Float64}(undef, length(S))
+    rules_error = Vector{Float64}(undef, length(S))
     rules_length = Vector{Int}(undef, length(S))
 
     while true
         silent || println()
         silent || println()
         silent || println()
+        
+        # Check if we've reached the maximum number of rules (excluding the default rule)
+        if max_rules > 0 && length(R) >= max_rules - 1
+            silent || println("Maximum number of rules reached ($(max_rules-1) + default rule).")
+            return DecisionList(R, bestguess(L; suppress_parity_warning = true))
+        end
         
         resize!(rules_coverage, length(S))
         resize!(rules_error, length(S))
@@ -287,11 +311,30 @@ function STEL(ruleset, X, y; min_coverage, rule_complexity_metric = :natoms, rng
         silent || println("Rules left: $(length(rules_coverage)).")
 
         Threads.@threads for (i,s) in collect(enumerate(S))
-            metrics = rulemetrics(s,D,L)
-            rules_coverage[i] = metrics[:coverage]
-            rules_error[i] = metrics[:error]
-            rules_length[i] = metrics[rule_complexity_metric]
-            # @show metrics
+            if isa(antecedent(s), BooleanTruth)                                             #TODO ASK MICHI {}
+                # Gestione speciale per BooleanTruth
+                if antecedent(s) == BooleanTruth(true) || string(antecedent(s)) == "⊤"
+                    rules_coverage[i] = 1.0
+                    # Calcola l'errore basato sulla distribuzione delle classi
+                    pred_model = consequent(s)
+                    # Estrai il valore effettivo dal modello
+                    if isa(pred_model, ConstantModel)
+                        pred_class = pred_model.outcome  # Assumo che il valore sia accessibile con .value
+                    else
+                        pred_class = string(pred_model)
+                    end
+                    rules_error[i] = sum(L .!= pred_class) / length(L)
+                else
+                    rules_coverage[i] = 0.0
+                    rules_error[i] = 1.0  # Errore massimo per false
+                end
+                rules_length[i] = 1  # Lunghezza minima per BooleanTruth
+            else # TODO ASK MICHI }
+                metrics = rulemetrics(s,D,L)
+                rules_coverage[i] = metrics[:coverage]
+                rules_error[i] = metrics[:error]
+                rules_length[i] = metrics[rule_complexity_metric]
+            end # TODO ASK MICHI ~
         end
         silent || println("Rules error:")
         silent || println(rules_error)
@@ -353,9 +396,19 @@ function STEL(ruleset, X, y; min_coverage, rule_complexity_metric = :natoms, rng
 
         # Indices of the remaining instances
         idx_remaining = begin
-            sat_unsat = evaluaterule(S[idx_best], D, L)[:checkmask,]
-            # Remain in D the rule that not satisfying the best rule's pruning_s condition
-            findall(sat_unsat .== false)
+            if isa(antecedent(S[idx_best]), BooleanTruth)                                                       # TODO ASK MICHI {
+                if antecedent(S[idx_best]) == BooleanTruth(true) || string(antecedent(S[idx_best])) == "⊤"
+                    # Se l'antecedente è true, nessuna istanza rimane
+                    Int[]
+                else
+                    # Se l'antecedente è false, tutte le istanze rimangono
+                    collect(1:length(L))
+                end
+            else                                                                                                # TODO ASK MICHI  }                                
+                sat_unsat = evaluaterule(S[idx_best], D, L)[:checkmask,]
+                # Remain in D the rule that not satisfying the best rule's pruning_s condition
+                findall(sat_unsat .== false)
+            end                                                                                                 # TODO ASK MICHI ~
         end
 
         # Exit condition
