@@ -9,7 +9,7 @@ using MLJ
 using JLD
 using JLD2
 using ProgressMeter
-using Revise
+# using Revise
 using ThreadSafeDicts
 using BenchmarkTools
 using Metrics # Heavy dep? TODO maybe

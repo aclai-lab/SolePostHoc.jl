@@ -10,7 +10,7 @@ using MLJ
 using JLD
 using JLD2
 using ProgressMeter
-using Revise
+# using Revise
 using ThreadSafeDicts
 using BenchmarkTools
 

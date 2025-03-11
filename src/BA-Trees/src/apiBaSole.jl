@@ -109,25 +109,25 @@ struct MyRule
     outcome::Int       # Here the class/label is saved
 end
 
-function antecedent_to_string(antecedent)
-    atoms = antecedent.grandchildren
-    parts = String[]
-    for atom in atoms
-        cond = atom.value
-        feat = cond.metacond.feature.i_variable
-        op   = cond.metacond.test_operator
-        thr  = cond.threshold
+# function antecedent_to_string(antecedent)
+#     atoms = antecedent.grandchildren
+#     parts = String[]
+#     for atom in atoms
+#         cond = atom.value
+#         feat = cond.metacond.feature.i_variable
+#         op   = cond.metacond.test_operator
+#         thr  = cond.threshold
 
-        op_str = op === (<)  ? "<" :
-                  op === (<=) ? "≤" :
-                  op === (>)  ? ">" :
-                  op === (>=) ? "≥" : 
-                  string(op)
+#         op_str = op === (<)  ? "<" :
+#                   op === (<=) ? "≤" :
+#                   op === (>)  ? ">" :
+#                   op === (>=) ? "≥" : 
+#                   string(op)
 
-        push!(parts, "(V$feat $op_str $thr)")
-    end
-    return join(parts, " ∧ ")
-end
+#         push!(parts, "(V$feat $op_str $thr)")
+#     end
+#     return join(parts, " ∧ ")
+# end
 
 using SoleLogics
 using SoleData

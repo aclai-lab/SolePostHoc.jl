@@ -1,6 +1,6 @@
 using Pkg
 Pkg.activate(".")
-using Revise
+# using Revise
 using Random
 using Logging
 using Dates

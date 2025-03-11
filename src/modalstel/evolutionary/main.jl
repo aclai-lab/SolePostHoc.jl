@@ -13,7 +13,7 @@ using StatsBase
 using MLJ
 using JLD2
 using ProgressMeter
-using Revise
+# using Revise
 using Plots
 using Metaheuristics
 using ThreadSafeDicts
