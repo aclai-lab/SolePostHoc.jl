@@ -89,9 +89,6 @@ No explicit return value, but produces:
 - The function aligns with Algorithm 1 from the reference implementation
 - Performance statistics are generated based on processing time and rule reduction
 
-# References
-- Pagliarini, Giovanni, et al. "Minimal Rules from Decision Forests: a Systematic Approach." OVERLAY@ AI* IA. 2024.
-
 # Example
 ```julia
 model = load_decision_tree_model()
