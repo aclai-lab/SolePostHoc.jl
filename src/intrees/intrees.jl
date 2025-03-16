@@ -66,7 +66,8 @@ function intrees(
     isnothing(min_coverage) && (min_coverage = 0.01)
 
     if !(X isa AbstractInterpretationSet)
-        X = SoleData.scalarlogiset(X; silent, allow_propositional = true)
+        # X = SoleData.scalarlogiset(X; silent, allow_propositional = true)
+        X = SoleData.scalarlogiset(X; allow_propositional = true)
     end
 
     """
@@ -180,7 +181,13 @@ function intrees(
         ruleset = @time begin
             afterpruningruleset = Vector{Rule}(undef, length(ruleset))
             Threads.@threads for (i,r) in collect(enumerate(ruleset))
-                afterpruningruleset[i] = intrees_prunerule(r, X, y; pruning_s, pruning_decay_threshold)
+                if r.antecedent isa SoleLogics.BooleanTruth
+                    # this case happens with XgBoost: the rule is a simply BooleanTruth
+                    # TODO Marco, is this the correct way to handle this case?
+                    afterpruningruleset[i] = r
+                else
+                    afterpruningruleset[i] = intrees_prunerule(r, X, y; pruning_s, pruning_decay_threshold)
+                end
             end
             afterpruningruleset
         end
