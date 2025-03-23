@@ -9,6 +9,8 @@ using Random
 using JSON
 using SoleModels      # Assicurati che i moduli SoleModels e SoleLogics siano configurati
 using SoleLogics
+import Dates: now
+using DataStructures
 
 include("apiRuleCosi.jl")
 
@@ -21,6 +23,13 @@ end
 if !@isdefined sklearn
     const sklearn = PyNULL()
 end
+
+Conda.pip_interop(true, PyCall.Conda.ROOTENV)
+PyCall.Conda.pip("install", "git+https://github.com/jobregon1212/rulecosi.git", PyCall.Conda.ROOTENV)
+PyCall.Conda.pip("install", "scikit-learn", PyCall.Conda.ROOTENV)
+
+copy!(rulecosi, pyimport_conda("rulecosi", "rulecosi"))
+copy!(sklearn, pyimport_conda("sklearn.ensemble", "sklearn"))
 
 ##############################
 # 1) Struct & BFS/DFS
@@ -50,13 +59,13 @@ function build_sklearnlike_arrays(branch, n_classes::Int, class_to_idx::Dict{Str
             nodes[i+1].counts[cidx+1] = 10.0
         elseif b isa Branch{String}
             thr = b.antecedent.value.threshold
-            fx  = b.antecedent.value.metacond.feature.i_variable - 1
-            left_i  = dfs(b.posconsequent)
+            fx = b.antecedent.value.metacond.feature.i_variable - 1
+            left_i = dfs(b.posconsequent)
             right_i = dfs(b.negconsequent)
-            nodes[i+1].feature   = fx
+            nodes[i+1].feature = fx
             nodes[i+1].threshold = thr
-            nodes[i+1].left      = left_i
-            nodes[i+1].right     = right_i
+            nodes[i+1].left = left_i
+            nodes[i+1].right = right_i
             for c in 1:n_classes
                 nodes[i+1].counts[c] = nodes[left_i+1].counts[c] + nodes[right_i+1].counts[c]
             end
@@ -67,18 +76,18 @@ function build_sklearnlike_arrays(branch, n_classes::Int, class_to_idx::Dict{Str
     end
     dfs(branch)
     n_nodes = length(nodes)
-    children_left  = Vector{Int}(undef, n_nodes)
+    children_left = Vector{Int}(undef, n_nodes)
     children_right = Vector{Int}(undef, n_nodes)
-    feature        = Vector{Int}(undef, n_nodes)
-    threshold      = Vector{Float64}(undef, n_nodes)
+    feature = Vector{Int}(undef, n_nodes)
+    threshold = Vector{Float64}(undef, n_nodes)
     value = Array{Float64,3}(undef, n_nodes, 1, n_classes)
     for i in 1:n_nodes
-        children_left[i]  = nodes[i].left
+        children_left[i] = nodes[i].left
         children_right[i] = nodes[i].right
-        feature[i]        = nodes[i].feature
-        threshold[i]      = nodes[i].threshold
+        feature[i] = nodes[i].feature
+        threshold[i] = nodes[i].threshold
         for c in 1:n_classes
-            value[i,1,c] = nodes[i].counts[c]
+            value[i, 1, c] = nodes[i].counts[c]
         end
     end
     return children_left, children_right, feature, threshold, value, n_nodes
@@ -87,7 +96,7 @@ end
 function serialize_branch_sklearn(b, classes::Vector{String}, class_to_idx::Dict{String,Int})
     n_classes = length(classes)
     cl, cr, ft, th, val, nn = build_sklearnlike_arrays(b, n_classes, class_to_idx)
-    posfeats = ft[ft .>= 0]
+    posfeats = ft[ft.>=0]
     maxfeat = isempty(posfeats) ? 0 : maximum(posfeats)
     n_features = maxfeat + 1
     return Dict(
@@ -112,14 +121,14 @@ Creates a dictionary with:
 function serialize_julia_ensemble(ensemble, classes::Vector{String})
     class_to_idx = Dict{String,Int}()
     for (i, cl) in enumerate(classes)
-        class_to_idx[cl] = i-1
+        class_to_idx[cl] = i - 1
     end
     trees = [serialize_branch_sklearn(b, classes, class_to_idx) for b in ensemble.models]
     return Dict("classes" => classes, "trees" => trees)
 end
 
 ##############################
-# 2) BLOCCO PYTHON
+# 2) BLOCK PYTHON
 ##############################
 
 py"""
@@ -212,7 +221,7 @@ def get_simplified_rules(rc, heuristics_digits=4, condition_digits=1):
 """
 
 ##############################
-# 3) FUNZIONE process_rules_decision_list: costruisce la decision list nel formato desiderato
+# 3) FUN process_rules_decision_list
 ##############################
 """
 process_rules_decision_list(rules::Vector{String})
@@ -223,65 +232,65 @@ The last rule with empty condition is treated as the default rule.
 function process_rules_decision_list(rules::Vector{String})
     structured = Tuple{String,String}[]
     default_outcome = nothing
-    
+
     for line in rules
         if occursin("cov", line)
             continue
         end
-        
+
         parts = split(line, ":")
         if length(parts) < 2
             continue
         end
-        
+
         rule_part = strip(parts[2])
         parts2 = split(rule_part, "→")
         if length(parts2) < 2
             continue
         end
-        
-        cond = strip(parts2[1], ['(',')',' '])
+
+        cond = strip(parts2[1], ['(', ')', ' '])
         # Fix parentheses and operators
         cond = replace(cond, "˄" => " ∧ ")
         # Ensure balanced parentheses
         if !startswith(cond, "(") && occursin("∧", cond)
             cond = "(" * cond * ")"
         end
-        
+
         out = strip(parts2[2])
-        out = replace(out, "["=>"")
-        out = replace(out, "]"=>"")
-        out = replace(out, "'"=>"")
-        
+        out = replace(out, "[" => "")
+        out = replace(out, "]" => "")
+        out = replace(out, "'" => "")
+
         if isempty(cond) || cond == "( )"
             default_outcome = out
             continue
         end
-        
+
         push!(structured, (cond, out))
     end
-    
+
     return structured, default_outcome
 end
 
 function build_rule_list(decision_list::Vector{Tuple{String,String}}, default_outcome::String)
     rules = Rule[]
-    
+
     for (cond_str, out) in decision_list
         try
             # Ensure proper spacing around operators
             cond_str = replace(cond_str, ">" => " > ")
             cond_str = replace(cond_str, "≤" => " ≤ ")
             cond_str = replace(cond_str, "∧" => " ∧ ")
-            
+
             φ = SoleLogics.parseformula(
                 cond_str;
-                atom_parser = a -> Atom(
+                atom_parser=a -> Atom(
                     parsecondition(
                         ScalarCondition,
                         a;
-                        featuretype = VariableValue,
-                        featvaltype = Real
+                        featuretype=VariableValue,
+                        featvaltype=Real
                     )
                 )
             )
@@ -293,27 +302,26 @@ function build_rule_list(decision_list::Vector{Tuple{String,String}}, default_ou
             continue
         end
     end
-    
+
     return rules, default_outcome
 end
 
 function convertToDecisionList(raw_rules::Vector{String})
     # Process the raw rules and extract the default outcome
     structured_rules, default_outcome = process_rules_decision_list(raw_rules)
-    
+
     # Build the rule list and get the default outcome
     rules, default = build_rule_list(structured_rules, default_outcome)
-    
+    #rules = dnf(rules)
     # Create the DecisionList
     return DecisionList(
         rules,
-        default,
-        (source = "RuleCOSI", timestamp = now())
+        default
     )
 end
 
 ##############################
-# 4) CONSTRUCTION OF THE DECISION SET IN DNF
+# 4) Build ds on dnf
 ##############################
 
 # Use the Rule type from SoleModels to build a DecisionSet.
@@ -326,47 +334,44 @@ end
 # 5) FUNCTION __init__
 ##############################
 
-function rulecosiplus(ensemble::Any)
-    Conda.pip_interop(true, PyCall.Conda.ROOTENV)
-    PyCall.Conda.pip("install", "git+https://github.com/jobregon1212/rulecosi.git", PyCall.Conda.ROOTENV)
-    PyCall.Conda.pip("install", "scikit-learn", PyCall.Conda.ROOTENV)
-    
-    copy!(rulecosi, pyimport("rulecosi"))
-    copy!(sklearn, pyimport("sklearn.ensemble"))
-    
-    current_dir = dirname(@__FILE__)
-    csv_path = joinpath(current_dir,"..","data","wisconsin.csv") # TODO Change this to generic dataset path in param
-    data = CSV.read(csv_path, DataFrame)
-    X = select(data, Not(:Class))
-    y = data.Class
-    
-    unique_classes = unique(y)
-    classes = collect(string.(unique_classes))
-    
-    Random.seed!(1212)
-    idx = shuffle(1:nrow(data))
-    ntrain = floor(Int, 0.9*nrow(data))
-    train_idx = idx[1:ntrain]
-    test_idx = idx[ntrain+1:end]
-    X_train = Matrix(X[train_idx, :])
-    y_train = y[train_idx]
-    X_test  = Matrix(X[test_idx, :])
-    y_test  = y[test_idx]
-    
-    classes = map(String, collect(unique(y)))
+function rulecosiplus(ensemble::Any, X_train::Any, y_train::Any)
+
+    # Convert training data to matrix format if needed
+    if !isa(X_train, Matrix)
+        X_train_matrix = Matrix(X_train)
+    else
+        X_train_matrix = X_train
+    end
+
+    # Generate column names
+    if isa(X_train, DataFrame)
+        column_names = names(X_train)
+    else
+        num_features = size(X_train_matrix, 2)
+        column_names = ["V$i" for i in 1:num_features]
+    end
+
+    # Serialize the ensemble
+    classes = map(String, collect(unique(y_train)))
     dict_model = serialize_julia_ensemble(ensemble, classes)
-    
+
+    # Build sklearn model
     builder = py"build_sklearn_model_from_julia"
     base_ensemble = builder(dict_model)
-    
+
     println("======================")
-    println("Ensemble serialize", dict_model)
+    println("Ensemble serialize:", dict_model)
     println("======================")
-    
+
     num_estimators = pycall(pybuiltin("len"), Int, base_ensemble["estimators_"])
-    println("Number of trees loaded in base_ensemble:", num_estimators)
-    
-#=
+    println("number of trees in base_ensemble:", num_estimators)
+
+    n_samples = size(X_train_matrix, 1)
+    n_classes = length(unique(y_train))
+
+    println("Dataset: $n_samples campioni, $n_classes classi")
+
+    #=
             RuleCOSIExtractor
 
         Extracts, combines, and simplifies rules from decision tree ensembles,
@@ -505,22 +510,28 @@ function rulecosiplus(ensemble::Any)
         conf_threshold=0.25, # α
         cov_threshold=0.1, # β
         random_state=3,
-        column_names=names(X)
+        column_names=column_names,
+        verbose=2
     )
-    
-    @time rc.fit(X_train, y_train)
-    
+
+
+    @time rc.fit(X_train_matrix, Vector(y_train))
+
+
+    max_rules = max(20, n_classes * 5)
+
     raw_rules = py"get_simplified_rules"(rc, 4, 1)
     println("Raw rules:")
     for r in raw_rules
         println(r)
     end
-    
+
     dl = convertToDecisionList(raw_rules)
 
-    
-    ds = convertApi(dl)
-    return ds
+    return dl
 end
 
 end
+
+# Required modules (adjust paths as needed)
+#include("apiRuleCosi.jl")
