@@ -43,23 +43,26 @@ end
 Recursively converts a decision tree element to a string representation.
 Handles Atoms, SyntaxBranches, and structures with grandchildren.
 """
-function element_to_string(x)
-    if x isa Atom
-        return condition_to_string(x.value)
-    elseif x isa SyntaxBranch
-        t = string(x.token)
-        children_strs = map(element_to_string, x.children)
-        if t == "¬"
-            return "¬ " * children_strs[1]
-        else
-            return "(" * join(children_strs, " " * t * " ") * ")"
-        end
-    elseif hasproperty(x, :grandchildren)
-        return "(" * join(map(element_to_string, x.grandchildren), " ∧ ") * ")"
-    else
-        return string(x)
-    end
-end
+
+#### already defined in apiREFNESole.jl
+
+# function element_to_string(x)
+#     if x isa Atom
+#         return condition_to_string(x.value)
+#     elseif x isa SyntaxBranch
+#         t = string(x.token)
+#         children_strs = map(element_to_string, x.children)
+#         if t == "¬"
+#             return "¬ " * children_strs[1]
+#         else
+#             return "(" * join(children_strs, " " * t * " ") * ")"
+#         end
+#     elseif hasproperty(x, :grandchildren)
+#         return "(" * join(map(element_to_string, x.grandchildren), " ∧ ") * ")"
+#     else
+#         return string(x)
+#     end
+# end
 
 """
     rule_to_string(rule)
