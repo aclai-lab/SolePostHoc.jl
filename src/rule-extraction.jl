@@ -30,10 +30,15 @@ using SoleModels: RuleExtractor
 import SoleModels: isexact, modalextractrules
 
 function _get_rule_extractor_docstring(ruleextractorname::String, method)
-    return """Extract rules from a symbolic model using [`$(string(method))`](ref).""" *
-    "\n\n" *
-    """See also [`modalextractrules`](@ref), [`RuleExtractor`](@ref)."""
+  return """Extract rules from a symbolic model using [`$(string(method))`](ref).""" *
+         "\n\n" *
+         """See also [`modalextractrules`](@ref), [`RuleExtractor`](@ref)."""
 end
+
+
+#======================================================================================================================================
+                                                        InTrees
+======================================================================================================================================#
 
 export InTreesRuleExtractor
 export intrees
@@ -43,47 +48,29 @@ include("intrees/apiIntrees.jl")
 
 """$(_get_rule_extractor_docstring("InTreesRuleExtractor", intrees))"""
 @kwdef struct InTreesRuleExtractor <: RuleExtractor
-    prune_rules::Bool = true
-    pruning_s::Union{Float64,Nothing} = nothing
-    pruning_decay_threshold::Union{Float64,Nothing} = nothing
-    rule_selection_method::Symbol = :CBC
-    rule_complexity_metric::Symbol = :natoms
-    # accuracy_rule_selection = nothing
-    min_coverage::Union{Float64,Nothing} = nothing
+  prune_rules::Bool = true
+  pruning_s::Union{Float64,Nothing} = nothing
+  pruning_decay_threshold::Union{Float64,Nothing} = nothing
+  rule_selection_method::Symbol = :CBC
+  rule_complexity_metric::Symbol = :natoms
+  # accuracy_rule_selection = nothing
+  min_coverage::Union{Float64,Nothing} = nothing
 end
 
 function modalextractrules(::InTreesRuleExtractor, m, args...; kwargs...)
   dl = intrees(m, args...; kwargs...)
-  ll = listrules(dl) # decision list to list of rules
+  ll = listrules(dl, use_shortforms=false) # decision list to list of rules
   rules_obj = convert_classification_rules(ll)
-  ds = DecisionSet(rules_obj)  
-  return ds
+  dsintrees = DecisionSet(rules_obj)
+  return dsintrees
 end
 
-#= 
-  IS NOT RULE EXTRACTION BUT MAYBE IN FUTURE 
-    export BellatrexRuleExtractor
-    export bellatrex
-    include("bellatrex.jl")
-
-
-    """$(_get_rule_extractor_docstring("BellatrexRuleExtractor", bellatrex))"""
-    @kwdef struct BellatrexRuleExtractor <: RuleExtractor
-        ntrees::Float64
-        ndims::Union{Nothing,Int}
-        nclusters::Int
-    end
-
-    function modalextractrules(::BellatrexRuleExtractor, m, args...; kwargs...)
-      dl = bellatrex(m, args...; kwargs...)
-      return listrules(dl)
-    end
-=#
+#======================================================================================================================================
+                                                        Lumen
+======================================================================================================================================#
 
 export lumen, Lumen
 export LumenRuleExtractor
-
-export batrees, BATrees
 
 using SoleModels: RuleExtractor
 import SoleModels: isexact, modalextractrules
@@ -99,7 +86,12 @@ function modalextractrules(::LumenRuleExtractor, m, args...; kwargs...)
   return ds
 end
 
-#= TODO: Include BATrees =#
+#======================================================================================================================================
+                                                        Batrees
+======================================================================================================================================#
+
+export batrees, BATrees
+
 include("BA-Trees/src/main.jl")
 @reexport using .BATrees
 
@@ -108,11 +100,13 @@ include("BA-Trees/src/main.jl")
 struct BATreesRuleExtractor <: RuleExtractor end
 
 function modalextractrules(::BATreesRuleExtractor, m, args...; kwargs...)
-  ds = batrees(m, dsOutput = true, args...; kwargs...)
-  return ds
+  dsbatrees = batrees(m, dsOutput=true, args...; kwargs...)
+  return dsbatrees
 end
 
-#
+#======================================================================================================================================
+                                                        Refne
+======================================================================================================================================#
 include("Refne/src/main.jl")
 include("Refne/src/apiREFNESole.jl")
 @reexport using .REFNE
@@ -127,8 +121,9 @@ function modalextractrules(::REFNERuleExtractor, m, args...; kwargs...)
   return ds
 end
 
-# TODO see and test this
-#==============================================================================#
+#======================================================================================================================================
+                                                        TrePan
+======================================================================================================================================#
 include("Trepan/src/main.jl")
 include("Trepan/src/apiTREPANSole.jl")
 @reexport using .TREPAN
@@ -143,9 +138,11 @@ function modalextractrules(::TREPANRuleExtractor, m, args...; kwargs...)
   return ds
 end
 
-#=
+#======================================================================================================================================
+                                                        RULECOSIPLUS
+======================================================================================================================================#
 include("RuleCosiplus/src/main.jl")
-#include("RuleCosiplus/src/apiRuleCosi.jl")
+include("RuleCosiplus/src/apiRuleCosi.jl")
 @reexport using .RULECOSIPLUS
 
 
@@ -153,9 +150,12 @@ include("RuleCosiplus/src/main.jl")
 struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
 
 function modalextractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
-  ds = rulecosiplus(m, args...; kwargs...)  # for now we return directly decision set object
-  return ds
+  dl = rulecosiplus(f, x, y) # decision list   
+  ll = listrules(dl, use_shortforms=false) # decision list to list of rules
+  rules_obj = convert_classification_rules(ll)
+  dsrulecosiplus = DecisionSet(rules_obj)
+  return dsrulecosiplus
 end
-=#
+
 
 end
