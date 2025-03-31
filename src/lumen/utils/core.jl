@@ -126,7 +126,11 @@ function truth_combinations(
             combination_vector = vcat(collect(values(combination_dict))...)
             
             if !(combination_vector in values(results))
-                result = apply_function(model, combination_vector)
+                result = if model isa AbstractModel
+                    apply_function(model, DataFrame(reshape(combination_vector, 1, :), :auto))
+                else
+                    apply_function(model, combination_vector)
+                end
                 push!(get!(Vector{BigInt}, results, result), BigInt(i))
                 label_count[result] = get(label_count, result, 0) + 1
             end
