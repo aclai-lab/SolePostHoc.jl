@@ -30,11 +30,11 @@ function truth_combinations(
     print_progress = true,
     silent = false,
 )
-    # Inizializzazione di strutture dati per gestire le soglie e gli atomi per feature
+    # Initialization of data structures to manage thresholds and atoms for each feature
     thresholds_by_feature = Dict{Int,Vector{Float64}}()
     atoms_by_feature = Dict{Int,Vector{Tuple{Float64,Bool}}}()
 
-    # Popolamento delle strutture dati con le soglie e gli atomi
+    # Populating data structures with thresholds and atoms
     for subalpha in alphabet.subalphabets
         feat = subalpha.featcondition[1].feature.i_variable
         thresholds_by_feature[feat] = sort(subalpha.featcondition[2])
@@ -46,12 +46,12 @@ function truth_combinations(
         push!(get!(Vector{Tuple{Float64,Bool}}, atoms_by_feature, feat), (threshold, true))
     end
 
-    # Ordinamento degli atomi per ciascuna feature
+    # Sorting atoms for each feature
     for (_, atom_list) in atoms_by_feature
         sort!(atom_list, by = first)
     end
 
-    # Calcolo del numero totale di combinazioni
+    # Calculation of the total number of combinations
     num_atoms = length(atoms)
     all_combinations = BigInt(2)^num_atoms
     println("num_atoms: ", num_atoms)
@@ -64,9 +64,9 @@ function truth_combinations(
         num_combinations = BigInt(round(all_combinations * vertical))
     end
 
-    # Stima del tempo di esecuzione
+    # Estimation of execution time
     silent || begin
-        println("Stima del tempo di esecuzione...")
+        println("Estimating execution time...")
         sample_size = min(1000, num_combinations)
         start_time = time()
 
@@ -87,21 +87,21 @@ function truth_combinations(
         print_estimated_time(total_estimated_time)
     end
 
-    # Inizio della generazione delle combinazioni
-    silent || println("Inizio della generazione delle combinazioni...")
-    silent || println("Totale combinazioni da generare: $num_combinations")
+    # Start of combination generation
+    silent || println("Starting combination generation...")
+    silent || println("Total combinations to generate: $num_combinations")
 
     results = Dict{Any,Vector{BigInt}}()
     label_count = Dict{Any,Int}()
 
-    # Processo di generazione e valutazione delle combinazioni
+    # Process of generating and evaluating combinations
     start_time = time()
     contradictions = 0
     i_rand = 0
-    update_interval = max(1, num_combinations ÷ 100)  # Aggiorna ogni 1% di progresso
+    update_interval = max(1, num_combinations ÷ 100)  # Update every 1% of progress
     
     for i = 0:(num_combinations-1)
-        i_v = i                                      # Indice per la progressbar
+        i_v = i  # Index for the progress bar
         if isone(vertical)
             combination, has_contradiction = process_combination(
                 BigInt(i),
@@ -111,13 +111,13 @@ function truth_combinations(
             )
         else
             has_contradiction = true
-                i = rand(BigInt(0):(all_combinations-1))
-                combination, has_contradiction = process_combination(
-                    BigInt(i),
-                    num_atoms,
-                    thresholds_by_feature,
-                    atoms_by_feature,
-                )
+            i = rand(BigInt(0):(all_combinations-1))
+            combination, has_contradiction = process_combination(
+                BigInt(i),
+                num_atoms,
+                thresholds_by_feature,
+                atoms_by_feature,
+            )
         end
         if has_contradiction
             contradictions += 1
@@ -132,7 +132,7 @@ function truth_combinations(
             end
         end
 
-        # Aggiornamento della barra di avanzamento testuale FIXME TOTALMENTE RIMUOVIBILE ?
+        # Update of textual progress bar FIXME CAN BE COMPLETELY REMOVED?
         print_progress && begin
             if i_v % update_interval == 0 || i_v == num_combinations - 1
                 progress = BigFloat(i_v + 1) / num_combinations
@@ -140,12 +140,12 @@ function truth_combinations(
             end
         end
     end
-    print_progress && println()  # Nuova linea dopo la barra di avanzamento
+    print_progress && println()  # New line after progress bar
 
     end_time = time()
     real_time_per_combination = (end_time - start_time) / num_combinations
 
-    # Stampa dei risultati
+    # Print results
     silent || print_results_summary(
         real_time_per_combination,
         Int64(contradictions),
@@ -241,10 +241,10 @@ function concat_results(
 )
     results = dict_to_tritvector(results, num_atoms)
     res = Dict{Any,TwoLevelDNFFormula}()
-    println("\nRisultati dettagliati:")
+    println("\nDetailed results:")
 
     for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
-        println("[$result] ($(length(combinations)) combinazioni)")
+        println("[$result] ($(length(combinations)) combinations)")
         res[result] = TwoLevelDNFFormula(
             Vector{TritVector}(combinations),
             num_atoms,
@@ -259,11 +259,11 @@ function concat_results(results::Any, my_atoms::Vector)
     num_atoms = length(my_atoms)
     results = dict_to_tritvector(results, num_atoms)
     res = Dict{Any,TwoLevelDNFFormula}()
-    println("\nRisultati dettagliati:")
+    println("\nDetailed results:")
 
     for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
-        println("[$result] ($(length(combinations)) combinazioni)")
-        res[result] = TwoLevelDNFFormula(my_atoms, Vector{TritVector}(combinations)) # if we resolve "constructs" we cane also use -> res[result] = TwoLevelDNFFormula(Vector{TritVector}(combinations), my_atoms)
+        println("[$result] ($(length(combinations)) combinations)")
+        res[result] = TwoLevelDNFFormula(my_atoms, Vector{TritVector}(combinations)) # if we resolve "constructs" we can also use -> res[result] = TwoLevelDNFFormula(Vector{TritVector}(combinations), my_atoms)
     end
     return res
 end
@@ -285,11 +285,11 @@ Returns:
 function verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLevelDNFFormula)
     @info "Starting verification of simplification"
 
-    # Funzione per generare assegnazioni basate sui BitVector
+    # Function to generate assignments based on BitVector
     function generate_smart_assignments(formula, num_samples)
         assignments = Set{Dict{Int,Bool}}()
 
-        # Converti ogni BitVector in un Dict{Int,Bool}
+        # Convert each BitVector into a Dict{Int,Bool}
         for combination in eachcombination(formula)
             assignment = Dict{Int,Bool}()
             for (i, bit) in enumerate(combination)
@@ -301,7 +301,7 @@ function verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLeve
             end
         end
 
-        # Aggiungi alcune assegnazioni casuali per aumentare la copertura
+        # Add some random assignments to increase coverage
         while length(assignments) < num_samples
             random_assignment = Dict(i => rand(Bool) for i = 1:nuberofatoms(formula))
             push!(assignments, random_assignment)
@@ -309,7 +309,7 @@ function verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLeve
         return collect(assignments)
     end
 
-    # Funzione ottimizzata per valutare la formula
+    # Optimized function to evaluate the formula
     function evaluate_custom_or_formula(formula, assignment)
         for combination in eachcombination(formula)
             all_true = true
@@ -332,11 +332,11 @@ function verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLeve
         return false
     end
 
-    # Genera un set di assegnazioni "intelligenti" basate sulle combinazioni esistenti
-    num_samples = min(1000, 2^nuberofatoms(original))  # Limita il numero di campioni per input molto grandi
+    # Generate a set of "smart" assignments based on existing combinations
+    num_samples = min(1000, 2^nuberofatoms(original))  # Limit the number of samples for very large inputs
     assignments = generate_smart_assignments(original, num_samples)
 
-    # Verifica le formule utilizzando le assegnazioni generate
+    # Verify formulas using generated assignments
     for (i, assignment) in enumerate(assignments)
         original_result = evaluate_custom_or_formula(original, assignment)
         simplified_result = evaluate_custom_or_formula(simplified, assignment)
@@ -348,7 +348,7 @@ function verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLeve
             return false
         end
 
-        # Stampa il progresso ogni 100 iterazioni
+        # Print progress every 100 iterations
         if i % 100 == 0
             @info "Processed $i out of $num_samples assignments"
         end

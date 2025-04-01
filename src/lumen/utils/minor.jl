@@ -56,7 +56,7 @@ Returns:
     Dict{Any, Vector{BitVector}}: A new dictionary with the same keys as `d`, but with the values converted to `BitVector`.
 """
 function dict_to_bitvector(d::Dict{Any,Vector{BigInt}}, np::Int)
-    # Usa la comprensione del dizionario e digits2 per la conversione diretta
+    # Use dictionary comprehension and digits2 for direct conversion
     Dict(k => [digits(v, base = 2, pad = np) |> BitVector for v in vals] for (k, vals) in d)
 end
 
