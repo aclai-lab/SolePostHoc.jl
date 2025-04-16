@@ -26,7 +26,7 @@ import DecisionTree as DT
 export lumen
 
 """
-    lumen(model, minimization_scheme = :espresso;
+    lumen(model, minimization_scheme = :mitespresso;
         start_time = time(),
         vertical = 1.0,
         horizontal = 1.0,
@@ -34,6 +34,11 @@ export lumen
         controllo = false,
         minimization_kwargs = (;),
         filteralphabetcallback! = identity,
+        solemodel = nothing,
+        apply_function = SoleModels.apply,
+        silent = false,
+        return_info = true,
+        vetImportance = [],
         kwargs...
     )
 
@@ -42,7 +47,7 @@ logical rules from a decision tree ensemble model into DNF (Disjunctive Normal F
 
 # Arguments
 - `model`: The decision tree ensemble model to analyze
-- `minimization_scheme::Symbol`: DNF minimization algorithm to use (e.g., :espresso)
+- `minimization_scheme::Symbol`: DNF minimization algorithm to use (default: :mitespresso)
 
 # Keyword arguments
 - `start_time`: Start time for performance measurement
@@ -52,6 +57,11 @@ logical rules from a decision tree ensemble model into DNF (Disjunctive Normal F
 - `controllo::Bool`: Flag to enable validation mode for comparing results
 - `minimization_kwargs::NamedTuple`: Additional arguments for the minimization algorithm
 - `filteralphabetcallback!`: Callback function for alphabet processing (default: identity)
+- `solemodel`: Pre-constructed SOLE model (if `nothing`, will be created from `model`)
+- `apply_function`: Function used to apply the model (default: SoleModels.apply)
+- `silent::Bool`: Flag to suppress output messages
+- `return_info::Bool`: Flag to include additional information in the return value (default: true)
+- `vetImportance`: Vector for feature importance values
 - `kwargs...`: Additional keyword arguments
 
 # Processing Steps
@@ -79,10 +89,12 @@ logical rules from a decision tree ensemble model into DNF (Disjunctive Normal F
    - Validates optimization correctness
 
 # Return
-No explicit return value, but produces:
-- Simplified DNF formulas for each class
-- Performance metrics and validation results
-- Statistical reports (when enabled)
+- When `return_info = false`: Returns a `DecisionSet` containing minimized rules
+- When `return_info = true`: Returns a tuple with:
+  - `DecisionSet` containing minimized rules
+  - Named tuple with additional information:
+    - `vectPrePostNumber`: Vector of tuples showing (pre-minimization, post-minimization) term counts
+    - `unminimized_ds`: `DecisionSet` containing unminimized rules
 
 # Notes
 - Parameters `vertical` and `horizontal` must be in range (0.0, 1.0]
@@ -94,7 +106,7 @@ No explicit return value, but produces:
 ```julia
 model = load_decision_tree_model()
 start_time = time()
-lumen(model, :espresso)
+decision_set, info = lumen(model, :mitespresso)
 ```
 
 See also
@@ -139,8 +151,8 @@ function lumen(
     # PART 2.a: Starter Ruleset Extraction
     silent || println(
         "\n\n$COLORED_TITLE$TITLE\n PART 2.a STARTER RULESET ESTRACTION \n$TITLE$RESET"
-        )
-    
+    )
+
     ruleset = @time begin
         if isensemble(model)
             rs = unique([listrules(tree; use_shortforms=true) for tree in SoleModels.models(model)])
@@ -160,7 +172,7 @@ function lumen(
         all_atoms = collect(atoms(SoleModels.alphabet(model, false)))
         num_all_atoms = length(all_atoms)
         my_atoms = unique(all_atoms)
-        
+
         silent || println(my_atoms)
 
         silent || println(
@@ -170,19 +182,19 @@ function lumen(
         # Get number of features from the maximum feature index in atoms
         n_features = maximum(atom.value.metacond.feature.i_variable for atom in my_atoms)
         !isa(n_features, Integer) && error("Symbolic feature names not supported")
-        
+
         my_alphabet = filteralphabetcallback(process_alphabet(my_atoms, n_features))
-        
+
         all(x -> (x == (<)), SoleData.test_operator.(subalphabets(my_alphabet))) ||
-            error("Only < operator supported")
-        
+        error("Only < operator supported")
+
         num_all_atoms, my_atoms, my_alphabet
     end
 
     if !controllo
         silent || println(
             "\n\n$COLORED_TITLE$TITLE\n PART 3 TABLE GENERATION \n$TITLE$RESET"
-            )
+        )
 
         # PART 3: Table Generation
         results, label_count = @time "Lumen: computing combinations" begin
@@ -201,7 +213,7 @@ function lumen(
                 subalpha.featcondition[1].feature.i_variable => sort(subalpha.featcondition[2]) 
                 for subalpha in my_alphabet.subalphabets
             )
-            
+
             atoms_by_feature = Dict{Int,Vector{Tuple{Float64,Bool}}}()
             for atom in my_atoms
                 feat = atom.value.metacond.feature.i_variable
@@ -214,15 +226,15 @@ function lumen(
             for (_, atom_list) in atoms_by_feature
                 sort!(atom_list, by=first)
             end
-            
+
             # Results Processing
             combined_results =
                 Lumen.concat_results(results, num_atoms, thresholds_by_feature, atoms_by_feature)
         =#
         # Results Processing
-        combined_results = 
+        combined_results =
             Lumen.concat_results(results, my_atoms)
-        
+
         return_info && (unminimized_rules = Rule[])
         minimized_rules = Rule[]
         vectPrePostNumber = Vector{Tuple{Int,Int}}()
@@ -230,7 +242,7 @@ function lumen(
         # Process each result
         for (result, formula) in combined_results
             silent || println("Risultato: $result")
-            
+
             if return_info
                 push!(unminimized_rules, convert_DNF_formula(formula, result, 1.0))
             end
@@ -239,14 +251,14 @@ function lumen(
                 Val(minimization_scheme),
                 formula;
                 minimization_kwargs...,
-                )
+            )
             formula_semplificata = formula_semplificata_t.value
 
 
 
             try
                 @info "Simplification completed in $(formula_semplificata_t.time) seconds"
-                
+
                 if !is_minimization_scheme_espresso
                     silent || println("==========================")
                     silent || println("comb:", eachcombination(formula_semplificata))
@@ -255,22 +267,22 @@ function lumen(
                     ntermpresemp = nterms(formula)
                     ntermpostsemp = nterms(formula_semplificata)
                     push!(vectPrePostNumber, (ntermpresemp, ntermpostsemp))
-                
-                    silent || println("Termini originali: ", nterms(formula))
+
+                    silent || println("Term origin: ", nterms(formula))
                     silent || println(
-                        "Termini dopo la semplificazione: ",
+                        "Term after semp: ",
                         nterms(formula_semplificata),
                     )
-                    silent || println("Atomi/termine originali: ", natomsperterm(formula))
+                    silent || println("Atoms/term orig: ", natomsperterm(formula))
 
                     silent || println(
-                        "Atomi/termine dopo la semplificazione: ",
+                        "Atom/term post semp: ",
                         #natomsperterm(formula_semplificata),
                     )
                 end
                 silent || println()
                 if is_minimization_scheme_espresso
-                    formula_string = leftmost_disjunctive_form_to_string(formula_semplificata,horizontal,vetImportance)
+                    formula_string = leftmost_disjunctive_form_to_string(formula_semplificata, horizontal, vetImportance)
                     φ = SoleLogics.parseformula(
                         formula_string;
                         atom_parser=a -> Atom(
@@ -303,17 +315,17 @@ function lumen(
         if !return_info
             return ds
         end
-        
+
         info = (;)
         info = merge(info, (; vectPrePostNumber=vectPrePostNumber))
         return_info && (info = merge(info, (; unminimized_ds=DecisionSet(unminimized_rules))))
-        
+
         return ds, info
     end
 
     if controllo
         silent || println(
-            "\n\n$COLORED_INFO$TITLE\n PARTE 2.d È un ottimizzazione valida?\n$TITLE$RESET",
+            "\n\n$COLORED_INFO$TITLE\n PART 2.d IS THE OPTIMIZATION VALID?\n$TITLE$RESET",
         )
         are_results_equal =
          Lumen.compare_truth_combinations(modelJ, my_alphabet, my_atoms, vertical; apply_function, silent, kwargs...)
@@ -341,19 +353,19 @@ include("types/types.jl")
 # Utils
 ##
 
-# Gestione dei report su file
+# File report management
 include("utils/report.jl")
 
-# IO-Algoritmic-Utils - IO algoritmico del progetto
+# IO-Algorithmic-Utils - Project's algorithmic IO
 include("utils/IO.jl")
 
-# Minor-Algoritmic-Utils - core algoritmico del progetto
+# Minor-Algorithmic-Utils - Project's algorithmic core
 include("utils/minor.jl")
 
-# Algoritmic-Utils - core algoritmico del progetto
+# Algorithmic-Utils - Project's algorithmic core
 include("utils/core.jl")
 
-# Algoritmic-Optimization-Utils - core algoritmico del progetto se avviato in ott_mode
+# Algorithmic-Optimization-Utils - Project's algorithmic core when running in ott_mode
 include("utils/coreOttMode.jl")
 include("utils/minimization.jl")
 include("deprecate.jl")

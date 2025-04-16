@@ -44,13 +44,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
 [compat]
-ModalDecisionTrees = "0.5.1"
 Random = "1"
-ScikitLearn = "0.7.0"
-SoleBase = "0.13.0"
-SoleData = "0.16.1"
-SoleLogics = "0.13.0"
-SoleModels = "0.10.0"
 julia = "1"
 
 [extras]
@@ -64,4 +58,11 @@ RDatasets = "ce6b1742-4840-55fa-b093-852dadbb1d8b"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "MLJ", "MLJBase", "MLJDecisionTreeInterface", "DataFrames", "DecisionTree"]
+test = [
+    "Test",
+    "MLJ",
+    "MLJBase",
+    "MLJDecisionTreeInterface",
+    "DataFrames",
+    "DecisionTree",
+]

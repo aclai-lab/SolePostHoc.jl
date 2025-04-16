@@ -30,7 +30,7 @@ end
 
 
 #=
-    TODO VALUTARE CORRETTEZZA
+    TODO is valid ? 
 =#
 function generate_disjunct_all(
     combination::BitVector,
@@ -45,14 +45,13 @@ function generate_disjunct_all(
     for (feat, values) in comb
         if haskey(atoms_by_feature, feat)
             for (threshold, _) in atoms_by_feature[feat]
-                # Creiamo un atomo per ogni condizione, senza filtrare
                 if values[1] < threshold
-                    # Condizione "<"
+                    # cond "<"
                     mc = ScalarMetaCondition(VariableValue(feat), <)
                     condition = ScalarCondition(mc, threshold)
                     push!(atoms, Atom(condition))
                 else
-                    # Condizione "≥"
+                    # cond "≥"
                     mc = ScalarMetaCondition(VariableValue(feat), ≥)
                     condition = ScalarCondition(mc, threshold)
                     push!(atoms, Atom(condition))
@@ -64,8 +63,8 @@ function generate_disjunct_all(
     return isempty(atoms) ? ⊤ : ∧(atoms...)
 end
 
-# #= TODO COSTATARE CORRETTEZZA\UTILITA =#
-# #= TODO SPEZZARE IN DUE E RINOMINARE  =#
+# #= TODO isValid? =#
+# #= TODO break in 2 and rename this =#
 # """
 #     IO_print_custom_or_formula_from_mask(formula::TwoLevelDNFFormula, horizontal::Float64) !!DEPRECATE!!
 

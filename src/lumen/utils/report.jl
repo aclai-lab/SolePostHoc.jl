@@ -42,7 +42,7 @@ Args:
     model (object): The model object.
 """
 function genera_report_statistiche(
-    nome_file,
+    file_name,
     all_rules,
     ntotatoms,
     nuniqatoms,
@@ -52,91 +52,91 @@ function genera_report_statistiche(
     elapsed_time,
     model,
 )
-    open(nome_file, "w") do file
-        println(file, "=== REPORT STATISTICO DELL'ESECUZIONE ===")
-        println(file, "Data e ora: ", Dates.now())
+    open(file_name, "w") do file
+        println(file, "=== STATISTICAL REPORT OF EXECUTION ===")
+        println(file, "Date and time: ", Dates.now())
         println(file, "====================================")
 
-        # Statistiche sulle regole e gli atomi
-        println(file, "\n1. REGOLE E ATOMI")
-        println(file, "  Numero totale di regole: ", length(all_rules))
-        println(file, "  Numero di proposizioni prima dell'uniq: ", ntotatoms)
-        println(file, "  Numero di proposizioni dopo l'uniq: ", nuniqatoms)
+        # Statistics on rules and atoms
+        println(file, "\n1. RULES AND ATOMS")
+        println(file, "  Total number of rules: ", length(all_rules))
+        println(file, "  Number of propositions before deduplication: ", ntotatoms)
+        println(file, "  Number of propositions after deduplication: ", nuniqatoms)
         println(
             file,
-            "  Riduzione delle proposizioni: ",
+            "  Reduction of propositions: ",
             round((1 - nuniqatoms / ntotatoms) * 100, digits = 2),
             "%",
         )
-        println(file, "  Numero di atomi: ", nuniqatoms)
+        println(file, "  Number of atoms: ", nuniqatoms)
 
-        # Statistiche sulle combinazioni
-        println(file, "\n2. COMBINAZIONI")
-        num_combinazioni_totali = sum(length(combs) for (_, combs) in results)
-        println(file, "  Numero totale di combinazioni valide: ", num_combinazioni_totali)
+        # Statistics on combinations
+        println(file, "\n2. COMBINATIONS")
+        total_combinations = sum(length(combs) for (_, combs) in results)
+        println(file, "  Total number of valid combinations: ", total_combinations)
 
-        # Statistiche sulle etichette
-        println(file, "\n3. DISTRIBUZIONE DELLE ETICHETTE")
+        # Statistics on labels
+        println(file, "\n3. LABEL DISTRIBUTION")
         for (label, count) in sort(collect(label_count), by = x -> x[2], rev = true)
-            percentage = (count / num_combinazioni_totali) * 100
+            percentage = (count / total_combinations) * 100
             println(file, "  $label: $count (", round(percentage, digits = 2), "%)")
         end
 
-        # Statistiche sulla semplificazione
-        println(file, "\n4. SEMPLIFICAZIONE DELLE FORMULE")
+        # Statistics on simplification
+        println(file, "\n4. FORMULA SIMPLIFICATION")
         for (result, formula) in combined_results
-            formula_semplificata = minimizza_dnf(formula)
-            riduzione =
+            simplified_formula = minimize_dnf(formula)
+            reduction =
                 (
                     1 -
-                    nterms(formula_semplificata) /
+                    nterms(simplified_formula) /
                     nterms(formula)
                 ) * 100
-            println(file, "  Etichetta $result:")
-            println(file, "    Termini originali: ", nterms(formula))
+            println(file, "  Label $result:")
+            println(file, "    Original terms: ", nterms(formula))
             println(
                 file,
-                "    Termini dopo la semplificazione: ",
-                nterms(formula_semplificata),
+                "    Terms after simplification: ",
+                nterms(simplified_formula),
             )
-            println(file, "    Riduzione: ", round(riduzione, digits = 2), "%")
+            println(file, "    Reduction: ", round(reduction, digits = 2), "%")
         end
 
-        # Prestazioni
-        println(file, "\n5. PRESTAZIONI")
+        # Performance
+        println(file, "\n5. PERFORMANCE")
         println(
             file,
-            "  Tempo totale di esecuzione: ",
+            "  Total execution time: ",
             round(elapsed_time, digits = 2),
-            " secondi",
+            " seconds",
         )
         println(
             file,
-            "  Tempo medio per combinazione: ",
-            round(elapsed_time / num_combinazioni_totali * 1000, digits = 2),
-            " millisecondi",
+            "  Average time per combination: ",
+            round(elapsed_time / total_combinations * 1000, digits = 2),
+            " milliseconds",
         )
 
-        # Complessità
-        println(file, "\n6. COMPLESSITÀ")
-        println(file, "  Numero di alberi nella foresta: ", length(model.trees))
+        # Complexity
+        println(file, "\n6. COMPLEXITY")
+        println(file, "  Number of trees in the forest: ", length(model.trees))
 
-        # Aggiunta della stampa delle formule semplificate
-        println(file, "\n7. FORMULE SEMPLIFICATE")
+        # Adding the print of simplified formulas
+        println(file, "\n7. SIMPLIFIED FORMULAS")
         for (result, formula) in combined_results
-            println(file, "  Etichetta $result:")
-            formula_semplificata = minimizza_dnf(formula)
-            println(file, "    Formula originale:")
-            stampa_dnf(file, formula, 10)
-            println(file, "    Formula semplificata:")
-            stampa_dnf(file, formula_semplificata, 10)
+            println(file, "  Label $result:")
+            simplified_formula = minimize_dnf(formula)
+            println(file, "    Original formula:")
+            print_dnf(file, formula, 10)
+            println(file, "    Simplified formula:")
+            print_dnf(file, simplified_formula, 10)
             println(
                 file,
-                "    Riduzione: ",
+                "    Reduction: ",
                 round(
                     (
                         1 -
-                        nterms(formula_semplificata) /
+                        nterms(simplified_formula) /
                         nterms(formula)
                     ) * 100,
                     digits = 2,
@@ -147,8 +147,8 @@ function genera_report_statistiche(
         end
 
         println(file, "\n====================================")
-        println(file, "Fine del report")
+        println(file, "End of report")
 
     end
-    println("Report generato con successo: $nome_file")
+    println("Report successfully generated: $file_name")
 end

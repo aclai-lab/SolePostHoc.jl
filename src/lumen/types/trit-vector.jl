@@ -1,4 +1,3 @@
-# This Trit implementation was created with the help of Claude (claude.ai)
 struct TritVector
     # Store all values in a single bit vector
     # Each trit takes 2 consecutive bits

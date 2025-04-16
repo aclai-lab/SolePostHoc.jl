@@ -1,8 +1,4 @@
 """
-CODICE GENERATO CON IA 
-"""
-
-"""
 Represents a single constraint with a variable, operator, and value.
 """
 struct Constraint
@@ -61,10 +57,10 @@ function parse_formula(formula_lines::Vector{<:AbstractString})  # Modificata qu
     for line in formula_lines
         isempty(strip(line)) && continue
 
-        # Rimuove "OR[n]:" e "SoleLogics.SyntaxBranch:"
+        # Rm "OR[n]:" e "SoleLogics.SyntaxBranch:"
         constraints_str = split(line, ":", limit = 3)[end] |> strip
 
-        # Divide in singoli vincoli
+        # Div in singoli vincoli
         constraint_parts = split(constraints_str, "∧")
 
         constraints = Constraint[]
@@ -141,12 +137,10 @@ Runs the `find_valid_instance` function to find a valid instance of the constrai
 This function is an example of how to use the `find_valid_instance` function to find a valid instance of the constraints. It first creates an example input formula, then parses the formula into a vector of `Branch` objects, and finally calls `find_valid_instance` to find a valid instance of the constraints. The valid instance is then printed to the console.
 """
 function run_generate_istance()
-    # Esempio di input
     formula = """
   OR[1]: SoleLogics.SyntaxBranch: V4 ≥ 1.7000000000000002 ∧ V2 ≥ 2.6500000000000004 ∧ V3 ≥ 5.05
     """
 
-    # Converti le sottostringhe in stringhe complete
     formula_lines = String.(split(strip(formula), "\n"))
     branches = parse_formula(formula_lines)
     instance = find_valid_instance(branches)

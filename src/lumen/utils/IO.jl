@@ -10,11 +10,11 @@ This function prints a message indicating the estimated time for the computation
 """
 function print_estimated_time(total_estimated_time::BigFloat)
     if total_estimated_time < 60
-        println("Tempo stimato: circa $(round(total_estimated_time, digits=2)) secondi")
+        println("Estimated time: approx $(round(total_estimated_time, digits=2)) seconda")
     elseif total_estimated_time < 3600
-        println("Tempo stimato: circa $(round(total_estimated_time / 60, digits=2)) minuti")
+        println("Estimated time: approx $(round(total_estimated_time / 60, digits=2)) minut")
     else
-        println("Tempo stimato: circa $(round(total_estimated_time / 3600, digits=2)) ore")
+        println("Estimated time: approx $(round(total_estimated_time / 3600, digits=2)) hours")
     end
 end
 
@@ -41,17 +41,16 @@ function print_results_summary(
     invalid_percentage = (Float64(contradictions) / Float64(num_combinations)) * 100
 
     println()
-    println("Precisione del tempo: $real_time_per_combination")
-    println("Generazione delle combinazioni completata.")
-    println("Totale combinazioni: $num_combinations")
-    println("Totale contraddizioni logiche trovate: $contradictions su $num_combinations")
-    println("Totale combinazioni valide: $valid_combinations")
+    println("Time precision: $real_time_per_combination")
+    println("Combination generation completed.")
+    println("Total combinations: $num_combinations")
+    println("Total logical contradictions found: $contradictions out of $num_combinations")
+    println("Total valid combinations: $valid_combinations")
 
-    # Aggiungere la percentuale delle valide e non valide
-    println("Percentuale combinazioni valide: $(round(valid_percentage, digits=2))%")
-    println("Percentuale combinazioni non valide: $(round(invalid_percentage, digits=2))%")
+    println("Percentage of valid combinations: $(round(valid_percentage, digits=2))%")
+    println("Percentage of invalid combinations: $(round(invalid_percentage, digits=2))%")
 
-    println("\nDistribuzione delle etichette:")
+    println("\nLabel distribution:")
     for (label, count) in sort(collect(label_count), by = x -> x[2], rev = true)
         percentage = (Float64(count) / Float64(valid_combinations)) * 100
         println("$label: $count ($(round(percentage, digits=2))%)")
@@ -186,14 +185,14 @@ function convert_DNF_formula(
     )
 
     #= 
-        Creiamo la Rule usando l'outcome passato come parametro
-        println("mask:" ,formula.prime_mask)
-        println("combination",formula.combinations)
-        stampa_dnf(stdout,formula)
-        println("formule:" ,dump(formula)) 
+        We create the Rule using the outcome passed as a parameter
+        println("mask:", formula.prime_mask)
+        println("combination", formula.combinations)
+        print_dnf(stdout, formula)
+        println("formulas:", dump(formula)) 
     =#
-    #println("comb:" ,formula.combinations)
-    #stampa_dnf(stdout,formula)
+    #println("comb:", formula.combinations)
+    #print_dnf(stdout, formula)
     return Rule(φ, outcome)
 end
 
