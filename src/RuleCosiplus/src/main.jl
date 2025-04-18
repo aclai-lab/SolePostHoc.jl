@@ -1,5 +1,4 @@
 module RULECOSIPLUS
-__precompile__()
 
 using PyCall
 using Conda
