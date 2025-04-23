@@ -1,3 +1,5 @@
+__precompile__() # this module is safe to precompile
+
 module RULECOSIPLUS
 
 using PyCall
@@ -10,6 +12,7 @@ using SoleModels      # Assicurati che i moduli SoleModels e SoleLogics siano co
 using SoleLogics
 import Dates: now
 using DataStructures
+using CategoricalArrays
 
 include("apiRuleCosi.jl")
 
@@ -27,8 +30,100 @@ Conda.pip_interop(true, PyCall.Conda.ROOTENV)
 PyCall.Conda.pip("install", "git+https://github.com/jobregon1212/rulecosi.git", PyCall.Conda.ROOTENV)
 PyCall.Conda.pip("install", "scikit-learn", PyCall.Conda.ROOTENV)
 
-copy!(rulecosi, pyimport_conda("rulecosi", "rulecosi"))
-copy!(sklearn, pyimport_conda("sklearn.ensemble", "sklearn"))
+function __init__()
+    copy!(rulecosi, pyimport_conda("rulecosi", "rulecosi"))
+    copy!(sklearn, pyimport_conda("sklearn.ensemble", "sklearn"))
+
+    py"""
+    import numpy as np
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.tree import DecisionTreeClassifier
+    from sklearn.tree._tree import Tree
+    from collections import Counter
+    import io, sys
+
+    def build_sklearn_tree(tree_state):
+        n_nodes = tree_state["node_count"]
+        n_features = tree_state["n_features"]
+        n_classes = tree_state["n_classes"]
+        t = Tree(n_features, np.array([n_classes], dtype=np.intp), 1)
+        dt = np.dtype([
+            ('left_child','<i8'),
+            ('right_child','<i8'),
+            ('feature','<i8'),
+            ('threshold','<f8'),
+            ('impurity','<f8'),
+            ('n_node_samples','<i8'),
+            ('weighted_n_node_samples','<f8'),
+            ('missing_go_to_left','u1')
+        ])
+        cl = tree_state["children_left"]
+        cr = tree_state["children_right"]
+        ft = tree_state["feature"]
+        th = tree_state["threshold"]
+        v_orig = tree_state["value"]
+        v = np.ascontiguousarray(v_orig, dtype=np.float64)
+        nodes_list = []
+        for i in range(n_nodes):
+            lc = cl[i]
+            rc = cr[i]
+            fe = ft[i]
+            tr = th[i]
+            counts = v[i,0,:]
+            tot = int(np.sum(counts))
+            imp = 0.0
+            nodes_list.append((lc, rc, fe, tr, imp, tot, float(tot), 0))
+        structured_nodes = np.array(nodes_list, dtype=dt)
+        st = {"max_depth": 20, "node_count": n_nodes, "nodes": structured_nodes, "values": v}
+        t.__setstate__(st)
+        return t
+
+    class RealDecisionTreeClassifier(DecisionTreeClassifier):
+        def __init__(self, tree_state, classes):
+            super().__init__()
+            self.tree_ = build_sklearn_tree(tree_state)
+            self.n_features_ = tree_state["n_features"]
+            self.n_outputs_ = 1
+            self.n_classes_ = tree_state["n_classes"]
+            self.classes_ = np.array(classes)
+            self.fitted_ = True
+        def fit(self, X, y=None):
+            return self
+
+    class RealRandomForestClassifier(RandomForestClassifier):
+        def __init__(self, forest_json):
+            super().__init__(n_estimators=0)
+            self.classes_ = np.array(forest_json["classes"])
+            self.estimators_ = []
+            for tree_state in forest_json["trees"]:
+                self.estimators_.append(RealDecisionTreeClassifier(tree_state, forest_json["classes"]))
+            self.fitted_ = True
+        def fit(self, X, y=None):
+            return self
+        def predict(self, X):
+            arr = np.array([est.predict(X) for est in self.estimators_])
+            final = []
+            for i in range(X.shape[0]):
+                c = Counter(arr[:, i]).most_common(1)[0][0]
+                final.append(c)
+            return np.array(final)
+
+    def build_sklearn_model_from_julia(dict_model):
+        return RealRandomForestClassifier(dict_model)
+
+    def get_simplified_rules(rc, heuristics_digits=4, condition_digits=1):
+        buffer = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = buffer
+        try:
+            rc.simplified_ruleset_.print_rules(heuristics_digits=heuristics_digits, condition_digits=condition_digits)
+        finally:
+            sys.stdout = old_stdout
+        rules_str = buffer.getvalue()
+        return rules_str.strip().splitlines()
+    """
+end
+
 
 ##############################
 # 1) Struct & BFS/DFS
@@ -42,6 +137,8 @@ mutable struct SkNode
     counts::Vector{Float64}
 end
 
+const TreeType = Union{String, CategoricalArrays.CategoricalValue{String, UInt32}}
+
 """
 build_sklearnlike_arrays(branch, n_classes, class_to_idx)
 
@@ -53,10 +150,10 @@ function build_sklearnlike_arrays(branch, n_classes::Int, class_to_idx::Dict{Str
     function dfs(b)
         i = length(nodes)
         push!(nodes, SkNode(-1, -1, -2, -2.0, fill(0.0, n_classes)))
-        if b isa ConstantModel{String}
+        if b isa ConstantModel{<:TreeType}
             cidx = haskey(class_to_idx, b.outcome) ? class_to_idx[b.outcome] : 0
             nodes[i+1].counts[cidx+1] = 10.0
-        elseif b isa Branch{String}
+        elseif b isa Branch{<:TreeType}
             thr = b.antecedent.value.threshold
             fx = b.antecedent.value.metacond.feature.i_variable - 1
             left_i = dfs(b.posconsequent)
@@ -130,94 +227,7 @@ end
 # 2) BLOCK PYTHON
 ##############################
 
-py"""
-import numpy as np
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.tree._tree import Tree
-from collections import Counter
-import io, sys
 
-def build_sklearn_tree(tree_state):
-    n_nodes = tree_state["node_count"]
-    n_features = tree_state["n_features"]
-    n_classes = tree_state["n_classes"]
-    t = Tree(n_features, np.array([n_classes], dtype=np.intp), 1)
-    dt = np.dtype([
-        ('left_child','<i8'),
-        ('right_child','<i8'),
-        ('feature','<i8'),
-        ('threshold','<f8'),
-        ('impurity','<f8'),
-        ('n_node_samples','<i8'),
-        ('weighted_n_node_samples','<f8'),
-        ('missing_go_to_left','u1')
-    ])
-    cl = tree_state["children_left"]
-    cr = tree_state["children_right"]
-    ft = tree_state["feature"]
-    th = tree_state["threshold"]
-    v_orig = tree_state["value"]
-    v = np.ascontiguousarray(v_orig, dtype=np.float64)
-    nodes_list = []
-    for i in range(n_nodes):
-        lc = cl[i]
-        rc = cr[i]
-        fe = ft[i]
-        tr = th[i]
-        counts = v[i,0,:]
-        tot = int(np.sum(counts))
-        imp = 0.0
-        nodes_list.append((lc, rc, fe, tr, imp, tot, float(tot), 0))
-    structured_nodes = np.array(nodes_list, dtype=dt)
-    st = {"max_depth": 20, "node_count": n_nodes, "nodes": structured_nodes, "values": v}
-    t.__setstate__(st)
-    return t
-
-class RealDecisionTreeClassifier(DecisionTreeClassifier):
-    def __init__(self, tree_state, classes):
-        super().__init__()
-        self.tree_ = build_sklearn_tree(tree_state)
-        self.n_features_ = tree_state["n_features"]
-        self.n_outputs_ = 1
-        self.n_classes_ = tree_state["n_classes"]
-        self.classes_ = np.array(classes)
-        self.fitted_ = True
-    def fit(self, X, y=None):
-        return self
-
-class RealRandomForestClassifier(RandomForestClassifier):
-    def __init__(self, forest_json):
-        super().__init__(n_estimators=0)
-        self.classes_ = np.array(forest_json["classes"])
-        self.estimators_ = []
-        for tree_state in forest_json["trees"]:
-            self.estimators_.append(RealDecisionTreeClassifier(tree_state, forest_json["classes"]))
-        self.fitted_ = True
-    def fit(self, X, y=None):
-        return self
-    def predict(self, X):
-        arr = np.array([est.predict(X) for est in self.estimators_])
-        final = []
-        for i in range(X.shape[0]):
-            c = Counter(arr[:, i]).most_common(1)[0][0]
-            final.append(c)
-        return np.array(final)
-
-def build_sklearn_model_from_julia(dict_model):
-    return RealRandomForestClassifier(dict_model)
-
-def get_simplified_rules(rc, heuristics_digits=4, condition_digits=1):
-    buffer = io.StringIO()
-    old_stdout = sys.stdout
-    sys.stdout = buffer
-    try:
-        rc.simplified_ruleset_.print_rules(heuristics_digits=heuristics_digits, condition_digits=condition_digits)
-    finally:
-        sys.stdout = old_stdout
-    rules_str = buffer.getvalue()
-    return rules_str.strip().splitlines()
-"""
 
 ##############################
 # 3) FUN process_rules_decision_list

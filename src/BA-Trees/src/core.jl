@@ -5,6 +5,9 @@ using Random
 using CSV
 using DataFrames
 using Statistics
+using CategoricalArrays
+
+const TreeType = Union{String, CategoricalArrays.CategoricalValue{String, UInt32}}
 
 using DecisionTree
 using SoleModels
@@ -244,9 +247,9 @@ Utility function that calculates the maximum depth
 of a SoleModels tree (Branch/ConstantModel).
 """
 function compute_tree_depth(node, depth::Int=0)::Int
-    if isa(node, ConstantModel{String})
+    if isa(node, ConstantModel{<:TreeType})
         return depth
-    elseif isa(node, Branch{String})
+    elseif isa(node, Branch{<:TreeType})
         left_d  = compute_tree_depth(node.posconsequent, depth+1)
         right_d = compute_tree_depth(node.negconsequent, depth+1)
         return max(left_d, right_d)
@@ -262,7 +265,7 @@ creating BA-Trees lines in a Vector{String}.
 If the node is a leaf (ConstantModel), print "LN", if it is a Branch, print "IN".
 """
 function create_tree_node_from_branch(
-    node::Union{Branch{String}, ConstantModel{String}},
+    node::Union{Branch, ConstantModel{<:TreeType}},
     node_id::Ref{Int},       # counter for the next node ID
     depth::Int,
     class_map::Dict{String,Int},
@@ -275,15 +278,15 @@ function create_tree_node_from_branch(
     current_node = node_id[]
     node_id[] += 1  # increment for the next node
 
-    if isa(node, ConstantModel{String})
+    if isa(node, ConstantModel{<:TreeType})
         # Nodo foglia
-        leaf = node::ConstantModel{String}
+        leaf = node::ConstantModel{<:TreeType}
         leaf_class_idx = class_map[leaf.outcome]
         push!(lines, "$current_node LN -1 -1 -1 -1 $depth $leaf_class_idx")
         return lines
     else
         # Internal node
-        branch = node::Branch{String}
+        branch = node::Branch{<:TreeType}
         feature_raw = branch.antecedent.value.metacond.feature.i_variable
         threshold   = branch.antecedent.value.threshold
 
@@ -333,7 +336,7 @@ your model f::DecisionEnsemble{String} (SoleModels).
 - Leaf classes are 0-based numbers (0 -> the first encountered class, 1 -> the second, etc.).
 """
 function create_random_forest_input_from_model(
-    f::DecisionEnsemble{String};
+    f::Union{DecisionEnsemble, SoleModels.DecisionXGBoost};
     output_file::String="forest.txt",
     feature_offset::Int=1
 )

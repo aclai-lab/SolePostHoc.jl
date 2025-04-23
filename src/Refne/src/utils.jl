@@ -1,4 +1,4 @@
-function generate_univers_of_combinations(min_values::Vector{Any}, max_values::Vector{Any}, n_points::Int=100)
+function generate_univers_of_combinations(min_values::Vector, max_values::Vector, n_points::Int=100)
     # Creation of linspace for each min/max pair
     ranges = [LinRange(min, max, n_points) for (min, max) in zip(min_values, max_values)]
 

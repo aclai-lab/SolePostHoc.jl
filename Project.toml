@@ -7,6 +7,7 @@ version = "0.2.0"
 AbstractTrees = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+CategoricalArrays = "324d7699-5711-5eae-9e2f-1d82baa6b597"
 Clustering = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
 ComplexityMeasures = "ab4b797d-85ee-42ba-b621-05d793b346a2"
 ConcurrentCollections = "5060bff5-0b44-40c5-b522-fcd3ca5cecdd"
@@ -44,6 +45,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
 [compat]
+CategoricalArrays = "0.10.8"
 Random = "1"
 julia = "1"
 
@@ -58,11 +60,4 @@ RDatasets = "ce6b1742-4840-55fa-b093-852dadbb1d8b"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = [
-    "Test",
-    "MLJ",
-    "MLJBase",
-    "MLJDecisionTreeInterface",
-    "DataFrames",
-    "DecisionTree",
-]
+test = ["Test", "MLJ", "MLJBase", "MLJDecisionTreeInterface", "DataFrames", "DecisionTree"]
