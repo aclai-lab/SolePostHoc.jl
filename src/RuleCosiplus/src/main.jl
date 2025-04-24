@@ -1,5 +1,3 @@
-__precompile__() # this module is safe to precompile
-
 module RULECOSIPLUS
 
 using PyCall
