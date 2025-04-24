@@ -1,5 +1,5 @@
-using Test
 using SolePostHoc
+using Test
 using IterTools
 using Random
 
@@ -14,7 +14,8 @@ end
 println("Julia version: ", VERSION)
 
 test_suites = [
-    ("Rule Extraction", ["ensemble-rule-extraction.jl"]),
+    #("Rule Extraction", ["ensemble-rule-extraction.jl"]),
+    ("Rule Extraction-sole", ["ensemble-rule-extraction-sole.jl"]),
 ]
 
 @testset "SolePostHoc.jl" begin
