@@ -1,1 +1,2 @@
-- [ ] Do api.jl and not apiALgoName.jl 
+- [x] Do shared_utils.jl and not apiALgoName.jl 
+- [ ] Add test
