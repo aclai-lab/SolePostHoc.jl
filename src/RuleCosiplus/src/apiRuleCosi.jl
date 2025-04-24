@@ -35,30 +35,25 @@ function condition_to_string(cond)
     end
 end
 
-# [Il resto del codice rimane invariato...]
-
 """
-    element_to_string(x)
+    el_to_string(x)
 
 Recursively converts a decision tree element to a string representation.
 Handles Atoms, SyntaxBranches, and structures with grandchildren.
 """
-
-#### already defined in apiREFNESole.jl
-
-function element_to_string(x)
+function el_to_string(x)
     if x isa Atom
         return condition_to_string(x.value)
     elseif x isa SyntaxBranch
         t = string(x.token)
-        children_strs = map(element_to_string, x.children)
+        children_strs = map(el_to_string, x.children)
         if t == "¬"
             return "¬ " * children_strs[1]
         else
             return "(" * join(children_strs, " " * t * " ") * ")"
         end
     elseif hasproperty(x, :grandchildren)
-        return "(" * join(map(element_to_string, x.grandchildren), " ∧ ") * ")"
+        return "(" * join(map(el_to_string, x.grandchildren), " ∧ ") * ")"
     else
         return string(x)
     end
@@ -71,7 +66,7 @@ Converts a classification rule to a string representation.
 Returns a string in the format "antecedent ↣ outcome"
 """
 function rule_to_string(rule)
-    antecedent_str = element_to_string(rule.antecedent)
+    antecedent_str = el_to_string(rule.antecedent)
     return "$(antecedent_str) ↣ $(rule.consequent.outcome)"
 end
 
@@ -135,7 +130,7 @@ function convertApi(ds::DecisionList)
 
     for r in rules_list
         c = r.consequent.outcome
-        ant_str = element_to_string(r.antecedent)
+        ant_str = el_to_string(r.antecedent)
         push!(get!(class_to_antecedents, c, String[]), ant_str)
     end
 

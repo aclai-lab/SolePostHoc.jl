@@ -2,10 +2,11 @@ module TREPAN
 
 # using Revise
 using Pkg
+using SoleModels
 using IterTools, DataFrames
 using DecisionTree: load_data, build_forest, apply_forest
 
-include("apiTREPANSole.jl")
+# include("apiTREPANSole.jl")
 # set of classification parameters and respective default values
 
 # n_subfeatures: number of features to consider randomly for each split (default: -1, sqrt(# features))
@@ -24,7 +25,7 @@ export trepan
 """
 function trepan(f, X; max_depth=-1, n_subfeatures=-1, partial_sampling=0.5, min_samples_leaf=5, min_samples_split=2, min_purity_increase=0.0, seed=42)
 
-    y_pred = apply(
+    y_pred = SoleModels.apply(
         f,
         SoleData.scalarlogiset(
             DataFrame(X, :auto);

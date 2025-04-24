@@ -35,6 +35,8 @@ function _get_rule_extractor_docstring(ruleextractorname::String, method)
          """See also [`modalextractrules`](@ref), [`RuleExtractor`](@ref)."""
 end
 
+export convert_classification_rules, refne_classification_rules
+include("shared_utils.jl")
 
 #======================================================================================================================================
                                                         InTrees
@@ -60,7 +62,7 @@ end
 function modalextractrules(::InTreesRuleExtractor, m, args...; kwargs...)
   dl = intrees(m, args...; kwargs...)
   ll = listrules(dl, use_shortforms=false) # decision list to list of rules
-  rules_obj = convert_classification_rules(ll)
+  rules_obj = convert_classification_rules(dl, ll)
   dsintrees = DecisionSet(rules_obj)
   return dsintrees
 end
@@ -125,7 +127,7 @@ end
                                                         TrePan
 ======================================================================================================================================#
 include("Trepan/src/main.jl")
-include("Trepan/src/apiTREPANSole.jl")
+# include("Trepan/src/apiTREPANSole.jl")
 @reexport using .TREPAN
 
 
@@ -152,7 +154,7 @@ struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
 function modalextractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
   dl = rulecosiplus(f, x, y) # decision list   
   ll = listrules(dl, use_shortforms=false) # decision list to list of rules
-  rules_obj = convert_classification_rules(ll)
+  rules_obj = convert_classification_rules(dl, ll)
   dsrulecosiplus = DecisionSet(rules_obj)
   return dsrulecosiplus
 end
