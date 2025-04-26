@@ -152,7 +152,7 @@ include("RuleCosiplus/src/apiRuleCosi.jl")
 struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
 
 function modalextractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
-  dl = rulecosiplus(f, x, y) # decision list   
+  dl = rulecosiplus(m, args...; kwargs...) # decision list   
   ll = listrules(dl, use_shortforms=false) # decision list to list of rules
   rules_obj = convert_classification_rules(dl, ll)
   dsrulecosiplus = DecisionSet(rules_obj)
