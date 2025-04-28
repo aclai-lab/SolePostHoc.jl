@@ -45,10 +45,10 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
 [compat]
-CategoricalArrays = "0.10.8"
+CategoricalArrays = "0.10"
 Random = "1"
-ScikitLearn = "0.7.0"
-SoleData = "0.16.2"
+ScikitLearn = "0.5 - 0.7"
+SoleData = "0.16"
 SoleLogics = "0.13.1"
 StatsBase = "0.30 - 0.34"
 julia = "1"
