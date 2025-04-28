@@ -336,7 +336,8 @@ your model f::DecisionEnsemble{String} (SoleModels).
 - Leaf classes are 0-based numbers (0 -> the first encountered class, 1 -> the second, etc.).
 """
 function create_random_forest_input_from_model(
-    f::Union{DecisionEnsemble, SoleModels.DecisionXGBoost};
+    # f::Union{DecisionEnsemble, SoleModels.DecisionXGBoost};
+    f::DecisionEnsemble;
     output_file::String="forest.txt",
     feature_offset::Int=1
 )
