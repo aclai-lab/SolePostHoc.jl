@@ -28,12 +28,9 @@ Conda.pip_interop(true, PyCall.Conda.ROOTENV)
 PyCall.Conda.pip("install", "git+https://github.com/jobregon1212/rulecosi.git", PyCall.Conda.ROOTENV)
 PyCall.Conda.pip("install", "scikit-learn", PyCall.Conda.ROOTENV)
 
-copy!(rulecosi, pyimport_conda("rulecosi", "rulecosi"))
-copy!(sklearn, pyimport_conda("sklearn.ensemble", "sklearn"))
-
-# function __init__()
-    # copy!(rulecosi, pyimport_conda("rulecosi", "rulecosi"))
-    # copy!(sklearn, pyimport_conda("sklearn.ensemble", "sklearn"))
+function __init__()
+    copy!(rulecosi, pyimport_conda("rulecosi", "rulecosi"))
+    copy!(sklearn, pyimport_conda("sklearn.ensemble", "sklearn"))
 
     py"""
     import numpy as np
@@ -123,7 +120,7 @@ copy!(sklearn, pyimport_conda("sklearn.ensemble", "sklearn"))
         rules_str = buffer.getvalue()
         return rules_str.strip().splitlines()
     """
-# end
+end
 
 
 ##############################
