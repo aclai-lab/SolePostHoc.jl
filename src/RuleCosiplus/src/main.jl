@@ -28,9 +28,12 @@ Conda.pip_interop(true, PyCall.Conda.ROOTENV)
 PyCall.Conda.pip("install", "git+https://github.com/jobregon1212/rulecosi.git", PyCall.Conda.ROOTENV)
 PyCall.Conda.pip("install", "scikit-learn", PyCall.Conda.ROOTENV)
 
-function __init__()
-    copy!(rulecosi, pyimport_conda("rulecosi", "rulecosi"))
-    copy!(sklearn, pyimport_conda("sklearn.ensemble", "sklearn"))
+copy!(rulecosi, pyimport_conda("rulecosi", "rulecosi"))
+copy!(sklearn, pyimport_conda("sklearn.ensemble", "sklearn"))
+
+# function __init__()
+    # copy!(rulecosi, pyimport_conda("rulecosi", "rulecosi"))
+    # copy!(sklearn, pyimport_conda("sklearn.ensemble", "sklearn"))
 
     py"""
     import numpy as np
@@ -120,7 +123,7 @@ function __init__()
         rules_str = buffer.getvalue()
         return rules_str.strip().splitlines()
     """
-end
+# end
 
 
 ##############################
@@ -153,6 +156,8 @@ function build_sklearnlike_arrays(branch, n_classes::Int, class_to_idx::Dict{Str
             nodes[i+1].counts[cidx+1] = 10.0
         elseif b isa Branch{<:TreeType}
             thr = b.antecedent.value.threshold
+            @show b.antecedent.value.metacond.feature.i_variable
+            @show typeof(b.antecedent.value.metacond.feature.i_variable)
             fx = b.antecedent.value.metacond.feature.i_variable - 1
             left_i = dfs(b.posconsequent)
             right_i = dfs(b.negconsequent)
