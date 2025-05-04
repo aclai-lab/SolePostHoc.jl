@@ -44,10 +44,34 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
+[sources.ModalDecisionTrees]
+rev = "64-modaladaboost"
+url = "https://github.com/aclai-lab/ModalDecisionTrees.jl"
+
+[sources.ScikitLearn]
+url = "https://github.com/PasoStudio73/ScikitLearn.jl"
+
+[sources.SoleBase]
+rev = "4-add-structs-for-solexplorer"
+url = "https://github.com/aclai-lab/SoleBase.jl"
+
+[sources.SoleData]
+rev = "main"
+url = "https://github.com/aclai-lab/SoleData.jl"
+
+[sources.SoleModels]
+rev = "lumen-refactoring"
+url = "https://github.com/aclai-lab/SoleModels.jl"
+
 [compat]
 CategoricalArrays = "0.10"
+ModalDecisionTrees = "0.5"
 Random = "1"
-SoleBase = "0.13.0"
+ScikitLearn = "0.8"
+SoleBase = "0.13"
+SoleData = "0.16.1"
+SoleLogics = "0.13"
+SoleModels = "0.10"
 StatsBase = "0.30 - 0.34"
 julia = "1"
 
