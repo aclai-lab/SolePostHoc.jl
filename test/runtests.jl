@@ -1,5 +1,5 @@
-using Test
 using SolePostHoc
+using Test
 using IterTools
 using Random
 

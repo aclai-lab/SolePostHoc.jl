@@ -5,4 +5,6 @@
 /Manifest.toml.bk
 /docs/build/
 Manifest.toml.bak
-TODO.md
+src/BA-Trees/src/temp_ba_trees/forest.txt
+src/BA-Trees/src/temp_ba_trees/result.txt.out
+src/BA-Trees/src/temp_ba_trees/result.txt.tree
