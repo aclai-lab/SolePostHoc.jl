@@ -55,10 +55,6 @@ url = "https://github.com/PasoStudio73/ScikitLearn.jl"
 rev = "4-add-structs-for-solexplorer"
 url = "https://github.com/aclai-lab/SoleBase.jl"
 
-[sources.SoleData]
-rev = "main"
-url = "https://github.com/aclai-lab/SoleData.jl"
-
 [sources.SoleModels]
 rev = "lumen-refactoring"
 url = "https://github.com/aclai-lab/SoleModels.jl"
@@ -69,7 +65,7 @@ ModalDecisionTrees = "0.5"
 Random = "1"
 ScikitLearn = "0.7.1"
 SoleBase = "0.13"
-SoleData = "0.16.1"
+SoleData = "0.16.2"
 SoleLogics = "0.13"
 SoleModels = "0.10"
 StatsBase = "0.30 - 0.34"
