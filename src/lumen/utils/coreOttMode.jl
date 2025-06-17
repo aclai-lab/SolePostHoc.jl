@@ -1,102 +1,22 @@
 #= -------------------------------------------------------------------------------------------------------------------------
 ############################################################################################################################
-#                                               OTTIMIZZAZIONE-MOD                                                         #
+#                                               OTTIMIZZAZIONE-MOD                                                                                                                                               #
 ############################################################################################################################
 =#
-
-
 """
-Determine the optimal number of threads to use for parallel processing based on the number of combinations.
+[OTT VERSION] Processes a combination ottimize mode of atom values and returns a dictionary of valid values for each feature, along with a flag indicating if the combination has a contradiction.
 
-The function calculates the optimal number of threads by considering the maximum number of threads available on the system and a minimum threshold of combinations per thread. It aims to maximize the parallelism while ensuring a minimum workload per thread to avoid overhead.
+This function takes a combination of atom values, represented as either a `BitVector` or an integer, and the dictionaries of thresholds and atom properties. It then processes the combination, filtering the valid values for each feature based on the atom values. If a feature has no valid values, the function sets a flag indicating a contradiction. Finally, it returns the dictionary of valid values for each feature and the contradiction flag.
 
-Args:
-    num_combinations (BigInt): The total number of combinations to be processed.
+Parameters:
+- `i::Union{BitVector,Int}`: The combination of atom values to be processed.
+- `num_atoms::Int`: The number of atoms in the combination.
+- `thresholds_by_feature::Dict{Int,Vector{Float64}}`: A dictionary mapping feature indices to their corresponding thresholds.
+- `atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}}`: A dictionary mapping feature indices to their corresponding atom properties (threshold and boolean flag).
 
 Returns:
-    Int: The optimal number of threads to use for parallel processing.
-"""
-function determine_optimal_threads(num_combinations::BigInt)
-    # Numero massimo di thread disponibili sul sistema
-    max_threads = Sys.CPU_THREADS
-
-    # Definiamo una soglia minima di combinazioni per thread
-    min_combinations_per_thread = BigInt(1000)
-
-    # Calcoliamo il numero ottimale di thread
-    optimal_threads = min(
-        max_threads,
-        max(
-            1,
-            Int(
-                min(num_combinations ÷ min_combinations_per_thread, BigInt(typemax(Int64))),
-            ),
-        ),
-    )
-
-    return optimal_threads
-end
-
-
-"""
-Calculate a dynamic chunk size for parallel processing based on the total number of combinations and the number of threads.
-
-The function determines an optimal chunk size that balances the number of chunks with the minimum workload per thread. It ensures the chunk size is within a reasonable range, rounds it to the nearest power of 2 for efficiency, and provides a fallback in case the calculated size is too large.
-
-Args:
-    num_combinations (BigInt): The total number of combinations to be processed.
-    num_threads (Int): The number of threads to be used for parallel processing.
-
-Returns:
-    BigInt: The calculated dynamic chunk size.
-"""
-function calculate_dynamic_chunk_size(num_combinations::BigInt, num_threads::Int)
-    # Define minimum and maximum chunk sizes
-    min_chunk_size = BigInt(100)
-    max_chunk_size = BigInt(10_000_000)
-
-    # Calculate an initial chunk size
-    initial_chunk_size = num_combinations ÷ (num_threads * 10)
-
-    # Ensure the chunk size is within limits
-    chunk_size = clamp(initial_chunk_size, min_chunk_size, max_chunk_size)
-
-    # Ensure there are at least as many chunks as threads
-    num_chunks = num_combinations ÷ chunk_size
-    if num_chunks < num_threads
-        chunk_size = num_combinations ÷ num_threads
-    end
-
-    # Round the chunk size to the nearest power of 2 for efficiency
-    # Use a safe exponent calculation to avoid overflow
-    if chunk_size > 0
-        safe_exponent = min(63, floor(Int, log2(Float64(chunk_size))))
-        chunk_size = BigInt(2)^safe_exponent
-    else
-        chunk_size = min_chunk_size
-    end
-
-    # Final safety check: if chunk_size is still too large, use a constant fallback
-    if chunk_size > num_combinations || chunk_size <= 0
-        chunk_size = min(num_combinations, BigInt(1_000_000))
-    end
-
-    return chunk_size
-end
-
-
-"""
-Generates a set of valid combinations of feature values based on the provided model, alphabet, atoms, and vertical parameter. The function uses a parallel processing approach with dynamic chunk sizes to efficiently process the large number of combinations.
-
-Args:
-    model (Any): The model to be used for evaluating the combinations.
-    alphabet (MultivariateScalarAlphabet{ScalarCondition}): The alphabet containing the feature conditions.
-    atoms (Vector{<:Atom{<:ScalarCondition{Float64,<:VariableValue,<:ScalarMetaCondition{<:VariableValue,typeof(<)}}}}): The atoms representing the feature conditions.
-    vertical (Float64): The vertical parameter used to scale the number of combinations.
-    print_progress (bool): Whether to print progress information during the computation.
-
-Returns:
-    Tuple{Dict{Any,Vector{BigInt}}, Dict{Any,Int64}}: A tuple containing the results dictionary (mapping labels to their corresponding combinations) and the label count dictionary.
+- `Dict{Int,Vector{Float64}}`: A dictionary mapping feature indices to their corresponding valid values.
+- `Bool`: A flag indicating if the combination has a contradiction.
 """
 function truth_combinations_ott(
     model::Any,
@@ -105,136 +25,163 @@ function truth_combinations_ott(
         <:Atom{
             <:ScalarCondition{
                 Float64,
-                <:VariableValue,
-                <:ScalarMetaCondition{<:VariableValue,typeof(<)},
+                <:VariableNamedValue,
+                <:ScalarMetaCondition{<:VariableNamedValue,typeof(<)},
             },
         },
     },
     vertical::Float64;
     apply_function = SoleModels.apply,
-    silent = false,
     print_progress = true,
+    silent = true,
 )
-    thresholds_by_feature = Dict(
-        subalpha.featcondition[1].feature.i_variable => sort(subalpha.featcondition[2])
-        for subalpha in alphabet.subalphabets
-    )
-    atoms_by_feature = group_atoms_by_feature(atoms)
+    # Inizializzazione identica all'originale
+    thresholds_by_feature = Dict{Int,Vector{Float64}}()
+    atoms_by_feature = Dict{Int,Vector{Tuple{Float64,Bool}}}()
 
-    num_atoms = length(atoms)
-    all_combinations = BigInt(2)^num_atoms
-    if isone(vertical)
-        num_combinations = all_combinations
-    else
-        num_combinations = BigInt(round(all_combinations * vertical))
+    for subalpha in alphabet.subalphabets
+        feat = subalpha.featcondition[1].feature.i_variable
+        thresholds_by_feature[feat] = sort(subalpha.featcondition[2])
     end
 
-    results = Dict{Any,Vector{BigInt}}()
-    label_count = Dict{Any,Int64}()
-    contradictions = Atomic{Int64}(0)
+    for atom in atoms
+        feat = atom.value.metacond.feature.i_variable
+        threshold = atom.value.threshold
+        push!(get!(Vector{Tuple{Float64,Bool}}, atoms_by_feature, feat), (threshold, true))
+    end
 
-    silent || println("$COLORED_ULTRA_OTT$TITLE\n THREADS DINAMICI \n$TITLE$RESET")
-    optimal_threads = determine_optimal_threads(num_combinations)
+    for (_, atom_list) in atoms_by_feature
+        sort!(atom_list, by = first)
+    end
 
-    silent || println("Numero di combinazioni: $num_combinations")
-    silent || println("Numero attuale di thread: ", Threads.nthreads())
-    silent || println("Numero ottimale di thread: $optimal_threads")
+    # Crea mappatura degli atomi nell'STESSO ORDINE di process_combination
+    atom_to_bit_position = Dict{Tuple{Int,Float64}, Int}()
+    bit_position = 0
+    
+    # CRUCIALE: stesso ordine di iterazione di process_combination
+    for (feat, atom_list) in atoms_by_feature
+        for (threshold, _) in atom_list
+            atom_to_bit_position[(feat, threshold)] = bit_position
+            bit_position += 1
+        end
+    end
 
-    silent || println("\n\n$COLORED_ULTRA_OTT$TITLE\n CHUNK DINAMICI \n$TITLE$RESET")
-
-    chunk_size = calculate_dynamic_chunk_size(num_combinations, Threads.nthreads())
-    num_chunks = (num_combinations + chunk_size - 1) ÷ chunk_size  # Ceiling division
-
-    silent || println("Dynamic chunk size: $chunk_size")
-    silent || println("Number of chunks: $num_chunks")
-
-    silent || println("$COLORED_ULTRA_OTT$TITLE$RESET")
-
-    silent || println("🚀 Starting combination processing...")
-
-    progress = Progress(num_chunks, 1)  # Creiamo una barra di progresso
-
-    Threads.@threads for chunk = 1:num_chunks
-        local_results = Dict{Any,Vector{BigInt}}()
-        local_label_count = Dict{Any,Int64}()
-        local_contradictions = 0
-
-        start_i = (chunk - 1) * chunk_size
-        end_i = min(start_i + chunk_size - 1, num_combinations - 1)
-
-        for i = start_i:end_i
-            if isone(vertical)
-                # Systematic
-                combination, has_contradiction = generate_combination_ott(
-                    BigInt(i),
-                    num_atoms,
-                    thresholds_by_feature,
-                    atoms_by_feature,
-                )
-            else
-                has_contradiction = true
-                # Find the first random non-contradicting one
-                while has_contradiction
-                    i_rand = rand(BigInt(0):(all_combinations-1))
-                    combination, has_contradiction = generate_combination_ott(
-                        BigInt(i_rand),
-                        num_atoms,
-                        thresholds_by_feature,
-                        atoms_by_feature,
-                    )
+    # Pre-genera tutte le combinazioni valide per feature (STESSO ORDINE)
+    valid_combinations_by_feature = Dict{Int, Vector{Tuple{Vector{Int}, Vector{Float64}}}}()
+    
+    for (feat, atom_list) in atoms_by_feature  # STESSO ORDINE di process_combination
+        thresholds = thresholds_by_feature[feat]
+        valid_combinations_by_feature[feat] = []
+        
+        atom_thresholds = [atom[1] for atom in atom_list]
+        num_atoms_for_feat = length(atom_thresholds)
+        
+        # Genera tutte le combinazioni di truth values per questa feature
+        for binary_combo in 0:(2^num_atoms_for_feat - 1)
+            truth_values = digits(binary_combo, base=2, pad=num_atoms_for_feat)
+            valid_values = copy(thresholds)
+            
+            # Applica i vincoli degli atomi NELLO STESSO ORDINE
+            for (atom_idx, (threshold, _)) in enumerate(atom_list)
+                truth_val = truth_values[atom_idx]
+                if truth_val == 1
+                    filter!(x -> x < threshold, valid_values)
+                else
+                    filter!(x -> x >= threshold, valid_values)
                 end
             end
-
-            if has_contradiction
-                local_contradictions += 1
-            else
-                combination_dict = SortedDict(combination)
-                combination_vector = collect(values(combination_dict))
-                result = apply_function(model, combination_vector)
-
-                push!(get!(Vector{BigInt}, local_results, result), BigInt(i))
-                local_label_count[result] = get(local_label_count, result, 0) + 1
+            
+            # Solo se ci sono valori validi, aggiungi la combinazione
+            if !isempty(valid_values)
+                push!(valid_combinations_by_feature[feat], (truth_values, valid_values))
             end
-        end
-
-        # Aggiorna i risultati globali in modo thread-safe
-        lock(results_lock) do
-            for (result, combs) in local_results
-                append!(get!(Vector{BigInt}, results, result), combs)
-            end
-            for (result, count) in local_label_count
-                label_count[result] = get(label_count, result, 0) + count
-            end
-            atomic_add!(contradictions, local_contradictions)
-        end
-
-        next!(progress)  # Aggiorniamo la barra di progresso
-    end
-
-    silent || println("Combination processing completed.")
-
-    total_contradictions = contradictions[]
-    silent || begin
-        valid_combinations = num_combinations - total_contradictions
-        println("\nTotal combinations: $num_combinations")
-        println("Logical contradictions: $total_contradictions")
-        println("\nLabel distribution:")
-        for (label, count) in sort(collect(label_count), by = x -> x[2], rev = true)
-            percentage = (count / valid_combinations) * 100
-            println("$label: $count ($(round(percentage, digits=2))%)")
         end
     end
-
-    silent || begin
-        println("\nDetailed results:")
-        for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
-            println("[$result] ($(length(combinations)) combinations):")
-            if length(combinations) > 10
-                println("  First 10: $(combinations[1:10])")
-                println("  ... ($(length(combinations)-10) more)")
-            else
-                println("  All: $combinations")
+    
+    # Aggiungi features senza atomi
+    for feat in keys(thresholds_by_feature)
+        if !haskey(valid_combinations_by_feature, feat)
+            push!(get!(Vector{Tuple{Vector{Int}, Vector{Float64}}}, valid_combinations_by_feature, feat), (Int[], [1605.0]))
+        end
+    end
+    
+    # Funzione per ricostruire l'ID binario originale (STESSO ORDINE di process_combination)
+    function reconstruct_binary_id(combination_tuple, feature_keys, atoms_by_feature, atom_to_bit_position)
+        binary_id = BigInt(0)
+        
+        # Itera nello STESSO ORDINE di process_combination
+        for (feat, atom_list) in atoms_by_feature
+            if feat in feature_keys
+                feat_idx = findfirst(x -> x == feat, feature_keys)
+                truth_values, _ = combination_tuple[feat_idx]
+                
+                for (atom_idx, (threshold, _)) in enumerate(atom_list)
+                    bit_pos = atom_to_bit_position[(feat, threshold)]
+                    truth_val = truth_values[atom_idx]
+                    
+                    if truth_val == 1
+                        binary_id += BigInt(2)^bit_pos
+                    end
+                end
             end
+        end
+        
+        return binary_id
+    end
+    
+    # Genera combinazioni usando prodotto cartesiano (STESSO ORDINE)
+    feature_keys = [feat for (feat, _) in atoms_by_feature]  # STESSO ORDINE di process_combination
+    
+    # Aggiungi features senza atomi alla fine
+    for feat in keys(thresholds_by_feature)
+        if !(feat in feature_keys)
+            push!(feature_keys, feat)
+        end
+    end
+    combination_sets = [valid_combinations_by_feature[feat] for feat in feature_keys]
+    all_combinations_iter = Iterators.product(combination_sets...)
+    
+    # Applica campionamento verticale
+    combinations_to_process = if isone(vertical)
+        all_combinations_iter
+    else
+        combinations_vec = collect(all_combinations_iter)
+        sample_size = min(length(combinations_vec), Int(round(length(combinations_vec) * vertical)))
+        sample_indices = randperm(length(combinations_vec))[1:sample_size]
+        [combinations_vec[i] for i in sample_indices]
+    end
+    
+    results = Dict{Any,Vector{BigInt}}()
+    label_count = Dict{Any,Int}()
+    seen_vectors = Set{Vector{Float64}}()
+    
+    for combination_tuple in combinations_to_process
+        # Ricostruisci l'ID binario originale
+        original_binary_id = reconstruct_binary_id(combination_tuple, feature_keys, atoms_by_feature, atom_to_bit_position)
+        
+        # Costruisci il dizionario della combinazione
+        combination_dict = Dict{Int, Vector{Float64}}()
+        for (feat_idx, feat) in enumerate(feature_keys)
+            _, valid_values = combination_tuple[feat_idx]
+            combination_dict[feat] = valid_values
+        end
+        
+        # Processa la combinazione
+        combination_dict = SortedDict(combination_dict)
+        combination_vector = vcat(collect(values(combination_dict))...)
+        
+        # Evita duplicati basati sui valori della combinazione
+        if !(combination_vector in seen_vectors)
+            push!(seen_vectors, combination_vector)
+            
+            result = if model isa AbstractModel
+                apply_function(model, DataFrame(reshape(combination_vector, 1, :), :auto))
+            else
+                apply_function(model, combination_vector)
+            end
+            
+            push!(get!(Vector{BigInt}, results, result), original_binary_id)
+            label_count[result] = get(label_count, result, 0) + 1
         end
     end
 
@@ -243,356 +190,349 @@ end
 
 
 """
-Generate a valid combination of feature values based on the provided thresholds and atom properties.
+Dict{Any, Vector{BigInt}}("Iris-virginica" => [9, 14, 19, 29, 34, 38, 39], "Iris-setosa" => [0, 1, 2, 3, 4, 20, 21, 22, 23, 24], "Iris-versicolor" => [5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 17, 18, 25, 26, 27, 28, 30, 31, 32, 33, 35, 36, 37])
+   
+Processes a combination of atom values and returns a dictionary of valid values for each feature, along with a flag indicating if the combination has a contradiction.
 
-This function takes the integer `i` representing a combination, the number of atoms `num_atoms`, the thresholds for each feature `thresholds_by_feature`, and the atoms grouped by feature `atoms_by_feature`. It then generates a valid combination of feature values that satisfies all the atom conditions, or returns a dictionary with `false` if no valid combination can be found.
+This function takes a combination of atom values, represented as either a `BitVector` or an integer, and the dictionaries of thresholds and atom properties. It then processes the combination, filtering the valid values for each feature based on the atom values. If a feature has no valid values, the function sets a flag indicating a contradiction. Finally, it returns the dictionary of valid values for each feature and the contradiction flag.
 
-The function works by iterating through each feature, finding a valid value for that feature based on the associated atom conditions, and building up the final combination dictionary. If no valid value can be found for a feature, the function returns an empty dictionary and `true` to indicate a contradiction.
+Parameters:
+- `i::Union{BitVector,Int}`: The combination of atom values to be processed.
+- `num_atoms::Int`: The number of atoms in the combination.
+- `thresholds_by_feature::Dict{Int,Vector{Float64}}`: A dictionary mapping feature indices to their corresponding thresholds.
+- `atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}}`: A dictionary mapping feature indices to their corresponding atom properties (threshold and boolean flag).
+
+Returns:
+- `Dict{Int,Vector{Float64}}`: A dictionary mapping feature indices to their corresponding valid values.
+- `Bool`: A flag indicating if the combination has a contradiction.
 """
-function generate_combination_ott(
-    i::BigInt,
+function process_combination(
+    i,
     num_atoms::Int,
     thresholds_by_feature::Dict{Int,Vector{Float64}},
     atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}},
 )
-    # Convertiamo direttamente in array i digit binari
-    truth_values = digits(i, base = 2, pad = num_atoms)
+    combination = Dict{Int,Vector{Float64}}()
 
-    function find_valid_value(
-        thresholds::Vector{Float64},
-        atom_list::Vector{Tuple{Float64,Bool}},
-        start_idx::Int,
-    )::Union{Float64,Nothing}
-        # Invece di mantenere una lista di valori validi, manteniamo i limiti del dominio
-        min_domain = -Inf
-        max_domain = Inf
+    truth_row = !isa(i, BitVector) ? digits(i, base = 2, pad = num_atoms) : i
 
-        # Processiamo ogni condizione aggiornando i limiti del dominio
-        for (idx, (threshold, is_less_than)) in enumerate(atom_list)
-            current_truth = truth_values[start_idx+idx-1]
-
-            if current_truth == (is_less_than ? 1 : 0)
-                # Condizione del tipo x < threshold o x ≤ threshold
-                max_domain = min(max_domain, threshold)
-            else
-                # Condizione del tipo x ≥ threshold o x > threshold
-                min_domain = max(min_domain, threshold)
-            end
-
-            # Verifichiamo subito se il dominio è vuoto
-            if min_domain >= max_domain
-                return nothing
-            end
-        end
-
-        # Troviamo il primo valore in thresholds che cade nel dominio valido
-        for val in thresholds
-            if min_domain <= val < max_domain
-                return val
-            end
-        end
-
-        return nothing
-    end
-
-    # Inizializziamo il dizionario per la combinazione risultante
-    combination = zeros(maximum(keys(thresholds_by_feature)))
-    current_idx = 1
-
-    # Processiamo ogni feature
+    has_contradiction = false
+    j = 1
     for (feat, atom_list) in atoms_by_feature
         thresholds = thresholds_by_feature[feat]
+        valid_values = copy(thresholds)
 
-        # Troviamo un valore valido per questa feature
-        valid_value = find_valid_value(thresholds, atom_list, current_idx)
-
-        # Se non troviamo un valore valido, abbiamo una contraddizione
-        if isnothing(valid_value)
-            return Dict(enumerate(combination)), true
+        for (_, (threshold, _)) in enumerate(atom_list)
+            if truth_row[j] == 1
+                filter!(x -> x < threshold, valid_values)
+            else
+                filter!(x -> x >= threshold, valid_values)
+            end
+            j += 1
         end
 
-        # Salviamo il valore valido trovato
-        combination[feat] = valid_value
+        if isempty(valid_values)
+            has_contradiction = true
+            break
+        else
+            combination[feat] = valid_values
+        end
 
-        # Aggiorniamo l'indice per la prossima feature
-        current_idx += length(atom_list)
     end
 
-    return Dict(enumerate(combination)), false
+    if !has_contradiction
+        for feat in keys(thresholds_by_feature)
+            if !haskey(combination, feat)
+                combination[feat] = [1605.0]
+            end
+        end
+    end
+
+    return combination, has_contradiction
 end
 
 
 """
-Group a list of atoms by their feature index. For each feature, the atoms are sorted by their threshold value and whether the threshold is a "less than" or "greater than" condition.
+Concatenates the results of a custom OR formula computation into a dictionary of `TwoLevelDNFFormula` objects.
 
-Args:
-    atoms (Vector{Atom}): A list of atoms to group by feature.
+This function takes the raw results of the custom OR formula computation, along with the number of atoms and the thresholds and atom properties, and constructs a dictionary of `TwoLevelDNFFormula` objects. The results are sorted by the number of combinations in descending order, and the `TwoLevelDNFFormula` objects are created with the sorted combinations.
+
+Parameters:
+- `results::Any`: The raw results of the custom OR formula computation.
+- `num_atoms::Int`: The number of atoms in the custom OR formula.
+- `thresholds_by_feature::Dict{Int,Vector{Float64}}`: A dictionary mapping feature indices to their corresponding thresholds.
+- `atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}}`: A dictionary mapping feature indices to their corresponding atom properties (threshold and boolean flag).
 
 Returns:
-    Dict{Int,Vector{Tuple{Float64,Bool}}}: A dictionary mapping feature indices to a sorted list of (threshold, is_less_than) tuples for the atoms of that feature.
+- `Dict{Any,TwoLevelDNFFormula}`: A dictionary mapping the original results to their corresponding `TwoLevelDNFFormula` objects.
 """
-function group_atoms_by_feature(atoms)
-    atoms_by_feature = Dict{Int,Vector{Tuple{Float64,Bool}}}()
-    for atom in atoms
-        feat = atom.value.metacond.feature.i_variable
-        threshold = atom.value.threshold
-        is_less_than = atom.value.metacond.test_operator === (<)
-        push!(
-            get!(Vector{Tuple{Float64,Bool}}, atoms_by_feature, feat),
-            (threshold, is_less_than),
-        )
-    end
-    for atom_list in values(atoms_by_feature)
-        sort!(atom_list)
-    end
-    return atoms_by_feature
-end
-
-
-"""
-Processes a combination of feature values, applies the model to the combination, and updates the results and label count accordingly.
-
-Args:
-    i (BigInt): The index of the current combination.
-    num_atoms (Int): The total number of atoms.
-    thresholds_by_feature (Dict{Int,Vector{Float64}}): A dictionary mapping feature indices to a list of thresholds for that feature.
-    atoms_by_feature (Dict{Int,Vector{Tuple{Float64,Bool}}}): A dictionary mapping feature indices to a sorted list of (threshold, is_less_than) tuples for the atoms of that feature.
-    model: The model to apply to the combination.
-    results (Dict{Any,Vector{BigInt}}): A dictionary to store the results and their corresponding combinations.
-    label_count (Dict{Any,Int64}): A dictionary to store the count of each label.
-    contradictions (Atomic{Int64}): An atomic counter for the number of logical contradictions.
-"""
-function process_combination_ott(
-    i::BigInt,
+function concat_results(
+    results::Any,
     num_atoms::Int,
     thresholds_by_feature::Dict{Int,Vector{Float64}},
     atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}},
-    model,
-    results,
-    label_count,
-    contradictions,
-    apply_function = SoleModels.apply,
 )
-    combination =
-        generate_combination(i, num_atoms, thresholds_by_feature, atoms_by_feature)
+    results = dict_to_tritvector(results, num_atoms)
+    res = Dict{Any,TwoLevelDNFFormula}()
+    println("\nDetailed results:")
 
-    if !isnothing(combination)
-        features = collect(values(combination))
-        result = apply_function(model, features)
-
-        # Thread-safe update of results and label_count
-        push!(get!(() -> Vector{BigInt}(), results, result), i)
-        atomic_add!(get!(() -> Atomic{Int64}(0), label_count, result), 1)
-    else
-        atomic_add!(contradictions, 1)
+    for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
+        println("[$result] ($(length(combinations)) combinations)")
+        res[result] = TwoLevelDNFFormula(
+            Vector{TritVector}(combinations),
+            num_atoms,
+            thresholds_by_feature,
+            atoms_by_feature
+        )
     end
+    return res
 end
 
+function concat_results(results::Any, my_atoms::Vector)
+    num_atoms = length(my_atoms)
 
-###############################################################################################################################
+    results = dict_to_tritvector(results, num_atoms)
+    res = Dict{Any,TwoLevelDNFFormula}()
+    println("\nDetailed results:")
 
-"""
-Generates a statistical report for the execution of the optimization mode, including information about the rules, atoms, combinations, label distribution, performance, and complexity.
-
-Args:
-    nome_file (String): The name of the file to write the report to.
-    all_rules (Any): The set of all rules used in the optimization.
-    ntotatoms (Int): The total number of atoms before deduplication.
-    nuniqatoms (Int): The number of unique atoms after deduplication.
-    results (Dict{Any,Vector{BigInt}}): A dictionary containing the results and their corresponding combinations.
-    label_count (Dict{Any,Int64}): A dictionary containing the count of each label.
-    combined_results (Dict{Any,TwoLevelDNFFormula}): A dictionary containing the simplified formulas for each label.
-    elapsed_time (Float64): The total execution time of the optimization.
-    model (Any): The model used in the optimization.
-"""
-function genera_report_statistiche_ott(
-    nome_file,
-    all_rules,
-    ntotatoms,
-    nuniqatoms,
-    results,
-    label_count,
-    combined_results,
-    elapsed_time,
-    model,
-)
-    open(nome_file, "w") do file
-        println(file, "=== REPORT STATISTICO DELL'ESECUZIONE ===")
-        println(file, "Data e ora: ", Dates.now())
-        println(file, "====================================")
-
-        # Statistiche sulle regole e gli atomi
-        println(file, "\n1. REGOLE E ATOMI")
-        println(file, "  Numero totale di regole: ", length(all_rules))
-        println(file, "  Numero di proposizioni prima dell'uniq: ", ntotatoms)
-        println(file, "  Numero di proposizioni dopo l'uniq: ", nuniqatoms)
-        println(
-            file,
-            "  Riduzione delle proposizioni: ",
-            round((1 - nuniqatoms / ntotatoms) * 100, digits = 2),
-            "%",
-        )
-        println(file, "  Numero di atomi: ", nuniqatoms)
-
-        # Statistiche sulle combinazioni
-        println(file, "\n2. COMBINAZIONI")
-        num_combinazioni_totali = sum(length(combs) for (_, combs) in results)
-        println(file, "  Numero totale di combinazioni valide: ", num_combinazioni_totali)
-
-        # Statistiche sulle etichette
-        println(file, "\n3. DISTRIBUZIONE DELLE ETICHETTE")
-        #sorted_label_count = sort(collect(label_count), by=x -> x[2][], rev=true)
-        for (label, count) in collect(label_count)
-            percentage = (count[] / num_combinazioni_totali) * 100
-            println(file, "  $label: $count (", round(percentage, digits = 2), "%)")
-        end
-
-        # Statistiche sulla semplificazione
-        #=
-            println(file, "\n4. SEMPLIFICAZIONE DELLE FORMULE")
-            for (result, formula) in combined_results
-                formula_semplificata = minimizza_dnf(formula)
-                riduzione = (1 - nterms(formula_semplificata) / nterms(formula)) * 100
-                println(file, "  Etichetta $result:")
-                println(file, "    Termini originali: ", nterms(formula))
-                println(file, "    Termini dopo la semplificazione: ", nterms(formula_semplificata))
-                println(file, "    Riduzione: ", round(riduzione, digits=2), "%")
-            end
-        =#
-
-        # Prestazioni
-        println(file, "\n5. PRESTAZIONI")
-        println(
-            file,
-            "  Tempo totale di esecuzione: ",
-            round(elapsed_time, digits = 2),
-            " secondi",
-        )
-        println(
-            file,
-            "  Tempo medio per combinazione: ",
-            round(elapsed_time / num_combinazioni_totali * 1000, digits = 2),
-            " millisecondi",
-        )
-
-        # Complessità
-        println(file, "\n6. COMPLESSITÀ")
-        println(file, "  Numero di alberi nella foresta: ", length(model.trees))
-
-        # Aggiunta della stampa delle formule semplificate
-        println(file, "\n7. FORMULE SEMPLIFICATE")
-        for (result, formula) in combined_results
-            println(file, "  Etichetta $result:")
-            formula_semplificata = minimizza_dnf(formula)
-            println(file, "    Formula originale:")
-            stampa_dnf(file, formula, 3)
-            println(file, "    Formula semplificata:")
-            stampa_dnf(file, formula_semplificata, 3)
-            println(
-                file,
-                "    Riduzione: ",
-                round(
-                    (
-                        1 -
-                        nterms(formula_semplificata) /
-                        nterms(formula)
-                    ) * 100,
-                    digits = 2,
-                ),
-                "%",
-            )
-            println(file)
-        end
-
-        println(file, "\n====================================")
-        println(file, "Fine del report")
+    for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
+        println("[$result] ($(length(combinations)) combinations)")
+        res[result] = TwoLevelDNFFormula(my_atoms, Vector{TritVector}(combinations)) # if we resolve "constructs" we can also use -> res[result] = TwoLevelDNFFormula(Vector{TritVector}(combinations), my_atoms)
     end
-    println("Report generato con successo: $nome_file")
+    return res
 end
 
-
 """
-    compare_truth_combinations(model, alpha, atom_prop, vertical; kwargs...)
+    verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLevelDNFFormula)
 
-Compares the results of `truth_combinations_ott` and `truth_combinations` functions.
+Verifies that a simplified custom OR formula is congruent with the original formula.
 
-This function executes both `truth_combinations_ott` and `truth_combinations` functions, and then compares the results. It checks if the sets of combinations for each label are identical between the two results. If any differences are found, it prints the details of the differences.
+This function takes the original and simplified custom OR formulas, and generates a set of random assignments to evaluate and compare the results of the two formulas. If any mismatch is found, the function returns `false`, indicating that the simplification is not correct. Otherwise, it returns `true`, confirming that the simplified formula is congruent with the original.
 
-Args:
-    model: The model object.
-    alpha: The alpha object.
-    atom_prop: The atom properties.
-    vertical: A boolean indicating whether to use vertical mode.
-    kwargs: Additional keyword arguments passed to the `truth_combinations_ott` and `truth_combinations` functions.
+Parameters:
+- `original::TwoLevelDNFFormula`: The original custom OR formula.
+- `simplified::TwoLevelDNFFormula`: The simplified custom OR formula.
 
 Returns:
-    A boolean indicating whether the results of the two functions are identical.
+- `true` if the simplified formula is congruent with the original, `false` otherwise.
 """
-function compare_truth_combinations(model, alpha, atom_prop, vertical; kwargs...)
-    println("\nConfrontando i risultati di truth_combinations_ott e truth_combinations...")
+function verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLevelDNFFormula)
+    @info "Starting verification of simplification"
 
-    println("\n\n$COLORED_INFO$TITLE\n$RESET")
-    # Esegui entrambe le funzioni
-    @time results_ott, label_count_ott =
-        truth_combinations_ott(model, alpha, atom_prop, vertical; kwargs...)
-    println("$COLORED_INFO************** ⬆️ **************$RESET")
-    @time results_standard, label_count_standard =
-        truth_combinations(model, alpha, atom_prop, vertical; kwargs...)
-    println("$COLORED_INFO************** ⬆️ **************$RESET")
-    println("$COLORED_INFO$TITLE$RESET")
+    # Function to generate assignments based on BitVector
+    function generate_smart_assignments(formula, num_samples)
+        assignments = Set{Dict{Int,Bool}}()
 
-    # Prepara le strutture dati necessarie per creare dnf's
-    num_atoms = length(atom_prop)
-    thresholds_by_feature = Dict(
-        subalpha.featcondition[1].feature.i_variable => sort(subalpha.featcondition[2])
-        for subalpha in alpha.subalphabets
-    )
-    atoms_by_feature = Dict{Int,Vector{Tuple{Float64,Bool}}}()
-    for atom in atom_prop
-        feat = atom.value.metacond.feature.i_variable
-        threshold = atom.value.threshold
-        push!(get!(Vector{Tuple{Float64,Bool}}, atoms_by_feature, feat), (threshold, true))
-    end
-    for (_, atom_list) in atoms_by_feature
-        sort!(atom_list, by = first)
-    end
-
-    # Crea dnf's per entrambi i risultati
-    combined_results_ott =
-        concat_results(results_ott, num_atoms, thresholds_by_feature, atoms_by_feature)
-    combined_results_standard =
-        concat_results(results_standard, num_atoms, thresholds_by_feature, atoms_by_feature)
-
-    # Confronta i risultati
-    are_equal = true
-    for (label, formula_ott) in combined_results_ott
-        if !haskey(combined_results_standard, label)
-            println("Etichetta $label presente solo nei risultati ottimizzati")
-            are_equal = false
-            continue
+        # Convert each BitVector into a Dict{Int,Bool}
+        for combination in eachcombination(formula)
+            assignment = Dict{Int,Bool}()
+            for (i, bit) in enumerate(combination)
+                assignment[i] = bit
+            end
+            push!(assignments, assignment)
+            if length(assignments) >= num_samples
+                break
+            end
         end
 
-        formula_standard = combined_results_standard[label]
-        if Set(eachcombination(formula_ott)) != Set(eachcombination(formula_standard))
-            println("Differenze trovate per l'etichetta $label:")
-            println("  Combinazioni ottimizzate: ", nterms(formula_ott))
-            println("  Combinazioni standard: ", nterms(formula_standard))
-            are_equal = false
+        # Add some random assignments to increase coverage
+        while length(assignments) < num_samples
+            random_assignment = Dict(i => rand(Bool) for i = 1:nuberofatoms(formula))
+            push!(assignments, random_assignment)
+        end
+        return collect(assignments)
+    end
+
+    # Optimized function to evaluate the formula
+    function evaluate_custom_or_formula(formula, assignment)
+        for combination in eachcombination(formula)
+            all_true = true
+            for (feat, atom_list) in eachatomsbyfeature(formula)
+                feat_value = get(assignment, feat, false)
+                for (threshold, is_less_than) in atom_list
+                    if is_less_than ? (feat_value >= threshold) : (feat_value < threshold)
+                        all_true = false
+                        break
+                    end
+                end
+                if !all_true
+                    break
+                end
+            end
+            if all_true
+                return true
+            end
+        end
+        return false
+    end
+
+    # Generate a set of "smart" assignments based on existing combinations
+    num_samples = min(1000, 2^nuberofatoms(original))  # Limit the number of samples for very large inputs
+    assignments = generate_smart_assignments(original, num_samples)
+
+    # Verify formulas using generated assignments
+    for (i, assignment) in enumerate(assignments)
+        original_result = evaluate_custom_or_formula(original, assignment)
+        simplified_result = evaluate_custom_or_formula(simplified, assignment)
+
+        if original_result != simplified_result
+            @warn "Mismatch found for assignment: $assignment"
+            @warn "Original result: $original_result"
+            @warn "Simplified result: $simplified_result"
+            return false
+        end
+
+        # Print progress every 100 iterations
+        if i % 100 == 0
+            @info "Processed $i out of $num_samples assignments"
         end
     end
 
-    for label in keys(combined_results_standard)
-        if !haskey(combined_results_ott, label)
-            println("Etichetta $label presente solo nei risultati standard")
-            are_equal = false
+    @info "Verification complete. Simplified formula is congruent with the original."
+    return true
+end
+
+
+function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+    # Apri il file per scrivere l'output
+    open("test_ott.txt", "w") do file
+        
+        println(file, "🚀 Benchmark Truth Combinations vs Truth Combinations OTT")
+        println(file, "=" ^ 60)
+
+        # Test con @time (singola esecuzione)
+        println(file, "\n📊 Test singolo con @time:")
+        println(file, "-" ^ 40)
+
+        print(file, "truth_combinations: ")
+        time1 = @elapsed result1 = truth_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+        println(file, "$(round(time1*1000, digits=3)) ms")
+
+        print(file, "truth_combinations_ott: ")
+        time2 = @elapsed result2 = truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+        println(file, "$(round(time2*1000, digits=3)) ms")
+
+        # Verifica che i risultati siano identici
+        println(file, "\n🔍 Verifica correttezza:")
+        println(file, "-" ^ 30)
+        if result1 == result2
+            println(file, "✅ I risultati sono IDENTICI - tutto ok!")
+        else
+            println(file, "❌ ATTENZIONE: I risultati sono DIVERSI!")
+            println(file, "Tipo result1: $(typeof(result1))")
+            println(file, "Tipo result2: $(typeof(result2))")
+
+            # Controlli più dettagliati
+            if isa(result1, Array) && isa(result2, Array)
+                println(file, "Dimensioni result1: $(size(result1))")
+                println(file, "Dimensioni result2: $(size(result2))")
+                if size(result1) == size(result2)
+                    diff_count = sum(result1 .!= result2)
+                    println(file, "Elementi diversi: $diff_count / $(length(result1))")
+                    if diff_count > 0 && diff_count <= 10
+                        println(file, "Prime differenze:")
+                        for i in 1:min(length(result1), 10)
+                            if result1[i] != result2[i]
+                                println(file, "  Posizione $i: $(result1[i]) vs $(result2[i])")
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        # Test multiplo per avere una media più affidabile
+        println(file, "\n🔄 Test multiplo (20 iterazioni + warm-up):")
+        println(file, "-" ^ 40)
+
+        n_tests = 20
+        n_warmup = 3
+
+        # Warm-up per stabilizzare la compilazione JIT
+        println(file, "Warm-up...")
+        for i in 1:n_warmup
+            truth_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+            truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+        end
+
+        # Test truth_combinations
+        println(file, "Testing truth_combinations...")
+        times1 = Float64[]
+        for i in 1:n_tests
+            # Forza garbage collection prima del test
+            GC.gc()
+            t = @elapsed truth_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+            push!(times1, t)
+        end
+
+        # Test truth_combinations_ott  
+        println(file, "Testing truth_combinations_ott...")
+        times2 = Float64[]
+        for i in 1:n_tests
+            # Forza garbage collection prima del test
+            GC.gc()
+            t = @elapsed truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+            push!(times2, t)
+        end
+
+        # Calcolo statistiche (con rimozione outlier)
+        # Rimuovi gli outlier più estremi (top 10% e bottom 10%)
+        times1_sorted = sort(times1)
+        times2_sorted = sort(times2)
+        
+        # Prendi il 80% centrale (rimuovi 10% estremi da ogni lato)
+        start_idx = max(1, Int(round(n_tests * 0.1)))
+        end_idx = min(n_tests, Int(round(n_tests * 0.9)))
+        
+        times1_clean = times1_sorted[start_idx:end_idx]
+        times2_clean = times2_sorted[start_idx:end_idx]
+        
+        avg1 = sum(times1_clean) / length(times1_clean)
+        avg2 = sum(times2_clean) / length(times2_clean)
+        min1 = minimum(times1)
+        min2 = minimum(times2)
+        max1 = maximum(times1)
+        max2 = maximum(times2)
+        median1 = times1_sorted[div(n_tests, 2)]
+        median2 = times2_sorted[div(n_tests, 2)]
+
+        # Risultati
+        println(file, "\n📈 RISULTATI:")
+        println(file, "=" ^ 50)
+        println(file, "truth_combinations:")
+        println(file, "  Tempo medio (no outlier): $(round(avg1*1000, digits=3)) ms")
+        println(file, "  Tempo mediano:            $(round(median1*1000, digits=3)) ms")
+        println(file, "  Tempo min:                $(round(min1*1000, digits=3)) ms") 
+        println(file, "  Tempo max:                $(round(max1*1000, digits=3)) ms")
+
+        println(file, "\ntruth_combinations_ott:")
+        println(file, "  Tempo medio (no outlier): $(round(avg2*1000, digits=3)) ms")
+        println(file, "  Tempo mediano:            $(round(median2*1000, digits=3)) ms")
+        println(file, "  Tempo min:                $(round(min2*1000, digits=3)) ms")
+        println(file, "  Tempo max:                $(round(max2*1000, digits=3)) ms")
+
+        # Confronto
+        speedup = avg1 / avg2
+        speedup_median = median1 / median2
+        if speedup > 1.0
+            println(file, "\n🏆 truth_combinations_ott è $(round(speedup, digits=2))x più veloce (media)!")
+            println(file, "🏆 truth_combinations_ott è $(round(speedup_median, digits=2))x più veloce (mediana)!")
+        else
+            println(file, "\n⚠️  truth_combinations è $(round(1/speedup, digits=2))x più veloce (media)!")
+            println(file, "⚠️  truth_combinations è $(round(1/speedup_median, digits=2))x più veloce (mediana)!")
+        end
+
+        println(file, "\n📊 Tutti i tempi (ms):")
+        println(file, "truth_combinations: ", [round(t*1000, digits=2) for t in times1])
+        println(file, "truth_combinations_ott: ", [round(t*1000, digits=2) for t in times2])
+        
+        # Identifica outlier
+        if max2 > 3 * median2
+            println(file, "\n⚠️  OUTLIER RILEVATO in truth_combinations_ott:")
+            println(file, "   Tempo max $(round(max2*1000, digits=2)) ms è molto superiore alla mediana $(round(median2*1000, digits=2)) ms")
+            println(file, "   Possibili cause: GC, compilazione JIT, interferenza sistema")
         end
     end
-
-    if are_equal
-        @info "I risultati di truth_combinations_ott e truth_combinations sono identici."
-    else
-        @warn "Sono state rilevate differenze tra i risultati di truth_combinations_ott e truth_combinations."
-    end
-
-    return are_equal
+    
+    println("✅ Benchmark completato! Risultati salvati in 'test_ott.txt'")
 end

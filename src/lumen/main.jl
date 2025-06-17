@@ -200,10 +200,12 @@ function lumen(
         results, label_count = @time "Lumen: computing combinations" begin
             if ott_mode
                 truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+                #testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
             else
                 truth_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
             end
         end
+
 
         # Feature Processing
         #= OLD CODE were we haven't Constructor
