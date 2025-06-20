@@ -407,14 +407,14 @@ end
 
 
 function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function, testott)
-    # Apri il file per scrivere l'output
+    # open output file 
     open("test_ott_$testott.txt", "w") do file
         
         println(file, "🚀 Benchmark Truth Combinations vs Truth Combinations OTT")
         println(file, "=" ^ 60)
 
-        # Test con @time (singola esecuzione)
-        println(file, "\n📊 Test singolo con @time:")
+        # Test with @elapsed (Single execution)
+        println(file, "\n📊 Single test with @execution:")
         println(file, "-" ^ 40)
 
         print(file, "truth_combinations: ")
@@ -425,43 +425,43 @@ function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_functio
         time2 = @elapsed result2 = truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
         println(file, "$(round(time2*1000, digits=3)) ms")
 
-        # Verifica che i risultati siano identici
-        println(file, "\n🔍 Verifica correttezza:")
+        # Check if the results are the same 
+        println(file, "\n🔍 Consistency check:")
         println(file, "-" ^ 30)
         if result1 == result2
-            println(file, "✅ I risultati sono IDENTICI - tutto ok!")
+            println(file, "✅ The results are consistent !")
         else
-            println(file, "❌ ATTENZIONE: I risultati sono DIVERSI!")
-            println(file, "Tipo result1: $(typeof(result1))")
-            println(file, "Tipo result2: $(typeof(result2))")
+            println(file, "❌ WARNING: the results are not consistent !")
+            println(file, "Result1 type: $(typeof(result1))")
+            println(file, "Result2 type: $(typeof(result2))")
 
-            # Controlli più dettagliati
+            # Check details
             if isa(result1, Array) && isa(result2, Array)
-                println(file, "Dimensioni result1: $(size(result1))")
-                println(file, "Dimensioni result2: $(size(result2))")
+                println(file, "Result1 size: $(size(result1))")
+                println(file, "Result2 size: $(size(result2))")
                 if size(result1) == size(result2)
                     diff_count = sum(result1 .!= result2)
-                    println(file, "Elementi diversi: $diff_count / $(length(result1))")
+                    println(file, "Different elements: $diff_count / $(length(result1))")
                     if diff_count > 0 && diff_count <= 10
-                        println(file, "Prime differenze:")
+                        println(file, "First 10 differences:")
                         for i in 1:min(length(result1), 10)
                             if result1[i] != result2[i]
-                                println(file, "  Posizione $i: $(result1[i]) vs $(result2[i])")
+                                println(file, "  index $i: $(result1[i]) vs $(result2[i])")
                             end
                         end
                     end
                 end
             end
         end
-
-        # Test multiplo per avere una media più affidabile
-        println(file, "\n🔄 Test multiplo (20 iterazioni + warm-up):")
+        
+        # Multiple test needed to make the mean more reliable
+        println(file, "\n🔄 Multiple test (20 iterations + warm-up):")
         println(file, "-" ^ 40)
 
         n_tests = 20
         n_warmup = 3
 
-        # Warm-up per stabilizzare la compilazione JIT
+        # Warm-up to stabilize the compilation JIT
         println(file, "Warm-up...")
         for i in 1:n_warmup
             truth_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
@@ -472,7 +472,7 @@ function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_functio
         println(file, "Testing truth_combinations...")
         times1 = Float64[]
         for i in 1:n_tests
-            # Forza garbage collection prima del test
+            # Force garbage collection
             GC.gc()
             t = @elapsed truth_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
             push!(times1, t)
@@ -482,18 +482,18 @@ function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_functio
         println(file, "Testing truth_combinations_ott...")
         times2 = Float64[]
         for i in 1:n_tests
-            # Forza garbage collection prima del test
+            # Force garbage collection
             GC.gc()
             t = @elapsed truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
             push!(times2, t)
         end
 
-        # Calcolo statistiche (con rimozione outlier)
-        # Rimuovi gli outlier più estremi (top 10% e bottom 10%)
+        # Statistics (with outlier removal)
+        # Remove the more extreme outlier (top 10% & bottom 10%)
         times1_sorted = sort(times1)
         times2_sorted = sort(times2)
         
-        # Prendi il 80% centrale (rimuovi 10% estremi da ogni lato)
+        # Take the middle 80% (Remove the 10% at the extremes)
         start_idx = max(1, Int(round(n_tests * 0.1)))
         end_idx = min(n_tests, Int(round(n_tests * 0.9)))
         
@@ -510,42 +510,42 @@ function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_functio
         median2 = times2_sorted[div(n_tests, 2)]
 
         # Risultati
-        println(file, "\n📈 RISULTATI:")
+        println(file, "\n📈 RESULTS:")
         println(file, "=" ^ 50)
         println(file, "truth_combinations:")
-        println(file, "  Tempo medio (no outlier): $(round(avg1*1000, digits=3)) ms")
-        println(file, "  Tempo mediano:            $(round(median1*1000, digits=3)) ms")
-        println(file, "  Tempo min:                $(round(min1*1000, digits=3)) ms") 
-        println(file, "  Tempo max:                $(round(max1*1000, digits=3)) ms")
+        println(file, "  Mean time (no outlier): $(round(avg1*1000, digits=3)) ms")
+        println(file, "  Median time:            $(round(median1*1000, digits=3)) ms")
+        println(file, "  Min time:                $(round(min1*1000, digits=3)) ms") 
+        println(file, "  Max time:                $(round(max1*1000, digits=3)) ms")
 
         println(file, "\ntruth_combinations_ott:")
-        println(file, "  Tempo medio (no outlier): $(round(avg2*1000, digits=3)) ms")
-        println(file, "  Tempo mediano:            $(round(median2*1000, digits=3)) ms")
-        println(file, "  Tempo min:                $(round(min2*1000, digits=3)) ms")
-        println(file, "  Tempo max:                $(round(max2*1000, digits=3)) ms")
+        println(file, "  Mean time (no outlier): $(round(avg2*1000, digits=3)) ms")
+        println(file, "  Median time:             $(round(median2*1000, digits=3)) ms")
+        println(file, "  Min time:                $(round(min2*1000, digits=3)) ms")
+        println(file, "  Max time:                $(round(max2*1000, digits=3)) ms")
 
         # Confronto
         speedup = avg1 / avg2
         speedup_median = median1 / median2
         if speedup > 1.0
-            println(file, "\n🏆 truth_combinations_ott è $(round(speedup, digits=2))x più veloce (media)!")
-            println(file, "🏆 truth_combinations_ott è $(round(speedup_median, digits=2))x più veloce (mediana)!")
+            println(file, "\n🏆 truth_combinations_ott is $(round(speedup, digits=2))x faster (mean)!")
+            println(file, "🏆 truth_combinations_ott is $(round(speedup_median, digits=2))x faster (median)!")
         else
-            println(file, "\n⚠️  truth_combinations è $(round(1/speedup, digits=2))x più veloce (media)!")
-            println(file, "⚠️  truth_combinations è $(round(1/speedup_median, digits=2))x più veloce (mediana)!")
+            println(file, "\n⚠️  truth_combinations is $(round(1/speedup, digits=2))x faster (mean)!")
+            println(file, "⚠️  truth_combinations is $(round(1/speedup_median, digits=2))x faster (median)!")
         end
 
-        println(file, "\n📊 Tutti i tempi (ms):")
+        println(file, "\n📊 All times (ms):")
         println(file, "truth_combinations: ", [round(t*1000, digits=2) for t in times1])
         println(file, "truth_combinations_ott: ", [round(t*1000, digits=2) for t in times2])
         
         # Identifica outlier
         if max2 > 3 * median2
-            println(file, "\n⚠️  OUTLIER RILEVATO in truth_combinations_ott:")
-            println(file, "   Tempo max $(round(max2*1000, digits=2)) ms è molto superiore alla mediana $(round(median2*1000, digits=2)) ms")
-            println(file, "   Possibili cause: GC, compilazione JIT, interferenza sistema")
+            println(file, "\n⚠️  OUTLIER FOUND in truth_combinations_ott:") 
+            println(file, "   Max time $(round(max2*1000, digits=2)) ms is a lot higher than the median $(round(median2*1000, digits=2)) ms")
+            println(file, "   Possible causes: GC, compilation JIT, system interference")
         end
     end
     
-    println("✅ Benchmark completato! Risultati salvati in 'test_ott.txt'")
+    println("✅ Benchmark completed! Result saved in 'test_ott.txt'")
 end
