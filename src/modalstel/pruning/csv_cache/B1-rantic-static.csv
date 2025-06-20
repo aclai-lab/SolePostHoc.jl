@@ -1,0 +1,3 @@
+B1,static,Original,/home/lele7x/results9/evolutionary-rule-extraction/pruning-ensemble/models_cache/B1-rantic-static/model_9582925acc4ca81879dbb4598da699194b5c8a685cab30ddb61602e71ecc9c18.jld2,100,97.50000000000001,98.75,97.5609756097561,100.0
+B1,static,Subforest,/home/lele7x/results9/evolutionary-rule-extraction/pruning-ensemble/models_cache/B1-rantic-static/model_9582925acc4ca81879dbb4598da699194b5c8a685cab30ddb61602e71ecc9c18.jld2,13,92.5,96.25,93.02325581395348,100.0
+B1,static,Avgforest,Nothing,13,88.07692307692308,94.03846153846153,89.95568552945679,99.32773109243698

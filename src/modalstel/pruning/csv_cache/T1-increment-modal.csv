@@ -1,0 +1,3 @@
+T1,modal,Original,/home/lele7x/results9/evolutionary-rule-extraction/pruning-ensemble/models_cache/T1-increment-modal/model_34c310393f83a4068b8540f8f3cece231662cd352a7972fcc65f5d3b6a3558d4.jld2,100,68.0,84.0,81.48148148148148,86.95652173913044
+T1,modal,Subforest,/home/lele7x/results9/evolutionary-rule-extraction/pruning-ensemble/models_cache/T1-increment-modal/model_34c310393f83a4068b8540f8f3cece231662cd352a7972fcc65f5d3b6a3558d4.jld2,6,63.99999999999999,82.0,76.66666666666667,90.0
+T1,modal,Avgforest,Nothing,6,35.333333333333336,67.66666666666667,68.44154948993659,67.9485262544473
