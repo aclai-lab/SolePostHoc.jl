@@ -67,14 +67,14 @@ Args:
     results::Dict{Any,Vector{BigInt}}: A dictionary mapping results to the corresponding combinations.
 """
 function print_detailed_results(results::Dict{Any,Vector{BigInt}})
-    println("\nRisultati dettagliati:")
+    println("\nDetailed results:")
     for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
-        println("[$result] ($(length(combinations)) combinazioni):")
+        println("[$result] ($(length(combinations)) combinations):")
         if length(combinations) > 10
-            println("  Prime 10 combinazioni: $(combinations[1:10])")
-            println("  ... ($(length(combinations)-10) altre combinazioni)")
+            println("  First 10 combinations: $(combinations[1:10])")
+            println("  ... ($(length(combinations)-10) more combinations)")
         else
-            println("  Combinazioni: $combinations")
+            println("  Combinations: $combinations")
         end
     end
 end
