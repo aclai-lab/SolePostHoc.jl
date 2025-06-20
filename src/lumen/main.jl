@@ -130,6 +130,8 @@ function lumen(
     silent=false,
     return_info=true, # TODO must default to `false`.
     vetImportance=[],
+    testott = nothing,
+    alphabetcontroll = nothing,
     kwargs...
 )
     if vertical <= 0.0 || vertical > 1.0 || horizontal <= 0.0 || horizontal > 1.0
@@ -191,16 +193,16 @@ function lumen(
         num_all_atoms, my_atoms, my_alphabet
     end
 
-    if !controllo
+    if testott == nothing && alphabetcontroll == nothing
         silent || println(
             "\n\n$COLORED_TITLE$TITLE\n PART 3 TABLE GENERATION \n$TITLE$RESET"
         )
 
         # PART 3: Table Generation
+
         results, label_count = @time "Lumen: computing combinations" begin
             if ott_mode
                 truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
-                #testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
             else
                 truth_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
             end
@@ -325,17 +327,20 @@ function lumen(
         return ds, info
     end
 
-    if controllo
+    if testott != nothing
         silent || println(
             "\n\n$COLORED_INFO$TITLE\n PART 2.d IS THE OPTIMIZATION VALID?\n$TITLE$RESET",
         )
-        are_results_equal =
-         Lumen.compare_truth_combinations(modelJ, my_alphabet, my_atoms, vertical; apply_function, silent, kwargs...)
-        if are_results_equal
-            @info "\nOptimization valid: results are identical."
-        else
-            @warn "\nWARNING: Optimization might not be valid. Results differ."
-        end
+        testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function,testott)
+        return nothing, nothing 
+    end
+
+    if alphabetcontroll != nothing
+        silent || println(
+            "\n\n$COLORED_INFO$TITLE\n ANALIZE ONLY ALPHABET\n$TITLE$RESET",
+        )
+        debug_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function,alphabetcontroll)
+        return nothing, nothing 
     end
 end
 
@@ -354,6 +359,8 @@ include("types/types.jl")
 ##
 # Utils
 ##
+
+include("reportAlphabet.jl")
 
 # File report management
 include("utils/report.jl")

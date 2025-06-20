@@ -35,30 +35,33 @@ function truth_combinations_ott(
     print_progress = true,
     silent = true,
 )
-    # Inizializzazione identica all'originale
+    # Same initialization as the original
     thresholds_by_feature = Dict{Int,Vector{Float64}}()
     atoms_by_feature = Dict{Int,Vector{Tuple{Float64,Bool}}}()
 
+    # For each feature we extract the atoms and thresholds
     for subalpha in alphabet.subalphabets
         feat = subalpha.featcondition[1].feature.i_variable
         thresholds_by_feature[feat] = sort(subalpha.featcondition[2])
     end
 
+    # For each atom we get it's feature index and threashold
     for atom in atoms
         feat = atom.value.metacond.feature.i_variable
         threshold = atom.value.threshold
         push!(get!(Vector{Tuple{Float64,Bool}}, atoms_by_feature, feat), (threshold, true))
     end
 
+    # We then sort each atom list (Legacy code)
     for (_, atom_list) in atoms_by_feature
         sort!(atom_list, by = first)
     end
 
-    # Crea mappatura degli atomi nell'STESSO ORDINE di process_combination
+    # We create an atom mapping with the same order as `process_combination`
     atom_to_bit_position = Dict{Tuple{Int,Float64}, Int}()
     bit_position = 0
     
-    # CRUCIALE: stesso ordine di iterazione di process_combination
+    # Crucial: we keep the same order of iteration as `process_combination`
     for (feat, atom_list) in atoms_by_feature
         for (threshold, _) in atom_list
             atom_to_bit_position[(feat, threshold)] = bit_position
@@ -66,22 +69,26 @@ function truth_combinations_ott(
         end
     end
 
-    # Pre-genera tutte le combinazioni valide per feature (STESSO ORDINE)
+    # Pre-process all the valid combination for each feature (In the same order of legacy version)
     valid_combinations_by_feature = Dict{Int, Vector{Tuple{Vector{Int}, Vector{Float64}}}}()
     
-    for (feat, atom_list) in atoms_by_feature  # STESSO ORDINE di process_combination
+    # For each feaure we find the valid combinations
+    for (feat, atom_list) in atoms_by_feature
+        # Extract the thresholds
         thresholds = thresholds_by_feature[feat]
         valid_combinations_by_feature[feat] = []
         
+        # Extract the atoms
         atom_thresholds = [atom[1] for atom in atom_list]
         num_atoms_for_feat = length(atom_thresholds)
         
-        # Genera tutte le combinazioni di truth values per questa feature
+        # Generate all truth value combinations for the feature
         for binary_combo in 0:(2^num_atoms_for_feat - 1)
+            # Parse the value into binary format
             truth_values = digits(binary_combo, base=2, pad=num_atoms_for_feat)
             valid_values = copy(thresholds)
             
-            # Applica i vincoli degli atomi NELLO STESSO ORDINE
+            # Apply the atom threshold to the value
             for (atom_idx, (threshold, _)) in enumerate(atom_list)
                 truth_val = truth_values[atom_idx]
                 if truth_val == 1
@@ -91,30 +98,31 @@ function truth_combinations_ott(
                 end
             end
             
-            # Solo se ci sono valori validi, aggiungi la combinazione
+            # If any valid value is found we add it to the valid combinations vector
             if !isempty(valid_values)
                 push!(valid_combinations_by_feature[feat], (truth_values, valid_values))
             end
         end
     end
     
-    # Aggiungi features senza atomi
+    # Add features without any atoms
     for feat in keys(thresholds_by_feature)
         if !haskey(valid_combinations_by_feature, feat)
             push!(get!(Vector{Tuple{Vector{Int}, Vector{Float64}}}, valid_combinations_by_feature, feat), (Int[], [1605.0]))
         end
     end
     
-    # Funzione per ricostruire l'ID binario originale (STESSO ORDINE di process_combination)
+    # This function is used to parse the combination to the relative value in base 10
     function reconstruct_binary_id(combination_tuple, feature_keys, atoms_by_feature, atom_to_bit_position)
         binary_id = BigInt(0)
         
-        # Itera nello STESSO ORDINE di process_combination
+        # As before we iterate with the same order as  `process_combination`
         for (feat, atom_list) in atoms_by_feature
             if feat in feature_keys
                 feat_idx = findfirst(x -> x == feat, feature_keys)
                 truth_values, _ = combination_tuple[feat_idx]
                 
+                # Extract the atom postition based on the value of the combination instance
                 for (atom_idx, (threshold, _)) in enumerate(atom_list)
                     bit_pos = atom_to_bit_position[(feat, threshold)]
                     truth_val = truth_values[atom_idx]
@@ -126,22 +134,25 @@ function truth_combinations_ott(
             end
         end
         
+        # Return the parsed base 10 combination value
         return binary_id
     end
     
-    # Genera combinazioni usando prodotto cartesiano (STESSO ORDINE)
-    feature_keys = [feat for (feat, _) in atoms_by_feature]  # STESSO ORDINE di process_combination
+    # Extract the feature keys
+    feature_keys = [feat for (feat, _) in atoms_by_feature]  
     
-    # Aggiungi features senza atomi alla fine
+    # Add features without any atoms
     for feat in keys(thresholds_by_feature)
         if !(feat in feature_keys)
             push!(feature_keys, feat)
         end
     end
+
+    # TODO: check if this is just a name change
     combination_sets = [valid_combinations_by_feature[feat] for feat in feature_keys]
     all_combinations_iter = Iterators.product(combination_sets...)
     
-    # Applica campionamento verticale
+    # Apply vertical sampling 
     combinations_to_process = if isone(vertical)
         all_combinations_iter
     else
@@ -151,29 +162,32 @@ function truth_combinations_ott(
         [combinations_vec[i] for i in sample_indices]
     end
     
+    # Initialize results
     results = Dict{Any,Vector{BigInt}}()
     label_count = Dict{Any,Int}()
     seen_vectors = Set{Vector{Float64}}()
     
+    # For each generated combinations
     for combination_tuple in combinations_to_process
-        # Ricostruisci l'ID binario originale
+        # We reconstruct the related base 10 value
         original_binary_id = reconstruct_binary_id(combination_tuple, feature_keys, atoms_by_feature, atom_to_bit_position)
         
-        # Costruisci il dizionario della combinazione
+        # Generate the combination dict
         combination_dict = Dict{Int, Vector{Float64}}()
         for (feat_idx, feat) in enumerate(feature_keys)
             _, valid_values = combination_tuple[feat_idx]
             combination_dict[feat] = valid_values
         end
         
-        # Processa la combinazione
+        # Process the combination
         combination_dict = SortedDict(combination_dict)
         combination_vector = vcat(collect(values(combination_dict))...)
         
-        # Evita duplicati basati sui valori della combinazione
+        # Skip any duplicates
         if !(combination_vector in seen_vectors)
             push!(seen_vectors, combination_vector)
             
+            # Make a prediction using the passed model
             result = if model isa AbstractModel
                 apply_function(model, DataFrame(reshape(combination_vector, 1, :), :auto))
             else
@@ -185,13 +199,12 @@ function truth_combinations_ott(
         end
     end
 
+    # Return the results
     return results, label_count
 end
 
 
-"""
-Dict{Any, Vector{BigInt}}("Iris-virginica" => [9, 14, 19, 29, 34, 38, 39], "Iris-setosa" => [0, 1, 2, 3, 4, 20, 21, 22, 23, 24], "Iris-versicolor" => [5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 17, 18, 25, 26, 27, 28, 30, 31, 32, 33, 35, 36, 37])
-   
+"""   
 Processes a combination of atom values and returns a dictionary of valid values for each feature, along with a flag indicating if the combination has a contradiction.
 
 This function takes a combination of atom values, represented as either a `BitVector` or an integer, and the dictionaries of thresholds and atom properties. It then processes the combination, filtering the valid values for each feature based on the atom values. If a feature has no valid values, the function sets a flag indicating a contradiction. Finally, it returns the dictionary of valid values for each feature and the contradiction flag.
@@ -393,9 +406,9 @@ function verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLeve
 end
 
 
-function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function, testott)
     # Apri il file per scrivere l'output
-    open("test_ott.txt", "w") do file
+    open("test_ott_$testott.txt", "w") do file
         
         println(file, "🚀 Benchmark Truth Combinations vs Truth Combinations OTT")
         println(file, "=" ^ 60)
