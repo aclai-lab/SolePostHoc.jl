@@ -117,7 +117,7 @@ See also
 """
 function lumen(
     modelJ, # actualy truth_combinations usa model 
-    minimization_scheme::Symbol=:mitespresso;
+    minimization_scheme::Symbol=:abc;
     vertical::Real=1.0,
     horizontal::Real=1.0,
     ott_mode::Bool=false,
@@ -148,7 +148,7 @@ function lumen(
         end
     end
 
-    is_minimization_scheme_espresso = minimization_scheme == :mitespresso # TODO we use this only for BYPASS in the code
+    is_minimization_scheme_espresso = minimization_scheme == :mitespresso || minimization_scheme == :boom || minimization_scheme == :abc # || minimization_scheme == :texasespresso
 
     # PART 2.a: Starter Ruleset Extraction
     silent || println(
@@ -251,17 +251,17 @@ function lumen(
                 push!(unminimized_rules, convert_DNF_formula(formula, result, 1.0))
             end
 
-            formula_semplificata_t = @timed Lumen.minimizza_dnf(
+            formula_semplificata= Lumen.minimizza_dnf(
                 Val(minimization_scheme),
                 formula;
                 minimization_kwargs...,
             )
-            formula_semplificata = formula_semplificata_t.value
+            #formula_semplificata = formula_semplificata_t.value
 
 
 
             try
-                @info "Simplification completed in $(formula_semplificata_t.time) seconds"
+                #@info "Simplification completed in $(formula_semplificata_t.time) seconds"
 
                 if !is_minimization_scheme_espresso
                     silent || println("==========================")
@@ -301,7 +301,7 @@ function lumen(
                     new_rule = Rule(φ, result)
                 else
                     new_rule = convert_DNF_formula(
-                        formula_semplificata_t.value,
+                        formula_semplificata,
                         result,
                         horizontal
                     )

@@ -21,6 +21,58 @@ function minimizza_dnf(
 end
 
 
+function minimizza_dnf(
+    ::Val{:boom},
+    formula::TwoLevelDNFFormula;
+    silent = true,
+    boom_kwargs...,
+)
+    formula = convert(SoleLogics.DNF, formula)
+    silent || (println(); @show formula)
+
+    formula = SoleData.boom_minimize(formula, silent; boom_kwargs...)
+
+    silent || (println(); @show formula)
+
+    return formula
+end
+
+function minimizza_dnf(
+    ::Val{:abc},
+    formula::TwoLevelDNFFormula;
+    silent = true,
+    boom_kwargs...,
+)
+    formula = convert(SoleLogics.DNF, formula)
+    silent || (println(); @show formula)
+
+    formula = SoleData.abc_minimize(formula, silent; boom_kwargs...)
+
+    silent || (println(); @show formula)
+
+    return formula
+end
+
+#=
+function minimizza_dnf(
+    ::Val{:texasespresso},
+    formula::TwoLevelDNFFormula;
+    silent = true,
+    texasespresso_kwargs...,
+)
+    formula = convert(SoleLogics.DNF, formula)
+    silent || (println(); @show formula)
+    formula = SoleData.espressoTexas_minimize(formula, silent; texasespresso_kwargs...)
+    silent || (println(); @show formula)
+    # @infiltrate
+    # @show syntaxstring(formula)
+    #formula = convert(TwoLevelDNFFormula, formula) # TODO FOR NOW WE USE BYPASS... FIX THIS WHEN WE KNOW HOW TO CONVERT 
+    silent || (println(); @show formula)
+    return formula
+end
+=#
+
+
 """
     minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula, horizontal = 1.0)
 
