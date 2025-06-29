@@ -209,6 +209,8 @@ function leftmost_disjunctive_form_to_string(ldf, c=1.0, vetImportance=[])
             return cf.grandchildren
         elseif cf isa Atom
             return [cf]
+        elseif cf isa BooleanTruth
+            return []
         else
             error("Unknown type in leftmost_disjunctive_form_to_string: $(typeof(cf))")
         end

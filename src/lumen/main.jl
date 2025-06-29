@@ -245,7 +245,7 @@ function lumen(
 
         # Process each result
         for (result, formula) in combined_results
-            silent || println("Risultato: $result")
+            println("Svolgendo minimizzazione per: $result")
 
             if return_info
                 push!(unminimized_rules, convert_DNF_formula(formula, result, 1.0))
@@ -307,7 +307,7 @@ function lumen(
                     )
                 end
                 #new_rule = Rule(ant, result)
-                println(new_rule)
+                silent || println(new_rule)
                 push!(minimized_rules, new_rule)
             catch e
                 @error "Simplification error: $e"
