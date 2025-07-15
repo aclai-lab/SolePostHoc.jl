@@ -86,6 +86,15 @@ struct InTreesRuleExtractor <: RuleExtractor
     end
 end
 
+function Base.iterate(e::InTreesRuleExtractor, state=1)
+    fields = fieldnames(typeof(e))
+    if state > length(fields)
+        return nothing
+    end
+    field = fields[state]
+    return (field => getfield(e, field)), state + 1
+end
+
 function Base.show(io::IO, info::InTreesRuleExtractor)
     println(io, "InTreesRuleExtractor:")
     for field in fieldnames(InTreesRuleExtractor)
@@ -94,8 +103,8 @@ function Base.show(io::IO, info::InTreesRuleExtractor)
     end
 end
 
-function modalextractrules(::InTreesRuleExtractor, m, args...; kwargs...)
-  dl = intrees(m, args...; kwargs...)
+function modalextractrules(e::InTreesRuleExtractor, m, args...; kwargs...)
+  dl = intrees(m, args...; e..., kwargs...)
   ll = listrules(dl, use_shortforms=false) # decision list to list of rules
   rules_obj = convert_classification_rules(dl, ll)
   dsintrees = DecisionSet(rules_obj)
