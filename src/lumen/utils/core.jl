@@ -129,6 +129,8 @@ function truth_combinations(
                 result = if model isa AbstractModel
                     apply_function(model, DataFrame(reshape(combination_vector, 1, :), :auto))
                 else
+                    @show model
+                    @show typeof(model)
                     apply_function(model, combination_vector)
                 end
                 push!(get!(Vector{BigInt}, results, result), BigInt(i))

@@ -40,8 +40,8 @@ include("shared_utils.jl")
 # ---------------------------------------------------------------------------- #
 #                                    types                                     #
 # ---------------------------------------------------------------------------- #
-const Optional{T} = Union{T, Nothing}
-const OptFloat64  = Optional{Float64}
+const Optional{T}     = Union{T, Nothing}
+const OptFloat64      = Optional{Float64}
 
 # ---------------------------------------------------------------------------- #
 #                                   intrees                                    #
@@ -125,10 +125,58 @@ include("lumen/main.jl")
 @reexport using .Lumen
 
 """$(_get_rule_extractor_docstring("LumenRuleExtractor", lumen))"""
-struct LumenRuleExtractor <: RuleExtractor end
+struct LumenRuleExtractor <: RuleExtractor 
+    minimization_scheme    :: Symbol
+    vertical               :: Real
+    horizontal             :: Real
+    ott_mode               :: Bool
+    controllo              :: Bool
+    minimization_kwargs    :: NamedTuple
+    filteralphabetcallback :: Function
+    vetImportance          :: Vector
 
-function modalextractrules(::LumenRuleExtractor, m, args...; kwargs...)
-  ds = lumen(m, args...; kwargs...)
+    function LumenRuleExtractor(;
+        minimization_scheme    :: Symbol     = :mitespresso,
+        vertical               :: Real       = 1.0,
+        horizontal             :: Real       = 1.0,
+        ott_mode               :: Bool       = false,
+        controllo              :: Bool       = false,
+        minimization_kwargs    :: NamedTuple = (;),
+        filteralphabetcallback :: Function   = identity,
+        vetImportance          :: Vector     = []
+    )
+        return new(
+            minimization_scheme,
+            vertical,
+            horizontal,
+            ott_mode,
+            controllo,
+            minimization_kwargs,
+            filteralphabetcallback,
+            vetImportance
+        )
+    end
+end
+
+function Base.iterate(e::LumenRuleExtractor, state=1)
+    fields = fieldnames(typeof(e))
+    if state > length(fields)
+        return nothing
+    end
+    field = fields[state]
+    return (field => getfield(e, field)), state + 1
+end
+
+function Base.show(io::IO, info::LumenRuleExtractor)
+    println(io, "LumenRuleExtractor:")
+    for field in fieldnames(LumenRuleExtractor)
+        value = getfield(info, field)
+        println(io, "  ", rpad(String(field) * ":", 25), value)
+    end
+end
+
+function modalextractrules(e::LumenRuleExtractor, m, args...; kwargs...)
+  ds = lumen(m, args...; e..., kwargs...)
   return ds
 end
 

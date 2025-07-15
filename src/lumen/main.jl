@@ -372,7 +372,7 @@ include("utils/IO.jl")
 include("utils/minor.jl")
 
 # Algorithmic-Utils - Project's algorithmic core
-# include("utils/core.jl")
+include("utils/core.jl")
 
 # Algorithmic-Optimization-Utils - Project's algorithmic core when running in ott_mode
 include("utils/coreOttMode.jl")
