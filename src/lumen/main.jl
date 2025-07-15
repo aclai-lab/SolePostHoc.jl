@@ -117,7 +117,7 @@ See also
 """
 function lumen(
     modelJ, # actualy truth_combinations usa model 
-    minimization_scheme::Symbol=:mitespresso;
+    minimization_scheme::Symbol=:abc;
     vertical::Real=1.0,
     horizontal::Real=1.0,
     ott_mode::Bool=false,
@@ -130,6 +130,8 @@ function lumen(
     silent=false,
     return_info=true, # TODO must default to `false`.
     vetImportance=[],
+    testott = nothing,
+    alphabetcontroll = nothing,
     kwargs...
 )
     if vertical <= 0.0 || vertical > 1.0 || horizontal <= 0.0 || horizontal > 1.0
@@ -146,7 +148,7 @@ function lumen(
         end
     end
 
-    is_minimization_scheme_espresso = minimization_scheme == :mitespresso # TODO we use this only for BYPASS in the code
+    is_minimization_scheme_espresso = minimization_scheme == :mitespresso || minimization_scheme == :boom || minimization_scheme == :abc # || minimization_scheme == :texasespresso
 
     # PART 2.a: Starter Ruleset Extraction
     silent || println(
@@ -191,12 +193,13 @@ function lumen(
         num_all_atoms, my_atoms, my_alphabet
     end
 
-    if !controllo
+    if testott == nothing && alphabetcontroll == nothing
         silent || println(
             "\n\n$COLORED_TITLE$TITLE\n PART 3 TABLE GENERATION \n$TITLE$RESET"
         )
 
         # PART 3: Table Generation
+
         results, label_count = @time "Lumen: computing combinations" begin
             if ott_mode
                 truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
@@ -204,6 +207,7 @@ function lumen(
                 truth_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
             end
         end
+
 
         # Feature Processing
         #= OLD CODE were we haven't Constructor
@@ -241,23 +245,23 @@ function lumen(
 
         # Process each result
         for (result, formula) in combined_results
-            silent || println("Risultato: $result")
+            println("Svolgendo minimizzazione per: $result")
 
             if return_info
                 push!(unminimized_rules, convert_DNF_formula(formula, result, 1.0))
             end
 
-            formula_semplificata_t = @timed Lumen.minimizza_dnf(
+            formula_semplificata= Lumen.minimizza_dnf(
                 Val(minimization_scheme),
                 formula;
                 minimization_kwargs...,
             )
-            formula_semplificata = formula_semplificata_t.value
+            #formula_semplificata = formula_semplificata_t.value
 
 
 
             try
-                @info "Simplification completed in $(formula_semplificata_t.time) seconds"
+                #@info "Simplification completed in $(formula_semplificata_t.time) seconds"
 
                 if !is_minimization_scheme_espresso
                     silent || println("==========================")
@@ -297,13 +301,13 @@ function lumen(
                     new_rule = Rule(φ, result)
                 else
                     new_rule = convert_DNF_formula(
-                        formula_semplificata_t.value,
+                        formula_semplificata,
                         result,
                         horizontal
                     )
                 end
                 #new_rule = Rule(ant, result)
-                println(new_rule)
+                silent || println(new_rule)
                 push!(minimized_rules, new_rule)
             catch e
                 @error "Simplification error: $e"
@@ -323,17 +327,20 @@ function lumen(
         return ds, info
     end
 
-    if controllo
+    if testott != nothing
         silent || println(
             "\n\n$COLORED_INFO$TITLE\n PART 2.d IS THE OPTIMIZATION VALID?\n$TITLE$RESET",
         )
-        are_results_equal =
-         Lumen.compare_truth_combinations(modelJ, my_alphabet, my_atoms, vertical; apply_function, silent, kwargs...)
-        if are_results_equal
-            @info "\nOptimization valid: results are identical."
-        else
-            @warn "\nWARNING: Optimization might not be valid. Results differ."
-        end
+        testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function,testott)
+        return nothing, nothing 
+    end
+
+    if alphabetcontroll != nothing
+        silent || println(
+            "\n\n$COLORED_INFO$TITLE\n ANALIZE ONLY ALPHABET\n$TITLE$RESET",
+        )
+        debug_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function,alphabetcontroll)
+        return nothing, nothing 
     end
 end
 
@@ -352,6 +359,8 @@ include("types/types.jl")
 ##
 # Utils
 ##
+
+include("reportAlphabet.jl")
 
 # File report management
 include("utils/report.jl")
