@@ -1,7 +1,6 @@
 module RuleExtraction
 
 using Reexport
-using Test
 using ThreadsX
 using Random
 using StatsBase
@@ -38,10 +37,15 @@ end
 export convert_classification_rules, refne_classification_rules
 include("shared_utils.jl")
 
-#======================================================================================================================================
-                                                        InTrees
-======================================================================================================================================#
+# ---------------------------------------------------------------------------- #
+#                                    types                                     #
+# ---------------------------------------------------------------------------- #
+const Optional{T} = Union{T, Nothing}
+const OptFloat64  = Optional{Float64}
 
+# ---------------------------------------------------------------------------- #
+#                                   intrees                                    #
+# ---------------------------------------------------------------------------- #
 export InTreesRuleExtractor
 export intrees
 include("intrees/intrees.jl")
@@ -49,14 +53,45 @@ include("intrees/apiIntrees.jl")
 
 
 """$(_get_rule_extractor_docstring("InTreesRuleExtractor", intrees))"""
-@kwdef struct InTreesRuleExtractor <: RuleExtractor
-  prune_rules::Bool = true
-  pruning_s::Union{Float64,Nothing} = nothing
-  pruning_decay_threshold::Union{Float64,Nothing} = nothing
-  rule_selection_method::Symbol = :CBC
-  rule_complexity_metric::Symbol = :natoms
-  # accuracy_rule_selection = nothing
-  min_coverage::Union{Float64,Nothing} = nothing
+struct InTreesRuleExtractor <: RuleExtractor
+    prune_rules             :: Bool
+    pruning_s               :: OptFloat64
+    pruning_decay_threshold :: OptFloat64
+    rule_selection_method   :: Symbol
+    rule_complexity_metric  :: Symbol
+    max_rules               :: Int
+    min_coverage            :: OptFloat64
+    rng                     :: AbstractRNG
+
+    function InTreesRuleExtractor(;
+        prune_rules             :: Bool        = true,
+        pruning_s               :: OptFloat64  = nothing,
+        pruning_decay_threshold :: OptFloat64  = nothing,
+        rule_selection_method   :: Symbol      = :CBC,
+        rule_complexity_metric  :: Symbol      = :natoms,
+        max_rules               :: Int         = -1,
+        min_coverage            :: OptFloat64  = nothing,
+        rng                     :: AbstractRNG = TaskLocalRNG()
+    )
+        return new(
+            prune_rules,
+            pruning_s,
+            pruning_decay_threshold,
+            rule_selection_method,
+            rule_complexity_metric,
+            max_rules,
+            min_coverage,
+            rng
+        )
+    end
+end
+
+function Base.show(io::IO, info::InTreesRuleExtractor)
+    println(io, "InTreesRuleExtractor:")
+    for field in fieldnames(InTreesRuleExtractor)
+        value = getfield(info, field)
+        println(io, "  ", rpad(String(field) * ":", 25), value)
+    end
 end
 
 function modalextractrules(::InTreesRuleExtractor, m, args...; kwargs...)
