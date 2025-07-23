@@ -136,7 +136,7 @@ end
 
 function build_dnf_rules(rules, class_map)
     # Map: from integer (0,1,2) to string with the name of the iris
-
+    
     # 1) Group antecedent strings (conjunctions) by class
     class_to_antecedents = Dict{Int,Vector{String}}()
     for r in rules
@@ -196,6 +196,7 @@ function BAinDS(class_map)
 
     ll = listrules(t)
     println("Rules: ", ll)
+    println("Class map: ", class_map)
     inverted_map = Dict(value => key for (key, value) in class_map)
     println("Inverted map: ", inverted_map)
     minimized_rules = build_dnf_rules(ll, inverted_map)

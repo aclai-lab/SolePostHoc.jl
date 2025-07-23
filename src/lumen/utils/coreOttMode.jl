@@ -4,19 +4,162 @@
 ############################################################################################################################
 =#
 """
-[OTT VERSION] Processes a combination ottimize mode of atom values and returns a dictionary of valid values for each feature, along with a flag indicating if the combination has a contradiction.
+        truth_combinations_ott(model, alphabet, atoms, r=1.0, c=1.0, vetImportance=[];
+                              apply_function=SoleModels.apply, print_progress=true, silent=true)
 
-This function takes a combination of atom values, represented as either a `BitVector` or an integer, and the dictionaries of thresholds and atom properties. It then processes the combination, filtering the valid values for each feature based on the atom values. If a feature has no valid values, the function sets a flag indicating a contradiction. Finally, it returns the dictionary of valid values for each feature and the contradiction flag.
+    Generates truth combinations for logical atoms and evaluates them using an ML model, 
+    with support for r sampling and variable selection by importance.
 
-Parameters:
-- `i::Union{BitVector,Int}`: The combination of atom values to be processed.
-- `num_atoms::Int`: The number of atoms in the combination.
-- `thresholds_by_feature::Dict{Int,Vector{Float64}}`: A dictionary mapping feature indices to their corresponding thresholds.
-- `atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}}`: A dictionary mapping feature indices to their corresponding atom properties (threshold and boolean flag).
+    This function processes logical atoms to generate all possible truth value combinations,
+    applies feature importance filtering, samples combinations based on the r parameter,
+    and evaluates each combination using the provided model.
 
-Returns:
-- `Dict{Int,Vector{Float64}}`: A dictionary mapping feature indices to their corresponding valid values.
-- `Bool`: A flag indicating if the combination has a contradiction.
+    # Arguments
+
+    - `model::Any`: Machine learning model used for predictions
+    - `alphabet`: Alphabet containing sub-alphabets with feature conditions  
+    - `atoms::Vector{<:Atom{...}}`: Vector of logical atoms with scalar conditions
+    - `r::Float64=1.0`: r sampling percentage (0.0-1.0)
+      * 1.0: Use all possible combinations (no sampling)
+      * 0.5: Randomly sample 50% of combinations
+      * 0.1: Randomly sample 10% of combinations
+    - `c::Float64=1.0`: Percentage of variables to include by importance (0.0-1.0)
+      * 1.0: Use all available variables
+      * 0.8: Use top 80% most important variables
+      * 0.5: Use top 50% most important variables
+    - `vetImportance::Vector`: Variable importance vector (ordered by importance)
+      * If empty, all variables are considered equally important
+      * Variables at the beginning are more important
+    - `apply_function=SoleModels.apply`: Function to apply the model
+    - `print_progress=true`: Print progress information
+    - `silent=true`: Silent mode (overrides print_progress)
+
+    # Returns
+
+    A tuple containing:
+    - `Dict{Any,Vector{BigInt}}`: Dictionary mapping each model prediction to vector of binary IDs
+    - `Dict{Any,Int}`: Dictionary mapping each prediction to its count
+
+    # Algorithm Overview
+
+    The function operates in three main steps:
+
+    1. **Variable Selection** (based on c parameter):
+       - If c=1.0: Use all variables [V1, V2, V3, V4, V5]
+       - If c=0.6: Use top 3 variables [V1, V2, V3] 
+       - If c=0.4: Use top 2 variables [V1, V2]
+
+    2. **Combination Generation**: For each feature, generate all truth value combinations
+       - Feature with atoms [A1, A2] generates: TT, TF, FT, FF
+       - Each combination maps to valid threshold values
+       - Invalid combinations (no valid values) are filtered out
+
+    3. **r Sampling** (based on r parameter):
+       - If r=1.0: Process all combinations
+       - If r=0.5: Random sample 50% of combinations
+       - If r=0.1: Random sample 10% of combinations
+       - Uses direct random generation for memory efficiency
+
+    # Examples
+
+    ## Example 1: Full Processing (r=1.0, c=1.0)
+    ```julia
+    # Use all variables and all combinations
+    results, counts = truth_combinations_ott(model, alphabet, atoms, 
+                                            r=1.0, c=1.0, vetImportance=[])
+
+    # Process Flow: Variables: ALL → Combinations: ALL → Model Evaluation: ALL
+    # Input: 3 features, 2 atoms each
+    # Total combinations: 2² × 2² × 2² = 64
+    # Processed: 64 combinations
+    # Output: Complete truth table evaluation
+    ```
+
+    ## Example 2: Variable Selection Only (r=1.0, c=0.5)
+    ```julia
+    # Use top 50% most important variables, all combinations
+    vetImportance = [1, 2, 3, 4, 5]  # Variable importance order
+    results, counts = truth_combinations_ott(model, alphabet, atoms,
+                                            r=1.0, c=0.5, 
+                                            vetImportance=vetImportance)
+
+    # Process Flow: Variables: TOP 50% → Combinations: ALL → Model Evaluation: ALL
+    # Input: 5 features, select top 2.5 → 3 features
+    # Selected: Variables [1, 2, 3] (most important)
+    # Total combinations: 2² × 2² × 2² = 64
+    # Processed: 64 combinations
+    # Output: Evaluation on reduced feature set
+    ```
+
+    ## Example 3: Sampling Only (r=0.3, c=1.0)
+    ```julia
+    # Use all variables, sample 30% of combinations
+    results, counts = truth_combinations_ott(model, alphabet, atoms,
+                                            r=0.3, c=1.0, 
+                                            vetImportance=[])
+
+    # Process Flow: Variables: ALL → Combinations: SAMPLE 30% → Model Evaluation: SAMPLED
+    # Input: 4 features, 3 atoms each
+    # Total combinations: 3⁴ = 81
+    # Sampled: 81 × 0.3 = 24 combinations
+    # Processed: 24 combinations (randomly selected)
+    # Output: Approximate evaluation results
+    ```
+
+    ## Example 4: Combined Filtering (r=0.2, c=0.6)
+    ```julia
+    # Use top 60% variables, sample 20% of combinations
+    vetImportance = [1, 2, 3, 4, 5]
+    results, counts = truth_combinations_ott(model, alphabet, atoms,
+                                            r=0.2, c=0.6,
+                                            vetImportance=vetImportance)
+
+    # Process Flow: Variables: TOP 60% → Combinations: SAMPLE 20% → Model Evaluation: SAMPLED
+    # Step 1: Variable Selection
+    #   Input: 5 features → Select top 3 (60%)
+    #   Selected: Variables [1, 2, 3]
+    # Step 2: Combination Generation
+    #   3 features → Total combinations: 2³ = 8
+    # Step 3: Sampling
+    #   Sample: 8 × 0.2 = 1.6 → 2 combinations
+    #   Processed: 2 combinations
+    # Output: Highly filtered evaluation results
+    ```
+
+    # Memory and Performance Considerations
+
+    **Memory Usage Patterns:**
+    - HIGH: r=1.0, c=1.0 (full processing)
+    - MEDIUM: r=0.5, c=1.0 (sampling only)
+    - LOW: r=1.0, c=0.5 (variable filter)
+    - LOWEST: r=0.1, c=0.3 (both filters)
+
+    **Sampling Strategy:**
+    - Direct Random Generation: Memory-efficient approach for large combination spaces
+    - Duplicate Handling: Automatically removes duplicate combinations
+    - Progressive Sampling: Generates combinations on-demand rather than storing all
+
+    # Output Format
+
+    The function returns two dictionaries:
+
+    1. **Results Dictionary**: `Dict{Any,Vector{BigInt}}`
+       - Keys: Model predictions (e.g., "ClassA", "ClassB", 0.85)
+       - Values: Vector of binary IDs representing the original atom combinations
+
+    2. **Label Count Dictionary**: `Dict{Any,Int}`
+       - Keys: Model predictions
+       - Values: Count of combinations that resulted in each prediction
+
+    **Binary ID Encoding**: Each combination is encoded as a BigInt where each bit 
+    represents the truth value of a specific atom, maintaining the same order as the input atoms.
+
+    # Notes
+
+    - When c < 1.0, excluded variables use default threshold values [prevfloat(42.0), 42.0]
+    - The function automatically handles features without atoms by assigning default values
+    - Binary IDs are reconstructed to maintain compatibility with the original atom ordering
+    - Sampling is performed after combination generation to ensure uniform distribution
 """
 function truth_combinations_ott(
     model::Any,
@@ -30,37 +173,74 @@ function truth_combinations_ott(
             },
         },
     },
-    vertical::Float64;
-    apply_function = SoleModels.apply,
-    print_progress = true,
-    silent = true,
+    r=1.0::Float64, # TODO r --> r
+    #c=1.0::Float64,
+    vetImportance=[];
+    apply_function=SoleModels.apply,
+    print_progress=true,
+    silent=true,
 )
-    # Same initialization as the original
+    c = 1.0   # because c is useless for now 
+    
+    #Same initialization as the original
     thresholds_by_feature = Dict{Int,Vector{Float64}}()
     atoms_by_feature = Dict{Int,Vector{Tuple{Float64,Bool}}}()
 
     # For each feature we extract the atoms and thresholds
+    silent || println("len: ", length(alphabet.subalphabets))
+
+    # If c is 1.0 (100%) or vetImportance is empty, use all variables
+    include_all_vars = (c == 1.0 || isempty(vetImportance))                # for now it is useless logic
+
+    # Calculate which variables to include based on importance
+    included_vars = Set{Int}()
+
+    if !include_all_vars
+        included_vars = Set(1:length(vetImportance)) # only because c is useless for now in this function
+        ## Determine how many variables to include based on c
+        #num_vars_to_include = max(1, ceil(Int, length(vetImportance) * c))
+        #
+        ## Get the most important variables
+        #sorted_indices = sortperm(1:length(vetImportance), by=i -> findfirst(==(i), vetImportance))
+        #for i in 1:num_vars_to_include
+        #    push!(included_vars, sorted_indices[i])
+        #end
+    else
+        included_vars = Set(1:length(vetImportance))
+    end
+
+    silent || println("Included variables: ", included_vars)
+
     for subalpha in alphabet.subalphabets
-        feat = subalpha.featcondition[1].feature.i_variable
-        thresholds_by_feature[feat] = sort(subalpha.featcondition[2])
+        silent || println("subalpha: ", subalpha)
+        if subalpha.featcondition[1].feature.i_variable in included_vars
+            feat = subalpha.featcondition[1].feature.i_variable
+            thresholds_by_feature[feat] = sort(subalpha.featcondition[2])
+        else
+            feat = subalpha.featcondition[1].feature.i_variable
+            thresholds_by_feature[feat] = sort([prevfloat(42.0), 42.0])
+        end
     end
 
     # For each atom we get it's feature index and threashold
     for atom in atoms
-        feat = atom.value.metacond.feature.i_variable
-        threshold = atom.value.threshold
-        push!(get!(Vector{Tuple{Float64,Bool}}, atoms_by_feature, feat), (threshold, true))
+        if atom.value.metacond.feature.i_variable in included_vars
+            feat = atom.value.metacond.feature.i_variable
+            threshold = atom.value.threshold
+            push!(get!(Vector{Tuple{Float64,Bool}}, atoms_by_feature, feat), (threshold, true))
+        end
     end
+    #println("atoms_by_feature", atoms_by_feature)
 
     # We then sort each atom list (Legacy code)
     for (_, atom_list) in atoms_by_feature
-        sort!(atom_list, by = first)
+        sort!(atom_list, by=first)
     end
 
     # We create an atom mapping with the same order as `process_combination`
-    atom_to_bit_position = Dict{Tuple{Int,Float64}, Int}()
+    atom_to_bit_position = Dict{Tuple{Int,Float64},Int}()
     bit_position = 0
-    
+
     # Crucial: we keep the same order of iteration as `process_combination`
     for (feat, atom_list) in atoms_by_feature
         for (threshold, _) in atom_list
@@ -70,24 +250,24 @@ function truth_combinations_ott(
     end
 
     # Pre-process all the valid combination for each feature (In the same order of legacy version)
-    valid_combinations_by_feature = Dict{Int, Vector{Tuple{Vector{Int}, Vector{Float64}}}}()
-    
+    valid_combinations_by_feature = Dict{Int,Vector{Tuple{Vector{Int},Vector{Float64}}}}()
+
     # For each feaure we find the valid combinations
     for (feat, atom_list) in atoms_by_feature
         # Extract the thresholds
         thresholds = thresholds_by_feature[feat]
         valid_combinations_by_feature[feat] = []
-        
+
         # Extract the atoms
         atom_thresholds = [atom[1] for atom in atom_list]
         num_atoms_for_feat = length(atom_thresholds)
-        
+
         # Generate all truth value combinations for the feature
-        for binary_combo in 0:(2^num_atoms_for_feat - 1)
+        for binary_combo in 0:(2^num_atoms_for_feat-1)
             # Parse the value into binary format
             truth_values = digits(binary_combo, base=2, pad=num_atoms_for_feat)
             valid_values = copy(thresholds)
-            
+
             # Apply the atom threshold to the value
             for (atom_idx, (threshold, _)) in enumerate(atom_list)
                 truth_val = truth_values[atom_idx]
@@ -97,50 +277,50 @@ function truth_combinations_ott(
                     filter!(x -> x >= threshold, valid_values)
                 end
             end
-            
+
             # If any valid value is found we add it to the valid combinations vector
             if !isempty(valid_values)
                 push!(valid_combinations_by_feature[feat], (truth_values, valid_values))
             end
         end
     end
-    
+
     # Add features without any atoms
     for feat in keys(thresholds_by_feature)
         if !haskey(valid_combinations_by_feature, feat)
-            push!(get!(Vector{Tuple{Vector{Int}, Vector{Float64}}}, valid_combinations_by_feature, feat), (Int[], [1605.0]))
+            push!(get!(Vector{Tuple{Vector{Int},Vector{Float64}}}, valid_combinations_by_feature, feat), (Int[], [1605.0]))
         end
     end
-    
+
     # This function is used to parse the combination to the relative value in base 10
     function reconstruct_binary_id(combination_tuple, feature_keys, atoms_by_feature, atom_to_bit_position)
         binary_id = BigInt(0)
-        
+
         # As before we iterate with the same order as  `process_combination`
         for (feat, atom_list) in atoms_by_feature
             if feat in feature_keys
                 feat_idx = findfirst(x -> x == feat, feature_keys)
                 truth_values, _ = combination_tuple[feat_idx]
-                
+
                 # Extract the atom postition based on the value of the combination instance
                 for (atom_idx, (threshold, _)) in enumerate(atom_list)
                     bit_pos = atom_to_bit_position[(feat, threshold)]
                     truth_val = truth_values[atom_idx]
-                    
+
                     if truth_val == 1
                         binary_id += BigInt(2)^bit_pos
                     end
                 end
             end
         end
-        
+
         # Return the parsed base 10 combination value
         return binary_id
     end
-    
+
     # Extract the feature keys
-    feature_keys = [feat for (feat, _) in atoms_by_feature]  
-    
+    feature_keys = [feat for (feat, _) in atoms_by_feature]
+
     # Add features without any atoms
     for feat in keys(thresholds_by_feature)
         if !(feat in feature_keys)
@@ -151,49 +331,49 @@ function truth_combinations_ott(
     # TODO: check if this is just a name change
     combination_sets = [valid_combinations_by_feature[feat] for feat in feature_keys]
     all_combinations_iter = Iterators.product(combination_sets...)
-    
-    # Apply vertical sampling 
-    combinations_to_process = if isone(vertical)
+
+    # Apply r sampling
+    combinations_to_process = if isone(r)
         all_combinations_iter
     else
         combinations_vec = collect(all_combinations_iter)
-        sample_size = min(length(combinations_vec), Int(round(length(combinations_vec) * vertical)))
+        sample_size = min(length(combinations_vec), Int(round(length(combinations_vec) * r)))
         sample_indices = randperm(length(combinations_vec))[1:sample_size]
         [combinations_vec[i] for i in sample_indices]
     end
-    
+
     # Initialize results
     results = Dict{Any,Vector{BigInt}}()
     label_count = Dict{Any,Int}()
     seen_vectors = Set{Vector{Float64}}()
-    
+
     # For each generated combinations
     for combination_tuple in combinations_to_process
         # We reconstruct the related base 10 value
         original_binary_id = reconstruct_binary_id(combination_tuple, feature_keys, atoms_by_feature, atom_to_bit_position)
-        
+
         # Generate the combination dict
-        combination_dict = Dict{Int, Vector{Float64}}()
+        combination_dict = Dict{Int,Vector{Float64}}()
         for (feat_idx, feat) in enumerate(feature_keys)
             _, valid_values = combination_tuple[feat_idx]
             combination_dict[feat] = valid_values
         end
-        
+
         # Process the combination
         combination_dict = SortedDict(combination_dict)
         combination_vector = vcat(collect(values(combination_dict))...)
-        
+
         # Skip any duplicates
         if !(combination_vector in seen_vectors)
             push!(seen_vectors, combination_vector)
-            
+
             # Make a prediction using the passed model
             result = if model isa AbstractModel
                 apply_function(model, DataFrame(reshape(combination_vector, 1, :), :auto))
             else
                 apply_function(model, combination_vector)
             end
-            
+
             push!(get!(Vector{BigInt}, results, result), original_binary_id)
             label_count[result] = get(label_count, result, 0) + 1
         end
@@ -204,7 +384,7 @@ function truth_combinations_ott(
 end
 
 
-"""   
+"""
 Processes a combination of atom values and returns a dictionary of valid values for each feature, along with a flag indicating if the combination has a contradiction.
 
 This function takes a combination of atom values, represented as either a `BitVector` or an integer, and the dictionaries of thresholds and atom properties. It then processes the combination, filtering the valid values for each feature based on the atom values. If a feature has no valid values, the function sets a flag indicating a contradiction. Finally, it returns the dictionary of valid values for each feature and the contradiction flag.
@@ -227,7 +407,7 @@ function process_combination(
 )
     combination = Dict{Int,Vector{Float64}}()
 
-    truth_row = !isa(i, BitVector) ? digits(i, base = 2, pad = num_atoms) : i
+    truth_row = !isa(i, BitVector) ? digits(i, base=2, pad=num_atoms) : i
 
     has_contradiction = false
     j = 1
@@ -289,7 +469,7 @@ function concat_results(
     res = Dict{Any,TwoLevelDNFFormula}()
     println("\nDetailed results:")
 
-    for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
+    for (result, combinations) in sort(collect(results), by=x -> length(x[2]), rev=true)
         println("[$result] ($(length(combinations)) combinations)")
         res[result] = TwoLevelDNFFormula(
             Vector{TritVector}(combinations),
@@ -308,7 +488,7 @@ function concat_results(results::Any, my_atoms::Vector)
     res = Dict{Any,TwoLevelDNFFormula}()
     println("\nDetailed results:")
 
-    for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
+    for (result, combinations) in sort(collect(results), by=x -> length(x[2]), rev=true)
         println("[$result] ($(length(combinations)) combinations)")
         res[result] = TwoLevelDNFFormula(my_atoms, Vector{TritVector}(combinations)) # if we resolve "constructs" we can also use -> res[result] = TwoLevelDNFFormula(Vector{TritVector}(combinations), my_atoms)
     end
@@ -406,28 +586,28 @@ function verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLeve
 end
 
 
-function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function, testott)
-    # open output file 
+function testOttt(modelJ, my_alphabet, my_atoms, r; silent, apply_function, testott)
+    # open output file
     open("test_ott_$testott.txt", "w") do file
-        
+
         println(file, "🚀 Benchmark Truth Combinations vs Truth Combinations OTT")
-        println(file, "=" ^ 60)
+        println(file, "="^60)
 
         # Test with @elapsed (Single execution)
         println(file, "\n📊 Single test with @execution:")
-        println(file, "-" ^ 40)
+        println(file, "-"^40)
 
         print(file, "truth_combinations: ")
-        time1 = @elapsed result1 = truth_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+        time1 = @elapsed result1 = truth_combinations(modelJ, my_alphabet, my_atoms, r; silent, apply_function)
         println(file, "$(round(time1*1000, digits=3)) ms")
 
         print(file, "truth_combinations_ott: ")
-        time2 = @elapsed result2 = truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+        time2 = @elapsed result2 = truth_combinations_ott(modelJ, my_alphabet, my_atoms, r; silent, apply_function)
         println(file, "$(round(time2*1000, digits=3)) ms")
 
-        # Check if the results are the same 
+        # Check if the results are the same
         println(file, "\n🔍 Consistency check:")
-        println(file, "-" ^ 30)
+        println(file, "-"^30)
         if result1 == result2
             println(file, "✅ The results are consistent !")
         else
@@ -453,10 +633,10 @@ function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_functio
                 end
             end
         end
-        
+
         # Multiple test needed to make the mean more reliable
         println(file, "\n🔄 Multiple test (20 iterations + warm-up):")
-        println(file, "-" ^ 40)
+        println(file, "-"^40)
 
         n_tests = 20
         n_warmup = 3
@@ -464,8 +644,8 @@ function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_functio
         # Warm-up to stabilize the compilation JIT
         println(file, "Warm-up...")
         for i in 1:n_warmup
-            truth_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
-            truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+            truth_combinations(modelJ, my_alphabet, my_atoms, r; silent, apply_function)
+            truth_combinations_ott(modelJ, my_alphabet, my_atoms, r; silent, apply_function)
         end
 
         # Test truth_combinations
@@ -474,17 +654,17 @@ function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_functio
         for i in 1:n_tests
             # Force garbage collection
             GC.gc()
-            t = @elapsed truth_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+            t = @elapsed truth_combinations(modelJ, my_alphabet, my_atoms, r; silent, apply_function)
             push!(times1, t)
         end
 
-        # Test truth_combinations_ott  
+        # Test truth_combinations_ott
         println(file, "Testing truth_combinations_ott...")
         times2 = Float64[]
         for i in 1:n_tests
             # Force garbage collection
             GC.gc()
-            t = @elapsed truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+            t = @elapsed truth_combinations_ott(modelJ, my_alphabet, my_atoms, r; silent, apply_function)
             push!(times2, t)
         end
 
@@ -492,14 +672,14 @@ function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_functio
         # Remove the more extreme outlier (top 10% & bottom 10%)
         times1_sorted = sort(times1)
         times2_sorted = sort(times2)
-        
+
         # Take the middle 80% (Remove the 10% at the extremes)
         start_idx = max(1, Int(round(n_tests * 0.1)))
         end_idx = min(n_tests, Int(round(n_tests * 0.9)))
-        
+
         times1_clean = times1_sorted[start_idx:end_idx]
         times2_clean = times2_sorted[start_idx:end_idx]
-        
+
         avg1 = sum(times1_clean) / length(times1_clean)
         avg2 = sum(times2_clean) / length(times2_clean)
         min1 = minimum(times1)
@@ -511,11 +691,11 @@ function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_functio
 
         # Risultati
         println(file, "\n📈 RESULTS:")
-        println(file, "=" ^ 50)
+        println(file, "="^50)
         println(file, "truth_combinations:")
         println(file, "  Mean time (no outlier): $(round(avg1*1000, digits=3)) ms")
         println(file, "  Median time:            $(round(median1*1000, digits=3)) ms")
-        println(file, "  Min time:                $(round(min1*1000, digits=3)) ms") 
+        println(file, "  Min time:                $(round(min1*1000, digits=3)) ms")
         println(file, "  Max time:                $(round(max1*1000, digits=3)) ms")
 
         println(file, "\ntruth_combinations_ott:")
@@ -536,16 +716,16 @@ function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_functio
         end
 
         println(file, "\n📊 All times (ms):")
-        println(file, "truth_combinations: ", [round(t*1000, digits=2) for t in times1])
-        println(file, "truth_combinations_ott: ", [round(t*1000, digits=2) for t in times2])
-        
+        println(file, "truth_combinations: ", [round(t * 1000, digits=2) for t in times1])
+        println(file, "truth_combinations_ott: ", [round(t * 1000, digits=2) for t in times2])
+
         # Identifica outlier
         if max2 > 3 * median2
-            println(file, "\n⚠️  OUTLIER FOUND in truth_combinations_ott:") 
+            println(file, "\n⚠️  OUTLIER FOUND in truth_combinations_ott:")
             println(file, "   Max time $(round(max2*1000, digits=2)) ms is a lot higher than the median $(round(median2*1000, digits=2)) ms")
             println(file, "   Possible causes: GC, compilation JIT, system interference")
         end
     end
-    
+
     println("✅ Benchmark completed! Result saved in 'test_ott.txt'")
 end

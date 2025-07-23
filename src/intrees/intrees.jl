@@ -53,7 +53,7 @@ function intrees(
     # New parameter to limit the number of rules
     max_rules::Int = -1,
     min_coverage::Union{Float64,Nothing} = nothing,
-    silent = false,
+    silent = true,
     rng::AbstractRNG = MersenneTwister(1),
     return_info::Bool = false,
     # kwargs...,

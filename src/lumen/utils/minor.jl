@@ -187,3 +187,59 @@ end
 #         end
 #     end
 # end
+
+
+#== 
+#
+#   UTILS FOR NEW MODE 
+#
+==##
+function condition_to_string(cond)
+    if cond isa SoleData.RangeScalarCondition
+        i_var = cond.feature.i_variable
+        # Remove any existing 'V' prefix to avoid duplication
+        i_var = replace(string(i_var), r"^V+" => "")
+        lower_op = cond.minincluded ? "≥" : ">"
+        upper_op = cond.maxincluded ? "≤" : "<"
+        return "(" *
+               join(
+                   [
+                       "V$(i_var) $(lower_op) $(cond.minval)",
+                       "V$(i_var) $(upper_op) $(cond.maxval)",
+                   ],
+                   " ∧ ",
+               ) *
+               ")"
+    elseif hasproperty(cond, :metacond)
+        i_var = cond.metacond.feature.i_variable
+        # Remove any existing 'V' prefix to avoid duplication
+        i_var = replace(string(i_var), r"^V+" => "")
+        op_fun = cond.metacond.test_operator
+        thr = cond.threshold
+        op_str =
+            op_fun === (<) ? "<" :
+            op_fun === (<=) ? "≤" :
+            op_fun === (>) ? ">" : op_fun === (>=) ? "≥" : string(op_fun)
+        return "(V$(i_var) $(op_str) $(thr))"
+    else
+        return string(cond)
+    end
+end
+
+function el_to_string(x)
+    if x isa Atom
+        return condition_to_string(x.value)
+    elseif x isa SyntaxBranch
+        t = string(x.token)
+        children_strs = map(el_to_string, x.children)
+        if t == "¬"
+            return "¬ " * children_strs[1]
+        else
+            return "(" * join(children_strs, " " * t * " ") * ")"
+        end
+    elseif hasproperty(x, :grandchildren)
+        return "(" * join(map(el_to_string, x.grandchildren), " ∧ ") * ")"
+    else
+        return string(x)
+    end
+end

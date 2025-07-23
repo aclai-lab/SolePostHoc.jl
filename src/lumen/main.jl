@@ -8,6 +8,8 @@ using SoleModels
 using SoleModels: DecisionSet
 using AbstractTrees
 using SoleData
+using SoleLogics
+using SoleLogics: normalize_formula, dnf
 using SoleData: MultivariateScalarAlphabet, UnivariateScalarAlphabet
 using DecisionTree: load_data, build_forest, apply_forest
 using ModalDecisionTrees
@@ -30,7 +32,7 @@ export lumen
         start_time = time(),
         vertical = 1.0,
         horizontal = 1.0,
-        ott_mode = false, 
+        ott_mode = false,
         controllo = false,
         minimization_kwargs = (;),
         filteralphabetcallback! = identity,
@@ -42,7 +44,7 @@ export lumen
         kwargs...
     )
 
-Logic-driven Unified Minimal Extractor of Notions (LUMEN): A function that extracts and minimizes 
+Logic-driven Unified Minimal Extractor of Notions (LUMEN): A function that extracts and minimizes
 logical rules from a decision tree ensemble model into DNF (Disjunctive Normal Form) formulas.
 
 # Arguments
@@ -116,7 +118,7 @@ See also
 [`rulemetrics`](@ref).
 """
 function lumen(
-    modelJ, # actualy truth_combinations usa model 
+    modelJ, # actualy truth_combinations usa model
     minimization_scheme::Symbol=:abc;
     vertical::Real=1.0,
     horizontal::Real=1.0,
@@ -130,9 +132,10 @@ function lumen(
     silent=false,
     return_info=true, # TODO must default to `false`.
     vetImportance=[],
-    testott = nothing,
-    alphabetcontroll = nothing,
-    kwargs...
+    merge_negated_elements=false,
+    testott=nothing,
+    alphabetcontroll=nothing,
+    kwargs...,
 )
     if vertical <= 0.0 || vertical > 1.0 || horizontal <= 0.0 || horizontal > 1.0
         @warn "Invalid parameters, setting both to 1"
@@ -148,16 +151,21 @@ function lumen(
         end
     end
 
-    is_minimization_scheme_espresso = minimization_scheme == :mitespresso || minimization_scheme == :boom || minimization_scheme == :abc # || minimization_scheme == :texasespresso
+    is_minimization_scheme_espresso =
+        minimization_scheme == :mitespresso ||
+        minimization_scheme == :boom ||
+        minimization_scheme == :abc # || minimization_scheme == :texasespresso
 
     # PART 2.a: Starter Ruleset Extraction
     silent || println(
-        "\n\n$COLORED_TITLE$TITLE\n PART 2.a STARTER RULESET ESTRACTION \n$TITLE$RESET"
+        "\n\n$COLORED_TITLE$TITLE\n PART 2.a STARTER RULESET ESTRACTION \n$TITLE$RESET",
     )
 
     ruleset = @time begin
         if isensemble(model)
-            rs = unique([listrules(tree; use_shortforms=true) for tree in SoleModels.models(model)])
+            rs = unique([
+                listrules(tree; use_shortforms=true) for tree in SoleModels.models(model)
+            ])
             # TODO maybe also sort?
             rs isa Vector{<:Vector{<:Any}} ? reduce(vcat, rs) : rs
         else
@@ -166,9 +174,7 @@ function lumen(
     end
     silent || println(ruleset)
 
-    silent || println(
-        "\n\n$COLORED_TITLE$TITLE\n PART 2.b ATOM EXTRACTION \n$TITLE$RESET",
-    )
+    silent || println("\n\n$COLORED_TITLE$TITLE\n PART 2.b ATOM EXTRACTION \n$TITLE$RESET")
 
     num_all_atoms, my_atoms, my_alphabet = begin
         all_atoms = collect(atoms(SoleModels.alphabet(model, false)))
@@ -182,7 +188,8 @@ function lumen(
         )
 
         # Get number of features from the maximum feature index in atoms
-        n_features = maximum(atom.value.metacond.feature.i_variable for atom in my_atoms)
+        n_features =
+            maximum(atom.value.metacond.feature.i_variable for atom in my_atoms)
         !isa(n_features, Integer) && error("Symbolic feature names not supported")
 
         my_alphabet = filteralphabetcallback(process_alphabet(my_atoms, n_features))
@@ -194,27 +201,45 @@ function lumen(
     end
 
     if testott == nothing && alphabetcontroll == nothing
-        silent || println(
-            "\n\n$COLORED_TITLE$TITLE\n PART 3 TABLE GENERATION \n$TITLE$RESET"
-        )
+        silent ||
+            println("\n\n$COLORED_TITLE$TITLE\n PART 3 TABLE GENERATION \n$TITLE$RESET")
 
         # PART 3: Table Generation
 
         results, label_count = @time "Lumen: computing combinations" begin
             if ott_mode
-                truth_combinations_ott(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+
+                silent || println("my_alphabet ", my_alphabet)
+                silent || println("my_atoms", my_atoms)
+
+                truth_combinations_ott(
+                    modelJ,
+                    my_alphabet,
+                    my_atoms,
+                    vertical,
+                    vetImportance;
+                    silent,
+                    apply_function,
+                ) # Combination generate with cartesian join
             else
-                truth_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function)
+                truth_combinations(
+                    modelJ,
+                    my_alphabet,
+                    my_atoms,
+                    vertical;
+                    silent,
+                    apply_function,
+                ) # Combination generate with classic Binary clock table
             end
         end
 
 
-        # Feature Processing
+        # Feature Processing TODO REMOVE
         #= OLD CODE were we haven't Constructor
 
             num_atoms = length(my_atoms)
             thresholds_by_feature = Dict(
-                subalpha.featcondition[1].feature.i_variable => sort(subalpha.featcondition[2]) 
+                subalpha.featcondition[1].feature.i_variable => sort(subalpha.featcondition[2])
                 for subalpha in my_alphabet.subalphabets
             )
 
@@ -235,82 +260,227 @@ function lumen(
             combined_results =
                 Lumen.concat_results(results, num_atoms, thresholds_by_feature, atoms_by_feature)
         =#
-        # Results Processing
-        combined_results =
-            Lumen.concat_results(results, my_atoms)
+
+
+        # I take combinations with the same class L and disjoin them with logical OR
+        combined_results = Lumen.concat_results(results, my_atoms)
 
         return_info && (unminimized_rules = Rule[])
         minimized_rules = Rule[]
         vectPrePostNumber = Vector{Tuple{Int,Int}}()
 
+        # merge_negated_elements version:
+        # To create a minimized version of the majority class, we can minimize and then negate the disjunction of all other classes.
+
+        silent ||
+            println("combined_results prima dell'ordinamento: ", collect(combined_results))
+
+        sorted_results = sort(collect(combined_results), by=p -> length(p[2].combinations))
+        max_key = sorted_results[end][1]  # Prendi la chiave dell'ultimo elemento
+
+
+        silent || println("sorted_results: ", sorted_results)
+        silent || println("max_key: ", max_key)
+
         # Process each result
-        for (result, formula) in combined_results
-            println("Svolgendo minimizzazione per: $result")
+        for (result, formula) in sorted_results
+            silent || println("Performing minimization for: $result")
+            
+            if result == max_key && merge_negated_elements
+                silent || println("Computing last rule as negation of disjunction of all others")
 
-            if return_info
-                push!(unminimized_rules, convert_DNF_formula(formula, result, 1.0))
-            end
+                try
+                    #println("yet minimized rules: ",minimized_rules[0].antecedent)
+                    # Extract antecedents from all previously minimized rules
+                    antecedents =
+                        [el_to_string(rule.antecedent) for rule in minimized_rules]
 
-            formula_semplificata= Lumen.minimizza_dnf(
-                Val(minimization_scheme),
-                formula;
-                minimization_kwargs...,
-            )
-            #formula_semplificata = formula_semplificata_t.value
+                    # Convert each antecedent to string directly
+                    #println("string: ",antecedents)
+                    antecedent_strings = [string("¬($ant)") for ant in antecedents]
 
+                    #println(antecedent_strings)
 
+                    # Create big disjunction string
+                    big_dnf_str = join(antecedent_strings, " ∧ ")
 
-            try
-                #@info "Simplification completed in $(formula_semplificata_t.time) seconds"
+                    silent || println("Debug: Negated string: $big_dnf_str")
 
-                if !is_minimization_scheme_espresso
-                    silent || println("==========================")
-                    silent || println("comb:", eachcombination(formula_semplificata))
-                    silent || println("==========================")
-
-                    ntermpresemp = nterms(formula)
-                    ntermpostsemp = nterms(formula_semplificata)
-                    push!(vectPrePostNumber, (ntermpresemp, ntermpostsemp))
-
-                    silent || println("Term origin: ", nterms(formula))
-                    silent || println(
-                        "Term after semp: ",
-                        nterms(formula_semplificata),
-                    )
-                    silent || println("Atoms/term orig: ", natomsperterm(formula))
-
-                    silent || println(
-                        "Atom/term post semp: ",
-                        #natomsperterm(formula_semplificata),
-                    )
-                end
-                silent || println()
-                if is_minimization_scheme_espresso
-                    formula_string = leftmost_disjunctive_form_to_string(formula_semplificata, horizontal, vetImportance)
+                    # Parse negated formula
                     φ = SoleLogics.parseformula(
-                        formula_string;
+                        big_dnf_str;
                         atom_parser=a -> Atom(
                             parsecondition(
                                 SoleData.ScalarCondition,
                                 a;
                                 featuretype=SoleData.VariableValue,
-                                featvaltype=Real
-                            )
-                        )
+                                featvaltype=Real,
+                            ),
+                        ),
+                    )
+
+                    silent || println("Debug: Parsed formula: $φ")
+
+
+                    # Apply dnf
+                    #final_antecedent_dnf = φ                                               # EITHER THE ¬(DNF)
+                    final_antecedent_dnf = normalize_formula(φ, :cnf)        # OR THE CNF
+                    #println(dump(final_antecedent_dnf.grandchildren))
+
+                    #final_antecedent_dnf = normalize_formula(final_antecedent_dnf, :dnf)  # TODO REMOVE
+                    silent || println("Debug: DNF result: $final_antecedent_dnf")                               #    THIS FOR TEST
+                    new_rule = Rule(final_antecedent_dnf, result)
+
+                    # One-line per estrarre solo la formula da string(new_rule)
+                    big_dnf_str = strip(split(replace(replace(string(new_rule), r"\e\[[0-9;]*m" => ""), r"^▣\s+" => ""), "↣")[1])
+                    # Parse negated formula
+                    φ = SoleLogics.parseformula(
+                        big_dnf_str;
+                        atom_parser=a -> Atom(
+                            parsecondition(
+                                SoleData.ScalarCondition,
+                                a;
+                                featuretype=SoleData.VariableValue,
+                                featvaltype=Real,
+                            ),
+                        ),
                     )
                     new_rule = Rule(φ, result)
-                else
-                    new_rule = convert_DNF_formula(
-                        formula_semplificata,
-                        result,
-                        horizontal
+                    silent || println("new_rule:", new_rule)
+                    push!(minimized_rules, new_rule)
+
+                catch e
+                    @error "Error creating negated rule: $e"
+                    # FALLBACK
+
+                    # TODO RESTORE CODE REMOVE COMMENT ..
+                    #if return_info .
+                    #    push!(unminimized_rules, convert_DNF_formula(formula, result, 1.0))
+                    #end
+
+                    formula_semplificata = Lumen.minimizza_dnf(
+                        Val(minimization_scheme),
+                        formula;
+                        minimization_kwargs...,
                     )
+                    try
+
+                        if !is_minimization_scheme_espresso
+                            silent || println("==========================")
+                            silent ||
+                                println("comb:", eachcombination(formula_semplificata))
+                            silent || println("==========================")
+
+                            ntermpresemp = nterms(formula)
+                            ntermpostsemp = nterms(formula_semplificata)
+                            push!(vectPrePostNumber, (ntermpresemp, ntermpostsemp))
+
+                            silent || println("Term origin: ", nterms(formula))
+                            silent ||
+                                println("Term after semp: ", nterms(formula_semplificata))
+                            silent || println("Atoms/term orig: ", natomsperterm(formula))
+
+                            silent || println(
+                                "Atom/term post semp: ",
+                                #natomsperterm(formula_semplificata),
+                            )
+                        end
+                        silent || println()
+                        if is_minimization_scheme_espresso
+                            formula_string = leftmost_disjunctive_form_to_string(
+                                formula_semplificata,
+                                horizontal,
+                                vetImportance,
+                            )
+                            φ = SoleLogics.parseformula(
+                                formula_string;
+                                atom_parser=a -> Atom(
+                                    parsecondition(
+                                        SoleData.ScalarCondition,
+                                        a;
+                                        featuretype=SoleData.VariableValue,
+                                        featvaltype=Real,
+                                    ),
+                                ),
+                            )
+                            new_rule = Rule(φ, result)
+                        else
+                            new_rule = convert_DNF_formula(
+                                formula_semplificata,
+                                result,
+                                horizontal,
+                            )
+                        end
+                        #new_rule = Rule(ant, result)
+                        silent || println(new_rule)
+                        push!(minimized_rules, new_rule)
+                    catch e
+                        @error "Simplification error: $e"
+                    end
+                    # END FALLBACK
                 end
-                #new_rule = Rule(ant, result)
-                silent || println(new_rule)
-                push!(minimized_rules, new_rule)
-            catch e
-                @error "Simplification error: $e"
+
+            else    # !merge_negated_elements or result is not max // finaly, continue in classic minimization
+
+                # TODO RESTORE CODE REMOVE COMMENT ..
+                #if return_info .
+                #    push!(unminimized_rules, convert_DNF_formula(formula, result, 1.0))
+                #end
+
+                formula_semplificata = Lumen.minimizza_dnf(
+                    Val(minimization_scheme),
+                    formula;
+                    minimization_kwargs...,
+                )
+                try
+
+                    if !is_minimization_scheme_espresso
+                        silent || println("==========================")
+                        silent || println("comb:", eachcombination(formula_semplificata))
+                        silent || println("==========================")
+
+                        ntermpresemp = nterms(formula)
+                        ntermpostsemp = nterms(formula_semplificata)
+                        push!(vectPrePostNumber, (ntermpresemp, ntermpostsemp))
+
+                        silent || println("Term origin: ", nterms(formula))
+                        silent || println("Term after semp: ", nterms(formula_semplificata))
+                        silent || println("Atoms/term orig: ", natomsperterm(formula))
+
+                        silent || println(
+                            "Atom/term post semp: ",
+                            #natomsperterm(formula_semplificata),
+                        )
+                    end
+                    silent || println()
+                    if is_minimization_scheme_espresso
+                        formula_string = leftmost_disjunctive_form_to_string(
+                            formula_semplificata,
+                            horizontal,
+                            vetImportance,
+                        )
+                        φ = SoleLogics.parseformula(
+                            formula_string;
+                            atom_parser=a -> Atom(
+                                parsecondition(
+                                    SoleData.ScalarCondition,
+                                    a;
+                                    featuretype=SoleData.VariableValue,
+                                    featvaltype=Real,
+                                ),
+                            ),
+                        )
+                        new_rule = Rule(φ, result)
+                    else
+                        new_rule =
+                            convert_DNF_formula(formula_semplificata, result, horizontal)
+                    end
+                    #new_rule = Rule(ant, result)
+                    silent || println(new_rule)
+                    push!(minimized_rules, new_rule)
+                catch e
+                    @error "Simplification error: $e"
+                end
             end
         end
 
@@ -322,7 +492,8 @@ function lumen(
 
         info = (;)
         info = merge(info, (; vectPrePostNumber=vectPrePostNumber))
-        return_info && (info = merge(info, (; unminimized_ds=DecisionSet(unminimized_rules))))
+        return_info &&
+            (info = merge(info, (; unminimized_ds=DecisionSet(unminimized_rules))))
 
         return ds, info
     end
@@ -331,16 +502,22 @@ function lumen(
         silent || println(
             "\n\n$COLORED_INFO$TITLE\n PART 2.d IS THE OPTIMIZATION VALID?\n$TITLE$RESET",
         )
-        testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function,testott)
-        return nothing, nothing 
+        testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function, testott)
+        return nothing, nothing
     end
 
     if alphabetcontroll != nothing
-        silent || println(
-            "\n\n$COLORED_INFO$TITLE\n ANALIZE ONLY ALPHABET\n$TITLE$RESET",
+        silent || println("\n\n$COLORED_INFO$TITLE\n ANALIZE ONLY ALPHABET\n$TITLE$RESET")
+        debug_combinations(
+            modelJ,
+            my_alphabet,
+            my_atoms,
+            vertical;
+            silent,
+            apply_function,
+            alphabetcontroll,
         )
-        debug_combinations(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function,alphabetcontroll)
-        return nothing, nothing 
+        return nothing, nothing
     end
 end
 

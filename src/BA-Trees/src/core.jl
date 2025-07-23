@@ -327,6 +327,25 @@ function create_tree_node_from_branch(
     end
 end
 
+
+function get_number_of_features(models::Vector{Branch{String}})
+    function get_feature_from_model(model::ConstantModel; maxvalue=0)
+        return maxvalue
+    end
+    function get_feature_from_model(model::Branch{String}; maxvalue=0)
+        return maximum([
+            get_feature_from_model(model.posconsequent, maxvalue=maxvalue), 
+            get_feature_from_model(model.negconsequent, maxvalue=maxvalue), 
+            get_feature_from_model(model.antecedent, maxvalue=maxvalue)
+        ]);
+    end
+    function get_feature_from_model(model::Atom; maxvalue=0)
+        return max(maxvalue, model.value.metacond.feature.i_variable)
+    end
+
+    return maximum([get_feature_from_model(model) for model in models])
+end
+
 """
 Create a BA-Trees file similar to create_random_forest_input, but using
 your model f::DecisionEnsemble{String} (SoleModels).
@@ -345,19 +364,16 @@ function create_random_forest_input_from_model(
     num_trees = length(f.models)
 
     # 2) Calculate NB_FEATURES
-    max_feat_used = 0
-    for tree in f.models
-        if isa(tree, Branch{String})
-            feat = tree.antecedent.value.metacond.feature.i_variable
-            max_feat_used = max(max_feat_used, feat)
-        end
-    end
-    nb_features = max_feat_used - (feature_offset - 1)
-
+    max_feat_used = get_number_of_features(f.models)
+    nb_features = max_feat_used - feature_offset + 1
+    
     # 3) NB_CLASSES
     all_labels = f.info.supporting_labels
     unique_labels = unique(all_labels)
     nb_classes = length(unique_labels)
+
+    #println("fffffff: ",f)
+    #println("all_labels:",all_labels)
 
     # 4) MAX_TREE_DEPTH
     max_depth = num_trees == 0 ? 0 :
@@ -376,6 +392,7 @@ function create_random_forest_input_from_model(
     println()
 
     # 6) File rows
+    println()
     lines = String[]
     push!(lines, "DATASET_NAME: dataset.train.csv")
     push!(lines, "ENSEMBLE: RF")
@@ -894,7 +911,7 @@ function prepare_and_run_ba_trees(;
     end
  end
 
-function WRAP_batrees(f, max_depth=10; dataset_name="iris", num_trees=10)
+function WRAP_batrees(f, max_depth=10; dataset_name="iris", num_trees=10, mod = 0)
     println("Born-Again Tree Analysis")
     println("="^30)
 
@@ -910,6 +927,7 @@ function WRAP_batrees(f, max_depth=10; dataset_name="iris", num_trees=10)
             num_trees    = num_trees,
             max_depth    = max_depth,
             forest = nothing,
+            mode_obj = mod
         )
     else
         class_map = prepare_and_run_ba_trees(
@@ -917,6 +935,7 @@ function WRAP_batrees(f, max_depth=10; dataset_name="iris", num_trees=10)
             num_trees    = length(f.models),
             max_depth    = max_depth,    # is indifferent ? 
             forest       = f,
+            mode_obj = mod
         )
     end
     return class_map
