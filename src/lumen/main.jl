@@ -148,7 +148,7 @@ function lumen(
         end
     end
 
-    is_minimization_scheme_espresso = minimization_scheme == :mitespresso || minimization_scheme == :boom || minimization_scheme == :abc # || minimization_scheme == :texasespresso
+    use_minimization_scheme = minimization_scheme == :mitespresso || minimization_scheme == :boom || minimization_scheme == :abc # || minimization_scheme == :texasespresso
 
     # PART 2.a: Starter Ruleset Extraction
     silent || println(
@@ -245,8 +245,8 @@ function lumen(
 
         # Process each result
         for (result, formula) in combined_results
-            println("Svolgendo minimizzazione per: $result")
-
+            println("Performing minimization for: $result")
+            
             if return_info
                 push!(unminimized_rules, convert_DNF_formula(formula, result, 1.0))
             end
@@ -285,7 +285,7 @@ function lumen(
                     )
                 end
                 silent || println()
-                if is_minimization_scheme_espresso
+                if use_minimization_scheme
                     formula_string = leftmost_disjunctive_form_to_string(formula_semplificata, horizontal, vetImportance)
                     φ = SoleLogics.parseformula(
                         formula_string;
