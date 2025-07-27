@@ -148,7 +148,7 @@ function lumen(
         end
     end
 
-    use_minimization_scheme = minimization_scheme == :mitespresso || minimization_scheme == :boom || minimization_scheme == :abc # || minimization_scheme == :texasespresso
+    use_minimization_scheme = minimization_scheme in (:mitespresso, :boom, :abc, ) #, :texasespresso
 
     # PART 2.a: Starter Ruleset Extraction
     silent || println(
