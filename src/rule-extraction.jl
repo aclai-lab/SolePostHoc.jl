@@ -93,6 +93,7 @@ end
 ======================================================================================================================================#
 
 export batrees, BATrees
+export BATreesRuleExtractor
 
 include("BA-Trees/src/main.jl")
 @reexport using .BATrees
