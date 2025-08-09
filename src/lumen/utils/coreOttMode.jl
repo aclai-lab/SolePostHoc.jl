@@ -301,6 +301,7 @@ function concat_results(
     return res
 end
 
+#=
 function concat_results(results::Any, my_atoms::Vector)
     num_atoms = length(my_atoms)
 
@@ -311,6 +312,28 @@ function concat_results(results::Any, my_atoms::Vector)
     for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
         println("[$result] ($(length(combinations)) combinations)")
         res[result] = TwoLevelDNFFormula(my_atoms, Vector{TritVector}(combinations)) # if we resolve "constructs" we can also use -> res[result] = TwoLevelDNFFormula(Vector{TritVector}(combinations), my_atoms)
+    end
+    return res
+end
+=#
+
+function concat_results(results::Any, my_atoms::Vector)
+    num_atoms = length(my_atoms)
+    
+    # Handle tuple case 
+    if results isa Tuple
+        results_dict, _ = results  # Extract just the dictionary part
+        results = results_dict     # Use only the dictionary for conversion
+    end
+    
+    # Convert dictionary to tritvector format
+    results = dict_to_tritvector(results, num_atoms)
+    res = Dict{Any,TwoLevelDNFFormula}()
+    println("\nDetailed results:")
+
+    for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
+        println("[$result] ($(length(combinations)) combinations)")
+        res[result] = TwoLevelDNFFormula(my_atoms, Vector{TritVector}(combinations))
     end
     return res
 end

@@ -16,6 +16,7 @@ println("Julia version: ", VERSION)
 test_suites = [
     #("Rule Extraction", ["ensemble-rule-extraction.jl"]),
     ("Rule Extraction-sole", ["ensemble-rule-extraction-sole.jl"]),
+    ("Rule Extraction with lumen.jl", ["lumen.jl"]),
 ]
 
 @testset "SolePostHoc.jl" begin
