@@ -1,5 +1,3 @@
-include("core_shared.jl")
-
 """
 Processes a combination of atom values and returns a dictionary of valid values for each feature, along with a flag indicating if the combination has a contradiction.
 

@@ -5,7 +5,7 @@ using Random
 using Logging
 using Dates
 using DataStructures
-using ScikitLearn
+# using ScikitLearn
 using SoleModels
 using DecisionTree: load_data, build_forest, apply_forest
 using AbstractTrees
