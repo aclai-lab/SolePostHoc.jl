@@ -521,8 +521,7 @@ function rulecosiplus(ensemble::Any, X_train::Any, y_train::Any)
         verbose=2
     )
 
-
-    @time rc.fit(X_train_matrix, Vector(y_train))
+    @time rc.fit(X_train_matrix, Vector(String.(y_train)))
 
 
     max_rules = max(20, n_classes * 5)

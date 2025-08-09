@@ -144,6 +144,8 @@ end
 #======================================================================================================================================
                                                         RULECOSIPLUS
 ======================================================================================================================================#
+export RULECOSIPLUSRuleExtractor
+
 include("RuleCosiplus/src/main.jl")
 include("RuleCosiplus/src/apiRuleCosi.jl")
 @reexport using .RULECOSIPLUS

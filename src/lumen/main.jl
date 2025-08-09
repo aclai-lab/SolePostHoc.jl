@@ -936,7 +936,7 @@ See also: [`minimize_formula`](@ref), [`create_rule`](@ref), [`LumenConfig`](@re
 function process_rules(combined_results, config::LumenConfig)
     minimized_rules = Rule[]
     vect_pre_post_number = Vector{Tuple{Int,Int}}()
-    original_formulas = config.return_info ? Dict{Vector{<:Label}, Any}() : nothing
+    original_formulas = config.return_info ? Dict{Any, Any}() : nothing
     
     for (result, formula) in combined_results
         config.silent || println("Performing minimization for: $result")
