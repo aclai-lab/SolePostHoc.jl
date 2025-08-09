@@ -2,7 +2,8 @@ module Lumen
 
 # Core dependencies - Essential packages for the LUMEN algorithm
 using Logging, Dates, DataStructures, DataFrames
-using Setfield  
+using Setfield
+using SoleBase: Label
 using SoleModels
 using SoleModels: DecisionSet  
 using AbstractTrees
@@ -935,7 +936,7 @@ See also: [`minimize_formula`](@ref), [`create_rule`](@ref), [`LumenConfig`](@re
 function process_rules(combined_results, config::LumenConfig)
     minimized_rules = Rule[]
     vect_pre_post_number = Vector{Tuple{Int,Int}}()
-    original_formulas = config.return_info ? Dict{String, Any}() : nothing
+    original_formulas = config.return_info ? Dict{Vector{<:Label}, Any}() : nothing
     
     for (result, formula) in combined_results
         config.silent || println("Performing minimization for: $result")
@@ -1547,9 +1548,10 @@ function create_rule(formula, result, config::LumenConfig)
                 )
             )
         )
-        
+        @show first(result)
+        @show typeof(first(result))
         # Create rule with parsed logical formula
-        return Rule(φ, result)
+        return Rule(φ, first(result))
     else
         # Direct conversion path for simpler algorithms
         # This path is more efficient but with limited feature support

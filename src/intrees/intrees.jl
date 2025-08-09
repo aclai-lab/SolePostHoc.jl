@@ -58,6 +58,7 @@ function intrees(
     return_info::Bool = false,
     # kwargs...,
 )
+@show min_coverage
     isnothing(pruning_s) && !isnothing(pruning_decay_threshold) && (prune_rules = false)
     isnothing(pruning_decay_threshold) && !isnothing(pruning_s) && (prune_rules = false)
     isnothing(pruning_s) && (pruning_s = 1.0e-6)

@@ -60,6 +60,8 @@ include("intrees/apiIntrees.jl")
 end
 
 function modalextractrules(::InTreesRuleExtractor, m, args...; kwargs...)
+  @show kwargs
+  @show gino
   dl = intrees(m, args...; kwargs...)
   ll = listrules(dl, use_shortforms=false) # decision list to list of rules
   rules_obj = convert_classification_rules(dl, ll)
