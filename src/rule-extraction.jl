@@ -1,7 +1,7 @@
 module RuleExtraction
 
 using Reexport
-using Test
+# using Test     --- not needed
 using ThreadsX
 using Random
 using StatsBase

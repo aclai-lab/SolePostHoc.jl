@@ -219,50 +219,56 @@ Returns:
 - `Dict{Int,Vector{Float64}}`: A dictionary mapping feature indices to their corresponding valid values.
 - `Bool`: A flag indicating if the combination has a contradiction.
 """
-function process_combination(
-    i,
-    num_atoms::Int,
-    thresholds_by_feature::Dict{Int,Vector{Float64}},
-    atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}},
-)
-    combination = Dict{Int,Vector{Float64}}()
+# WARNING: Method definition process_combination(Any, Int64, Base.Dict{Int64, Array{Float64, 1}}, 
+# Base.Dict{Int64, Array{Tuple{Float64, Bool}, 1}}) 
+# in module Lumen at /home/paso/Documents/Aclai/Sole/SolePostHoc.jl/src/lumen/utils/core.jl:180 
+# overwritten at /home/paso/Documents/Aclai/Sole/SolePostHoc.jl/src/lumen/utils/coreOttMode.jl:222.
+# ERROR: Method overwriting is not permitted during Module precompilation. 
+# Use `__precompile__(false)` to opt-out of precompilation.
+# function process_combination(
+#     i,
+#     num_atoms::Int,
+#     thresholds_by_feature::Dict{Int,Vector{Float64}},
+#     atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}},
+# )
+#     combination = Dict{Int,Vector{Float64}}()
 
-    truth_row = !isa(i, BitVector) ? digits(i, base = 2, pad = num_atoms) : i
+#     truth_row = !isa(i, BitVector) ? digits(i, base = 2, pad = num_atoms) : i
 
-    has_contradiction = false
-    j = 1
-    for (feat, atom_list) in atoms_by_feature
-        thresholds = thresholds_by_feature[feat]
-        valid_values = copy(thresholds)
+#     has_contradiction = false
+#     j = 1
+#     for (feat, atom_list) in atoms_by_feature
+#         thresholds = thresholds_by_feature[feat]
+#         valid_values = copy(thresholds)
 
-        for (_, (threshold, _)) in enumerate(atom_list)
-            if truth_row[j] == 1
-                filter!(x -> x < threshold, valid_values)
-            else
-                filter!(x -> x >= threshold, valid_values)
-            end
-            j += 1
-        end
+#         for (_, (threshold, _)) in enumerate(atom_list)
+#             if truth_row[j] == 1
+#                 filter!(x -> x < threshold, valid_values)
+#             else
+#                 filter!(x -> x >= threshold, valid_values)
+#             end
+#             j += 1
+#         end
 
-        if isempty(valid_values)
-            has_contradiction = true
-            break
-        else
-            combination[feat] = valid_values
-        end
+#         if isempty(valid_values)
+#             has_contradiction = true
+#             break
+#         else
+#             combination[feat] = valid_values
+#         end
 
-    end
+#     end
 
-    if !has_contradiction
-        for feat in keys(thresholds_by_feature)
-            if !haskey(combination, feat)
-                combination[feat] = [1605.0]
-            end
-        end
-    end
+#     if !has_contradiction
+#         for feat in keys(thresholds_by_feature)
+#             if !haskey(combination, feat)
+#                 combination[feat] = [1605.0]
+#             end
+#         end
+#     end
 
-    return combination, has_contradiction
-end
+#     return combination, has_contradiction
+# end
 
 
 """
@@ -279,27 +285,33 @@ Parameters:
 Returns:
 - `Dict{Any,TwoLevelDNFFormula}`: A dictionary mapping the original results to their corresponding `TwoLevelDNFFormula` objects.
 """
-function concat_results(
-    results::Any,
-    num_atoms::Int,
-    thresholds_by_feature::Dict{Int,Vector{Float64}},
-    atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}},
-)
-    results = dict_to_tritvector(results, num_atoms)
-    res = Dict{Any,TwoLevelDNFFormula}()
-    println("\nDetailed results:")
+# WARNING: Method definition concat_results(Any, Int64, Base.Dict{Int64, Array{Float64, 1}}, 
+# Base.Dict{Int64, Array{Tuple{Float64, Bool}, 1}}) 
+# in module Lumen at /home/paso/Documents/Aclai/Sole/SolePostHoc.jl/src/lumen/utils/core.jl:240 
+# overwritten at /home/paso/Documents/Aclai/Sole/SolePostHoc.jl/src/lumen/utils/coreOttMode.jl:288.
+# ERROR: Method overwriting is not permitted during Module precompilation. 
+# Use `__precompile__(false)` to opt-out of precompilation.
+# function concat_results(
+#     results::Any,
+#     num_atoms::Int,
+#     thresholds_by_feature::Dict{Int,Vector{Float64}},
+#     atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}},
+# )
+#     results = dict_to_tritvector(results, num_atoms)
+#     res = Dict{Any,TwoLevelDNFFormula}()
+#     println("\nDetailed results:")
 
-    for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
-        println("[$result] ($(length(combinations)) combinations)")
-        res[result] = TwoLevelDNFFormula(
-            Vector{TritVector}(combinations),
-            num_atoms,
-            thresholds_by_feature,
-            atoms_by_feature
-        )
-    end
-    return res
-end
+#     for (result, combinations) in sort(collect(results), by = x -> length(x[2]), rev = true)
+#         println("[$result] ($(length(combinations)) combinations)")
+#         res[result] = TwoLevelDNFFormula(
+#             Vector{TritVector}(combinations),
+#             num_atoms,
+#             thresholds_by_feature,
+#             atoms_by_feature
+#         )
+#     end
+#     return res
+# end
 
 #=
 function concat_results(results::Any, my_atoms::Vector)
