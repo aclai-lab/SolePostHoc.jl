@@ -25,10 +25,12 @@ export trepan
 """
 function trepan(f, X; max_depth=-1, n_subfeatures=-1, partial_sampling=0.5, min_samples_leaf=5, min_samples_split=2, min_purity_increase=0.0, seed=42)
 
+    Xdf, Xm = X isa DataFrame ? (X, Matrix(X)) : (DataFrame(X, :auto), X)
+
     y_pred = SoleModels.apply(
         f,
         SoleData.scalarlogiset(
-            DataFrame(X, :auto);
+            Xdf;
             allow_propositional=true,
         ),
     )
@@ -37,7 +39,7 @@ function trepan(f, X; max_depth=-1, n_subfeatures=-1, partial_sampling=0.5, min_
 
     model = build_forest(
         y_pred,
-        X,
+        Xm,
         n_subfeatures,
         n_trees,
         partial_sampling,

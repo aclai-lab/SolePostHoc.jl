@@ -10,6 +10,7 @@ using CategoricalArrays
 const TreeType = Union{String, CategoricalArrays.CategoricalValue{String, UInt32}}
 
 using DecisionTree
+using SoleBase: Label
 using SoleModels
 
 # <-- PATH FIX: usa @__DIR__ per includere "other.jl"
@@ -328,11 +329,11 @@ function create_tree_node_from_branch(
 end
 
 
-function get_number_of_features(models::Vector{Branch{String}})
+function get_number_of_features(models::Vector{<:Branch{<:Label}})
     function get_feature_from_model(model::ConstantModel; maxvalue=0)
         return maxvalue
     end
-    function get_feature_from_model(model::Branch{String}; maxvalue=0)
+    function get_feature_from_model(model::Branch{<:Label}; maxvalue=0)
         return maximum([
             get_feature_from_model(model.posconsequent, maxvalue=maxvalue), 
             get_feature_from_model(model.negconsequent, maxvalue=maxvalue), 
