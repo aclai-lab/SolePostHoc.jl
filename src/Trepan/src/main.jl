@@ -23,30 +23,30 @@ export trepan
 """
 - Mark W. Craven, et al. "Extracting Thee-Structured Representations of Thained Networks"
 """
-function trepan(model, X, y_pred; max_depth=-1, n_subfeatures=-1, partial_sampling=0.5, min_samples_leaf=5, min_samples_split=2, min_purity_increase=0.0, seed=42)
+function trepan(f, X; max_depth=-1, n_subfeatures=-1, partial_sampling=0.5, min_samples_leaf=5, min_samples_split=2, min_purity_increase=0.0, seed=42)
 
-    # y_pred = SoleModels.apply(
-    #     f,
-    #     SoleData.scalarlogiset(
-    #         DataFrame(X, :auto);
-    #         allow_propositional=true,
-    #     ),
-    # )
+    y_pred = SoleModels.apply(
+        f,
+        SoleData.scalarlogiset(
+            DataFrame(X, :auto);
+            allow_propositional=true,
+        ),
+    )
 
-    # n_trees = 1
+    n_trees = 1
 
-    # model = build_forest(
-    #     y_pred,
-    #     X,
-    #     n_subfeatures,
-    #     n_trees,
-    #     partial_sampling,
-    #     max_depth,
-    #     min_samples_leaf,
-    #     min_samples_split,
-    #     min_purity_increase;
-    #     rng=seed,
-    # )
+    model = build_forest(
+        y_pred,
+        X,
+        n_subfeatures,
+        n_trees,
+        partial_sampling,
+        max_depth,
+        min_samples_leaf,
+        min_samples_split,
+        min_purity_increase;
+        rng=seed,
+    )
 
 
     println(model)
