@@ -2,4 +2,10 @@
 *.jl.cov
 *.jl.mem
 /Manifest.toml
+/Manifest.toml.bk
 /docs/build/
+Manifest.toml.bak
+src/BA-Trees/src/temp_ba_trees/forest.txt
+src/BA-Trees/src/temp_ba_trees/result.txt.out
+src/BA-Trees/src/temp_ba_trees/result.txt.tree
+src/lumen/reportAlphabet.jl
