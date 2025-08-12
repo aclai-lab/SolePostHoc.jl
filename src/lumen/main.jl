@@ -1548,10 +1548,10 @@ function create_rule(formula, result, config::LumenConfig)
                 )
             )
         )
-        @show first(result)
-        @show typeof(first(result))
+        #@show first(result)
+        #@show typeof(first(result))
         # Create rule with parsed logical formula
-        return Rule(φ, first(result))
+        return Rule(φ, result)
     else
         # Direct conversion path for simpler algorithms
         # This path is more efficient but with limited feature support
