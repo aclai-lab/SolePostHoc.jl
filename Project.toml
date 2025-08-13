@@ -1,7 +1,7 @@
 name = "SolePostHoc"
 uuid = "cf1aa0c3-12c9-4ebe-9bdc-bd6c2ca79b72"
 authors = ["Michele Ghiotti", "Giovanni Pagliarini", "Riccardo Pasini", "Marco Perrotta", "Eduard I. Stan"]
-version = "0.2.0"
+version = "0.2.1"
 
 [deps]
 AbstractTrees = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
@@ -45,7 +45,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
 [compat]
-CategoricalArrays = "0.10.8"
+CategoricalArrays = "1.0"
 Random = "1"
 julia = "1"
 
