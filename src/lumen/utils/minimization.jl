@@ -1,9 +1,9 @@
-function minimizza_dnf(_minimization_scheme::Val, formula::TwoLevelDNFFormula, kwargs...)
+function minimize(_minimization_scheme::Val, formula::TwoLevelDNFFormula, kwargs...)
     error("Unknown minimization scheme: $(_minimization_scheme)!")
 end
 
 # using Infiltrator
-function minimizza_dnf(
+function minimize(
     ::Val{:mitespresso},
     formula::TwoLevelDNFFormula;
     silent = true,
@@ -21,7 +21,7 @@ function minimizza_dnf(
 end
 
 
-function minimizza_dnf(
+function minimize(
     ::Val{:boom},
     formula::TwoLevelDNFFormula;
     silent = true,
@@ -37,7 +37,7 @@ function minimizza_dnf(
     return formula
 end
 
-function minimizza_dnf(
+function minimize(
     ::Val{:abc},
     formula::TwoLevelDNFFormula;
     silent = true,
@@ -54,7 +54,7 @@ function minimizza_dnf(
 end
 
 #=
-function minimizza_dnf(
+function minimize(
     ::Val{:texasespresso},
     formula::TwoLevelDNFFormula;
     silent = true,
@@ -73,14 +73,7 @@ end
 =#
 
 
-"""
-    minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula, horizontal = 1.0)
-
-Simplifies a custom OR formula using the Quine algorithm.
-
-This function takes a `TwoLevelDNFFormula` object and applies the Quine algorithm to minimize the number of combinations in the formula. It returns a new `TwoLevelDNFFormula` object with the simplified combinations.
-"""
-function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
+function minimize(::Val{:quine}, formula::TwoLevelDNFFormula)
     # Initialize the starting terms
     terms = [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
     for (i, term) in enumerate(eachcombination(formula))
@@ -232,7 +225,7 @@ end
 
 
 #=MINIMUMS THAT DON'T SEEM GLOBAL TO ME=#
-function minimizza_dnf(::Val{:quine_naive}, formula::TwoLevelDNFFormula)
+function minimize(::Val{:quine_naive}, formula::TwoLevelDNFFormula)
     # Convert terms into binary vectors
     terms = [Vector{Int}([x ? 1 : 0 for x in term]) for term in eachcombination(formula)]
     
@@ -402,7 +395,7 @@ end
 
 
 #=GLOBAL MINIMUMS BUT INCORRECT=#
-function minimizza_dnf(::Val{:quine_oldstyle}, formula::TwoLevelDNFFormula)
+function minimize(::Val{:quine_oldstyle}, formula::TwoLevelDNFFormula)
     # Initialization of starting terms
     terms = [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
     for (i, term) in enumerate(eachcombination(formula))
@@ -579,7 +572,7 @@ end
 
 
  #CLASSIC ESPRESSO STABLE (LOCAL MINIMAL)
- function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula; minimization_method_kwargs...)
+ function minimize(::Val{:espresso}, formula::TwoLevelDNFFormula; minimization_method_kwargs...)
     # Convert TritVectors to the internal representation used by Espresso
     # We'll map: 1 -> 1, 0 -> 0, -1 -> 0 (since we only care about positive terms)
     terms = Vector{Vector{Int}}()
@@ -761,7 +754,7 @@ end
 
 
 #=
-function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula; minimization_method_kwargs...)
+function minimize(::Val{:espresso}, formula::TwoLevelDNFFormula; minimization_method_kwargs...)
     terms = [Vector{Int}([x ? 1 : 0 for x in term]) for term in eachcombination(formula)]
 
     function covers(cube1, cube2)
@@ -932,7 +925,7 @@ end
 =#
 
 #=quine resolution...=#
-function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
+function minimize(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
     # Initialize terms
     terms = [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
     for (i, term) in enumerate(eachcombination(formula))
@@ -1125,7 +1118,7 @@ function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
 end
 
 #resolution test#
-function minimizza_dnf(::Val{:quine_petrick}, formula::TwoLevelDNFFormula)
+function minimize(::Val{:quine_petrick}, formula::TwoLevelDNFFormula)
     terms = eachcombination(formula)
 
     if isempty(terms)
@@ -1256,7 +1249,7 @@ function minimizza_dnf(::Val{:quine_petrick}, formula::TwoLevelDNFFormula)
 end
 
 # quine fuso with espresso [DEFINITIVE !?!?!?!1?!?!?!1?!1?!]
-function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
+function minimize(::Val{:pina}, formula::TwoLevelDNFFormula)
     let spinner_state = Ref(1)  # Keep track of spinner state between calls
         function show_progress(desc::String, current::Int, total::Int)
             spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
@@ -1462,7 +1455,7 @@ function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
     end
 end
 
-function minimizza_dnf(::Val{:pina_interrupted}, formula::TwoLevelDNFFormula)
+function minimize(::Val{:pina_interrupted}, formula::TwoLevelDNFFormula)
     let spinner_state = Ref(1)  # Spinner state
         function show_progress(desc::String, current::Int, total::Int)
             spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
@@ -1643,7 +1636,7 @@ function minimizza_dnf(::Val{:pina_interrupted}, formula::TwoLevelDNFFormula)
 end
 
 # WORKING with same results as espresso
-function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
+function minimize(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
     ########################################################################
     # 1) Original terms in 0/1 format to guarantee the same coverage
     ########################################################################
@@ -1655,7 +1648,7 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
     ########################################################################
     # 2) Minimization with Espresso
     ########################################################################
-    espresso_result = minimizza_dnf(Val(:espresso), formula)
+    espresso_result = minimize(Val(:espresso), formula)
 
     ########################################################################
     # 3) Convert Espresso results into cubes with -1 (if prime_mask not empty)
@@ -1948,7 +1941,7 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
 end
 
 # AI GENERATED (TODO TEST it)
-function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
+function minimize(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
     ########################################################################
     # 1) Original terms in 0/1 format to guarantee the same coverage
     ########################################################################
@@ -1960,7 +1953,7 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
     ########################################################################
     # 2) Minimization with Espresso
     ########################################################################
-    espresso_result = minimizza_dnf(Val(:espresso), formula)
+    espresso_result = minimize(Val(:espresso), formula)
 
     ########################################################################
     # 3) Convert Espresso results into cubes with -1 (if prime_mask not empty)
@@ -2301,7 +2294,7 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
 end
 
 # AI GENERATED (TODO TEST it) (RAM HUNGRY)
-function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
+function minimize(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
     ########################################################################
     # 1) Original terms in 0/1 format to guarantee the same coverage
     ########################################################################
@@ -2313,7 +2306,7 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
     ########################################################################
     # 2) Minimization with Espresso (initial step)
     ########################################################################
-    espresso_result = minimizza_dnf(Val(:espresso), formula)
+    espresso_result = minimize(Val(:espresso), formula)
     println(length(eachcombination(espresso_result.combination)))
 
     ########################################################################
@@ -2611,7 +2604,7 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
     # 4) POSSIBLE check for "residual tautology"
     # If there is exactly 1 cube and it's all -1, discard it:
     if length(final_coverage_unified) == 1 && all(x -> x == Int8(-1), final_coverage_unified[1])
-        @warn "minimizza_dnf: found 1 completely -1 cube (tautology). Forcibly removing it!"
+        @warn "minimize: found 1 completely -1 cube (tautology). Forcibly removing it!"
         final_coverage_unified = Vector{Vector{Int8}}()  # e.g. empty formula ("false")
         # Or you could go back to prime implicants, etc. Depends on your logic.
     end

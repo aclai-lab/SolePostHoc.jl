@@ -26,8 +26,6 @@ export lumen, LumenConfig, LumenResult
 ##
 
 """
-    LumenConfig
-
 Configuration parameters for the Logic-driven Unified Minimal Extractor of Notions (LUMEN) algorithm.
 
 This struct encapsulates all configuration options for the LUMEN algorithm, providing a clean
@@ -37,10 +35,10 @@ to enable keyword-based construction with default values.
 # Fields
 
 ## Core Algorithm Parameters
-- `minimization_scheme::Symbol = :AlgorithmName`: The DNF minimization algorithm to use
+- `minimization_scheme::Symbol = :abc`: The DNF minimization algorithm to use
   - `:mitespresso`: Advanced minimization with good balance of speed/quality
-  - `:boom`: Boom minimizator 
-  - `:abc`: Minimization whit Berkeley framework 
+  - `:boom`: wrapper around the Boom minimizer, from Fišer, P., & Hlavička, J. (2003). BOOM-A heuristic Boolean minimizer. Computing and Informatics, 22(1), 19-51.
+  - `:abc`: wrapper around the ABC minimizer from Brayton, Robert, and Alan Mishchenko. "ABC: An academic industrial-strength verification tool." International Conference on Computer Aided Verification. Berlin, Heidelberg: Springer Berlin Heidelberg, 2010.
   
 ## Coverage Parameters  
 - `vertical::Float64 = 1.0`: Vertical coverage parameter (α) ∈ (0.0, 1.0]
@@ -49,9 +47,9 @@ to enable keyword-based construction with default values.
   Controls the breadth of rule coverage across feature space (% of different thresholds)
 
 ## Processing Modes
-- `ott_mode::Bool = false`: Optimized truth table processing
+- `opt_mode::Bool = false`: Optimized truth table processing
   When `true`, uses memory-efficient and time-efficient algorithms for large datasets
-- `controllo::Bool = false`: Enable validation mode
+- `opt_check::Bool = false`: Enable validation mode
   Compares results between different processing methods for correctness verification
 
 ## Customization Options
@@ -66,8 +64,8 @@ to enable keyword-based construction with default values.
 - `vetImportance::Vector = []`: Vector for tracking feature importance values
 
 ## Testing and Debugging
-- `testott = nothing`: Special testing mode for optimization validation
-- `alphabetcontroll = nothing`: Special mode for alphabet analysis only
+- `test_opt = nothing`: Special testing mode for optimization validation
+- `alphabetcontrol = nothing`: Special mode for alphabet analysis only
 
 # Constructor Validation
 
@@ -92,7 +90,7 @@ config = LumenConfig(
 
 # Advanced configuration with custom processing
 config = LumenConfig(
-    ott_mode = true,
+    opt_mode = true,
     minimization_kwargs = (max_iterations = 1000,),
     filteralphabetcallback = my_custom_filter
 )
@@ -104,16 +102,16 @@ Base.@kwdef struct LumenConfig
     minimization_scheme::Symbol = :abc
     vertical::Float64 = 1.0
     horizontal::Float64 = 1.0
-    ott_mode::Bool = true # TODO VALUATE THIS (if df. true?)
-    controllo::Bool = false
+    opt_mode::Bool = true # TODO VALUATE THIS (if df. true?)
+    opt_check::Bool = false
     minimization_kwargs::NamedTuple = (;)
     filteralphabetcallback = identity
     apply_function = nothing
     silent::Bool = false
     return_info::Bool = true
     vetImportance::Vector = []
-    testott = nothing
-    alphabetcontroll = nothing
+    test_opt = nothing
+    alphabetcontrol = nothing
     #use_listrules::Bool = false
     
     # Custom constructor with validation - ensures configuration integrity
@@ -126,8 +124,6 @@ Base.@kwdef struct LumenConfig
 end
 
 """
-    LumenResult
-
 Comprehensive result structure containing extracted logical rules and associated metadata.
 
 This immutable struct encapsulates all outputs from the LUMEN algorithm, providing a clean
@@ -292,212 +288,11 @@ function validate_config(config::LumenConfig)
     
     # Additional consistency checks could be added here
     # For example, warning about potentially problematic parameter combinations
-    if config.ott_mode && config.controllo
-        @warn "Running both ott_mode and controllo simultaneously may impact performance"
+    if config.opt_mode && config.opt_check
+        @warn "Running both opt_mode and opt_check simultaneously may impact performance"
     end
 end
 
-##
-# Core Algorithm Components - Rule Extraction Strategies
-##
-
-"""
-    RuleExtractionStrategy
-
-Abstract base type for different rule extraction approaches.
-
-This design uses the Strategy pattern to handle different types of models
-(single trees vs. ensembles) with appropriate algorithms. The pattern provides:
-
-1. **Extensibility**: Easy to add new extraction methods
-2. **Type safety**: Compile-time method dispatch  
-3. **Clarity**: Each strategy has a clear, focused responsibility
-4. **Testability**: Individual strategies can be tested in isolation
-
-# Concrete Strategies
-
-- [`StandardExtraction`](@ref): For ensemble models powered by Sole
-- [`EnsembleExtraction`](@ref): For generic ensemble models (forests, boosting, etc.)
-
-# Design Pattern Benefits
-
-The Strategy pattern is chosen here because:
-- Rule extraction logic differs significantly between model types
-- We want to avoid large if-else blocks in the main algorithm
-- Future model types can be supported by adding new strategies
-- Each strategy can optimize for its specific model characteristics
-
-See also: [`extract_rules`](@ref), [`StandardExtraction`](@ref), [`EnsembleExtraction`](@ref)
-"""
-abstract type RuleExtractionStrategy end
-
-"""
-    StandardExtraction <: RuleExtractionStrategy
-
-Strategy for extracting rules from Sole decision models.
-
-This strategy is optimized for Sole structures and provides
-direct rule extraction without the complexity needed for ensemble handling.
-The approach maintains the tree's original logical structure while converting
-it to a rule-based representation.
-
-# Characteristics
-- **Efficiency**: Direct tree traversal without ensemble overhead
-- **Simplicity**: Straightforward path-to-rule conversion
-- **Preservation**: Maintains original tree decision logic
-
-See also: [`RuleExtractionStrategy`](@ref), [`EnsembleExtraction`](@ref)
-"""
-struct StandardExtraction <: RuleExtractionStrategy end
-
-"""
-    EnsembleExtraction <: RuleExtractionStrategy  
-
-Strategy for extracting rules from ensemble models (Random Forests, AdaBoost, etc.).
-
-This strategy handles the complexity of multiple tree models by extracting rules
-from each constituent tree and then combining/deduplicating the results. The approach
-balances computational efficiency with comprehensive rule coverage.
-
-# Characteristics
-- **Comprehensiveness**: Extracts rules from all ensemble members
-- **Deduplication**: Removes identical rules across trees
-- **Scalability**: Handles ensembles of arbitrary size
-- **Preservation**: Maintains the collective decision logic of the ensemble
-
-# Implementation Notes
-The strategy uses `unique()` to eliminate duplicate rules, which can significantly
-reduce the final ruleset size for ensembles where trees learn similar patterns.
-
-See also: [`RuleExtractionStrategy`](@ref), [`StandardExtraction`](@ref)
-"""
-struct EnsembleExtraction <: RuleExtractionStrategy end
-
-"""
-    extract_rules(model, ::StandardExtraction; use_shortforms=true) -> Vector{Rule}
-
-Extract logical rules from a single decision tree model.
-
-This method implements rule extraction for individual decision trees by traversing
-each path from root to leaf and converting the path conditions into logical rules.
-The process preserves the tree's decision logic while converting it to a more
-flexible rule representation.
-
-# Arguments
-- `model`: Single decision tree model to extract rules from
-- `::StandardExtraction`: Strategy type parameter (for dispatch)
-- `use_shortforms::Bool=true`: Whether to use shortened rule representations
-
-# Returns
-- `Vector{Rule}`: Collection of logical rules representing the tree's decision logic
-
-# Algorithm Details
-1. **Path Enumeration**: Traverse all root-to-leaf paths in the tree
-2. **Condition Extraction**: Convert split conditions to logical atoms
-3. **Rule Construction**: Combine path conditions into rule antecedents
-4. **Leaf Integration**: Associate each rule with its corresponding decision
-
-# Performance Notes
-- Time complexity: O(n) where n is the number of nodes
-- Space complexity: O(k) where k is the number of leaves (rules)
-- Optimized for single-tree scenarios without ensemble overhead
-"""
-function extract_rules(model, ::StandardExtraction; use_shortforms=true)
-    return listrules(model; use_shortforms)
-end
-
-"""
-    extract_rules(model, ::EnsembleExtraction; use_shortforms=true) -> Vector{Rule}
-
-Extract and consolidate logical rules from an ensemble of decision trees.
-
-This method handles the complexity of ensemble models by extracting rules from
-each constituent tree and then combining them into a unified ruleset. The process
-includes deduplication to avoid redundant rules while preserving the ensemble's
-collective decision-making capability.
-
-# Arguments
-- `model`: Ensemble model containing multiple decision trees
-- `::EnsembleExtraction`: Strategy type parameter (for dispatch)
-- `use_shortforms::Bool=true`: Whether to use shortened rule representations
-
-# Returns
-- `Vector{Rule}`: Unified collection of unique logical rules from all trees
-
-# Algorithm Details
-1. **Per-Tree Extraction**: Extract rules from each tree in the ensemble
-2. **Deduplication**: Remove identical rules using `unique()`
-3. **Consolidation**: Flatten nested rule vectors into single collection
-4. **Validation**: Ensure consistent rule format across the ensemble
-
-# Performance Considerations
-- Time complexity: O(m×n) where m is ensemble size, n is average tree size
-- Space complexity: O(k) where k is the total number of unique rules
-- Memory usage optimized through deduplication
-- Parallelization potential for very large ensembles
-
-# Implementation Notes
-The method handles the common case where `listrules` returns nested vectors
-by flattening them with `reduce(vcat, rs)`. This ensures consistent output
-format regardless of the specific ensemble implementation.
-"""
-function extract_rules(model, ::EnsembleExtraction; use_shortforms=true)
-    # Extract rules from each tree in the ensemble
-    # Using list comprehension for clarity and potential parallelization
-    rs = unique([listrules(tree; use_shortforms) for tree in SoleModels.models(model)])
-    
-    # Handle nested vector structures that some ensemble types produce
-    # The ternary operator provides robust handling of different return types
-    return rs isa Vector{<:Vector{<:Any}} ? reduce(vcat, rs) : rs
-end
-
-"""
-    extract_rules(model; use_shortforms=true) -> Vector{Rule}
-
-Automatic rule extraction with strategy selection based on model type.
-
-This is the main entry point for rule extraction that automatically chooses
-the appropriate strategy based on the input model type. It provides a clean
-interface while leveraging the Strategy pattern internally for optimal performance.
-
-# Arguments  
-- `model`: Decision tree model (single tree or ensemble)
-- `use_shortforms::Bool=true`: Whether to use shortened rule representations
-
-# Returns
-- `Vector{Rule}`: Collection of logical rules extracted from the model
-
-# Strategy Selection Logic
-- **Single trees**: Uses `StandardExtraction` for optimal single-tree performance
-- **Ensembles**: Uses `EnsembleExtraction` to handle multiple trees correctly
-- **Unknown types**: Defaults to `StandardExtraction` with potential warnings
-
-# Design Benefits
-This automatic dispatch approach provides:
-1. **Simplicity**: Users don't need to know about strategy types
-2. **Correctness**: Always uses the right algorithm for the model type
-3. **Performance**: Optimal strategy selection without user overhead
-4. **Maintainability**: Strategy logic centralized in one place
-
-# Examples
-```julia
-# Works with single trees
-tree_model = build_tree(X, y)
-rules = extract_rules(tree_model)
-
-# Works with ensembles  
-forest_model = build_forest(X, y)
-rules = extract_rules(forest_model)
-
-# Automatic strategy selection handles both cases correctly
-```
-"""
-function extract_rules(model; use_shortforms=true)
-    # Automatically select strategy based on model type
-    # This design decision centralizes the type-checking logic
-    strategy = isensemble(model) ? EnsembleExtraction() : StandardExtraction()
-    return extract_rules(model, strategy; use_shortforms)
-end
 
 ##
 # Alphabet and Atom Processing
@@ -674,13 +469,13 @@ determine which logical formulas correspond to each decision outcome.
 
 The function automatically selects between two implementation strategies:
 
-## Standard Mode (`ott_mode = false`)
+## Standard Mode (`opt_mode = false`)
 - **Algorithm**: `truth_combinations()`
 - **Use case**: General-purpose processing for most datasets
 - **Characteristics**: Straightforward implementation with good memory usage
 - **Performance**: Optimal for small to medium-sized problems
 
-## Optimized Mode (`ott_mode = true`)  
+## Optimized Mode (`opt_mode = true`)  
 - **Algorithm**: `truth_combinations_ott()`
 - **Use case**: Large-scale problems requiring memory optimization
 - **Characteristics**: Reduced memory footprint with specialized data structures
@@ -730,7 +525,7 @@ The function automatically selects between two implementation strategies:
 The `config` parameter influences processing through:
 - `silent`: Controls progress output during generation
 - `apply_function`: Custom model evaluation function
-- `ott_mode`: Chooses between standard and optimized algorithms
+- `opt_mode`: Chooses between standard and optimized algorithms
 - Processing parameters passed to the underlying algorithms
 
 # Examples
@@ -740,7 +535,7 @@ The `config` parameter influences processing through:
 results, counts = generate_combinations(model, alphabet, atoms, 1.0, config)
 
 # Memory-optimized processing for large problems
-config_opt = LumenConfig(ott_mode=true)
+config_opt = LumenConfig(opt_mode=true)
 results, counts = generate_combinations(model, alphabet, atoms, 0.8, config_opt)
 
 # Custom processing with specific apply function
@@ -763,7 +558,7 @@ function generate_combinations(model, alphabet, atoms, vertical, config::LumenCo
     # The choice between standard and optimized mode significantly impacts
     # both memory usage and computational characteristics
     
-    if config.ott_mode
+    if config.opt_mode
         # Optimized processing for large-scale problems
         # This mode uses specialized data structures and algorithms
         # to reduce memory footprint while maintaining correctness
@@ -831,7 +626,7 @@ Preserves original formulas for comparison and analysis.
 
 ### Step 2.2: Minimization
 ```julia
-minimized_formula = minimize_formula(formula, config)
+minimized_formula = lumen_minimize(formula, config)
 ```
 Applies the configured minimization algorithm to simplify the formula.
 
@@ -876,7 +671,7 @@ The function implements robust error handling:
 ```julia
 try
     # Minimization process
-    minimized_formula = minimize_formula(formula, config)
+    minimized_formula = lumen_minimize(formula, config)
     rule = create_rule(minimized_formula, result, config)
     push!(minimized_rules, rule)
 catch e
@@ -931,7 +726,7 @@ minimized, original, stats = process_rules(results, config_full)
 total_reduction = sum(pre - post for (pre, post) in stats)
 ```
 
-See also: [`minimize_formula`](@ref), [`create_rule`](@ref), [`LumenConfig`](@ref)
+See also: [`lumen_minimize`](@ref), [`create_rule`](@ref), [`LumenConfig`](@ref)
 """
 function process_rules(combined_results, config::LumenConfig)
     minimized_rules = Rule[]
@@ -946,7 +741,7 @@ function process_rules(combined_results, config::LumenConfig)
             original_formulas[result] = formula
         end
         
-        minimized_formula = minimize_formula(formula, config)
+        minimized_formula = lumen_minimize(formula, config)
         config.silent || println("End of minimization for: $result ")
         
         if should_track_statistics(config.minimization_scheme)
@@ -1134,7 +929,7 @@ function determine_apply_function(model, config_apply_function)
 end
 
 """
-    minimize_formula(formula, config::LumenConfig) -> MinimizedFormula
+    lumen_minimize(formula, config::LumenConfig) -> MinimizedFormula
 
 Apply the configured minimization algorithm to simplify a DNF formula.
 
@@ -1154,7 +949,7 @@ algorithm-specific parameter passing.
 ## Algorithm Dispatch
 The function uses Julia's `Val()` type system for compile-time algorithm selection:
 ```julia
-Lumen.minimizza_dnf(Val(config.minimization_scheme), formula; config.minimization_kwargs...)
+Lumen.minimize(Val(config.minimization_scheme), formula; config.minimization_kwargs...)
 ```
 
 This approach provides:
@@ -1197,7 +992,7 @@ Different algorithms have varying memory footprints:
 The function implements comprehensive error handling:
 ```julia
 try
-    return Lumen.minimizza_dnf(Val(scheme), formula; kwargs...)
+    return Lumen.minimize(Val(scheme), formula; kwargs...)
 catch MethodError
     throw(ArgumentError("Unsupported minimization scheme: _scheme"))
 catch e
@@ -1216,22 +1011,22 @@ end
 ```julia
 # Basic minimization with default parameters
 config = LumenConfig(minimization_scheme = :mitespresso)
-simplified = minimize_formula(complex_formula, config)
+simplified = lumen_minimize(complex_formula, config)
 
 # Advanced minimization with custom parameters
 config = LumenConfig(
     minimization_scheme = :boom,
     minimization_kwargs = (max_depth = 10, timeout = 30.0)
 )
-simplified = minimize_formula(complex_formula, config)
+simplified = lumen_minimize(complex_formula, config)
 ```
 
-See also: [`LumenConfig`](@ref), [`process_rules`](@ref), [`Lumen.minimizza_dnf`](@ref)
+See also: [`LumenConfig`](@ref), [`process_rules`](@ref)
 """
-function minimize_formula(formula, config::LumenConfig)
-    # Use Julia's Val() system for compile-time algorithm dispatch
+function lumen_minimize(formula, config::LumenConfig)
+    # Use Julia's `Val()` for compile-time algorithm dispatch
     # This provides optimal performance by avoiding runtime method lookup
-    return Lumen.minimizza_dnf(
+    return Lumen.minimize(
         Val(config.minimization_scheme),  # Compile-time algorithm selection
         formula;                          # The formula to minimize
         config.minimization_kwargs...     # Forward algorithm-specific parameters
@@ -1600,7 +1395,7 @@ Advanced interface using pre-constructed configuration for complex scenarios.
 - `minimization_scheme::Symbol = :mitespresso`: DNF minimization algorithm
 - `vertical::Float64 = 1.0`: Instance coverage parameter α ∈ (0,1]
 - `horizontal::Float64 = 1.0`: Feature coverage parameter β ∈ (0,1]
-- `ott_mode::Bool = false`: Enable memory-optimized processing
+- `opt_mode::Bool = false`: Enable memory-optimized processing
 - `silent::Bool = false`: Suppress progress output
 - `return_info::Bool = true`: Include detailed metadata in results
 
@@ -1670,7 +1465,7 @@ result = lumen(model, config)
 ## Performance Tuning
 ```julia
 # Memory-optimized processing for large datasets
-config = LumenConfig(ott_mode = true, vertical = 0.8)
+config = LumenConfig(opt_mode = true, vertical = 0.8)
 
 # Speed-optimized processing with basic minimization
 config = LumenConfig(minimization_scheme = :abc, silent = true)
@@ -1679,7 +1474,7 @@ config = LumenConfig(minimization_scheme = :abc, silent = true)
 ## Analysis and Debugging
 ```julia
 # Full information retention for analysis
-config = LumenConfig(return_info = true, controllo = true)
+config = LumenConfig(return_info = true, opt_check = true)
 result = lumen(model, config)
 
 # Access detailed statistics  
@@ -1723,7 +1518,7 @@ config = LumenConfig(
     minimization_scheme = :boom,        # Aggressive minimization
     vertical = 0.9,                     # High instance coverage  
     horizontal = 0.8,                   # Moderate feature coverage
-    ott_mode = true,                    # Memory optimization
+    opt_mode = true,                    # Memory optimization
     return_info = true                  # Full information retention
 )
 result = lumen(large_ensemble, config)
@@ -1759,7 +1554,7 @@ println("Processing time: _(result.processing_time) seconds")
 - **Domain-specific processing**: Custom alphabet filters and apply functions
 - **Output formats**: Additional result formatters and exporters
 
-See also: [`LumenConfig`](@ref), [`LumenResult`](@ref), [`extract_rules`](@ref), [`minimize_formula`](@ref)
+See also: [`LumenConfig`](@ref), [`LumenResult`](@ref), [`extract_rules`](@ref), [`lumen_minimize`](@ref)
 """
 function lumen(model; kwargs...)
     config = LumenConfig(; kwargs...)
@@ -1770,7 +1565,7 @@ function lumen(model, config::LumenConfig)
     start_time = time()
     
     # Handle special test modes
-    if !isnothing(config.testott) || !isnothing(config.alphabetcontroll)
+    if !isnothing(config.test_opt) || !isnothing(config.alphabetcontrol)
         return handle_test_modes(model, config)
     end
     
@@ -1838,16 +1633,16 @@ function handle_test_modes(model, config::LumenConfig)
     _, atoms, alphabet = extract_atoms(sole_model, config.filteralphabetcallback)
     apply_function = determine_apply_function(model, config.apply_function)
     
-    if !isnothing(config.testott)
+    if !isnothing(config.test_opt)
         config.silent || println("\n$COLORED_INFO PART 2.d: IS THE OPTIMIZATION VALID? $RESET")
         testOttt(model, alphabet, atoms, config.vertical; 
-                config.silent, apply_function, config.testott)
+                config.silent, apply_function, config.test_opt)
     end
     
-    if !isnothing(config.alphabetcontroll)
+    if !isnothing(config.alphabetcontrol)
         config.silent || println("\n$COLORED_INFO ANALYZE ONLY ALPHABET $RESET")
         debug_combinations(model, alphabet, atoms, config.vertical; 
-                          config.silent, apply_function, config.alphabetcontroll)
+                          config.silent, apply_function, config.alphabetcontrol)
     end
     
     return nothing, nothing
@@ -1859,8 +1654,8 @@ end
 
 # Types
 include("types/trit-vector.jl")
-include("types/balanced-trit-vector.jl") 
-include("types/balanced-ternary-vector.jl")
+# include("types/balanced-trit-vector.jl") 
+# include("types/balanced-ternary-vector.jl")
 include("types/types.jl")
 
 # Utilities
@@ -1870,7 +1665,7 @@ include("utils/IO.jl")
 include("utils/minor.jl")
 include("utils/core_shared.jl")
 include("utils/core.jl")
-include("utils/coreOttMode.jl")
+include("utils/coreOptMode.jl")
 include("utils/minimization.jl")
 include("deprecate.jl")
 

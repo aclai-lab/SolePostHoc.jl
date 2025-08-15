@@ -41,7 +41,7 @@ Args:
     elapsed_time (float): The total execution time.
     model (object): The model object.
 """
-function genera_report_statistiche(
+function generate_statistics_report(
     file_name,
     all_rules,
     ntotatoms,
