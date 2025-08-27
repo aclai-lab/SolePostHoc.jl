@@ -61,7 +61,7 @@ using SoleLogics
             @test config.minimization_scheme == :abc
             @test config.vertical == 1.0
             @test config.horizontal == 1.0
-            @test config.ott_mode == true
+            @test config.opt_mode == true
             @test config.silent == false
             
             # Test custom configuration
@@ -237,8 +237,8 @@ using SoleLogics
             end
             
             # Test OTT mode
-            config_ott = LumenConfig(ott_mode=true, silent=true)
-            config_no_ott = LumenConfig(ott_mode=false, silent=true)
+            config_ott = LumenConfig(opt_mode=true, silent=true)
+            config_no_ott = LumenConfig(opt_mode=false, silent=true)
             
             @test_nowarn lumen(model, config_ott)
             @test_nowarn lumen(model, config_no_ott)
