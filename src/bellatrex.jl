@@ -7,17 +7,21 @@ using Random
 using Hyperopt
 using ModalDecisionTrees: DForest
 
-# hyperparameter: ntrees, nclusters
+"""
+TODO docstring
+# References
+- Dedja, Klest, et al. "BELLATREX: Building explanations through a locally accurate rule extractor." Ieee Access 11 (2023): 41348-41367.
+- https://github.com/Klest94/Bellatrex
 
-# Repository web path: https://github.com/Klest94/Bellatrex
-# Bellatrex is a a
+See also [`modalextractrules`](@ref), [`bellatrex`](@ref), [`RuleExtractor`](@ref).
+"""
 function bellatrex(
     m::Union{AbstractModel,DecisionForest,DForest},
     X::AbstractLogiset, # testing dataset
     Y::AbstractVector{<:Label};
     exec_ntrees::Vector{Float64}=[0.2,0.5,0.8],
     exec_ndims::Vector=[2,5,nothing],
-    exec_nclusters::Vector{Int64}=[1,2,3],
+    exec_nclusters::Vector{Int}=[1,2,3],
     rng::AbstractRNG = MersenneTwister(1),
     kwargs...,
 )
@@ -28,7 +32,7 @@ function bellatrex(
     ndatasetinstances = ninstances(X)
     final_predictions = []
     ruleset = begin
-        if m isa DecisionForest
+        if isensemble(m)
             unique([listrules(tree; use_shortforms=true) for tree in ftrees])
         else
             listrules(model)

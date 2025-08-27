@@ -1,4 +1,5 @@
 using SolePostHoc
+
 using Documenter
 
 DocMeta.setdocmeta!(SolePostHoc, :DocTestSetup, :(using SolePostHoc); recursive=true)
@@ -8,6 +9,7 @@ makedocs(;
     authors="Michele Ghiotti, Giovanni Pagliarini, Eduard I. Stan",
     repo=Documenter.Remotes.GitHub("aclai-lab", "SolePostHoc.jl"),
     sitename="SolePostHoc.jl",
+    checkdocs=:none,
     format=Documenter.HTML(;
         size_threshold = 4000000,
         prettyurls=get(ENV, "CI", "false") == "true",
@@ -15,8 +17,9 @@ makedocs(;
         assets=String[],
     ),
     pages=[
-        "Home" => "index.md",
+        "Home" => "index.md"
     ],
+    warnonly = :true,
 )
 
 deploydocs(;

@@ -1,0 +1,3 @@
+T1,modal,Original,/home/lele7x/results9/evolutionary-rule-extraction/pruning-ensemble/models_cache/T1-rantic-modal/model_f9dca91efa42707f1cf71691682bb9202913823e676f8fc1227a5f4555b28e47.jld2,100,68.0,84.0,81.48148148148148,86.95652173913044
+T1,modal,Subforest,/home/lele7x/results9/evolutionary-rule-extraction/pruning-ensemble/models_cache/T1-rantic-modal/model_f9dca91efa42707f1cf71691682bb9202913823e676f8fc1227a5f4555b28e47.jld2,13,60.00000000000001,80.0,77.77777777777779,82.6086956521739
+T1,modal,Avgforest,Nothing,13,37.23076923076923,68.61538461538461,69.88145508817865,68.3408326681882

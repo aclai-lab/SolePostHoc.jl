@@ -1,5 +1,6 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+SoleModels = "4249d9c7-3290-4ddd-961c-e1d3ec2467f8"
 SolePostHoc = "cf1aa0c3-12c9-4ebe-9bdc-bd6c2ca79b72"
 
 [compat]
