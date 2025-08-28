@@ -958,9 +958,9 @@ function process_rules(combined_results, config::LumenConfig)
         
         try
             
-            println("pre dnf-domain minimized_formula:",minimized_formula)      # this code is usable only if use SoleData `origin/ADD_new_function_refine_dnf` in this moment [20 August 2025]
+            config.silent || println("pre dnf-domain minimized_formula:",minimized_formula)      # this code is usable only if use SoleData `origin/ADD_new_function_refine_dnf` in this moment [20 August 2025]
             minimized_formula = SoleData.refine_dnf(minimized_formula)            # TODO EVALUATE IF THIS IS NEEDED IN THIS POSITION OR BEFORE
-            println("post dnf-domain minimization:",minimized_formula)              # this code is usable only if use SoleData `origin/ADD_new_function_refine_dnf` in this moment [20 August 2025]
+            config.silent || println("post dnf-domain minimization:",minimized_formula)              # this code is usable only if use SoleData `origin/ADD_new_function_refine_dnf` in this moment [20 August 2025]
 
             rule = create_rule(minimized_formula, result, config)
             config.silent || println("Generated rule: $rule")
