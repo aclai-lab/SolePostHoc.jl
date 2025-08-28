@@ -47,6 +47,7 @@ ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 [compat]
 CategoricalArrays = "0.10"
 Random = "1"
+Setfield = "1"
 julia = "1"
 
 [extras]
