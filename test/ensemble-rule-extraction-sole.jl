@@ -3,13 +3,14 @@ using Test
 using SolePostHoc
 
 using MLJ
-using MLJBase
+# using MLJBase
 using DataFrames
 
-using MLJDecisionTreeInterface
+# using MLJDecisionTreeInterface
 using SoleModels
 
-import DecisionTree as DT
+using DecisionTree
+const DT = DecisionTree
 
 X, y, solem, solem_large = begin
   X, y = @load_iris
@@ -38,7 +39,7 @@ X, y, solem, solem_large = begin
   # Bind the model and data into a machine
   mach = machine(model, X_train, y_train)
   # Fit the model
-  fit!(mach)
+  MLJ.fit!(mach)
 
   classlabels = (mach).fitresult[2]
   classlabels = classlabels[sortperm((mach).fitresult[3])]

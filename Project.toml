@@ -46,8 +46,6 @@ ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
 [sources]
 ModalDecisionTrees = {rev = "64-modaladaboost", url = "https://github.com/aclai-lab/ModalDecisionTrees.jl"}
-SoleModels = {rev = "main", url = "https://github.com/aclai-lab/SoleModels.jl"}
-
 
 [compat]
 CategoricalArrays = "0.10"
