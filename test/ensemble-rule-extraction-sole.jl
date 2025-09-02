@@ -67,9 +67,6 @@ ds = @test_nowarn SolePostHoc.LumenRuleExtractor(fitted_params(mach).forest, app
 
 @test_nowarn SolePostHoc.LumenRuleExtractor()(solem)
 @test_nowarn SolePostHoc.modalextractrules(LumenRuleExtractor(), solem)
-@test_nowarn SolePostHoc.BellatrexRuleExtractor(solem)
-@test_nowarn SolePostHoc.BellatrexRuleExtractor()(solem)
-@test_nowarn SolePostHoc.modalextractrules(BellatrexRuleExtractor(), solem)
 
 
 @test SolePostHoc.modalextractrules(solem; method = :lumen, vertical = 1.0)

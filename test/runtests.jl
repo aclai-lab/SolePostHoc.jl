@@ -17,6 +17,7 @@ test_suites = [
     #("Rule Extraction", ["ensemble-rule-extraction.jl"]),
     ("Rule Extraction-sole", ["ensemble-rule-extraction-sole.jl"]),
     ("Rule Extraction with lumen.jl", ["lumen.jl"]),
+    ("Generic rule Extraction test with rule_extraction.jl", ["rule_extraction.jl"]),
 ]
 
 @testset "SolePostHoc.jl" begin
