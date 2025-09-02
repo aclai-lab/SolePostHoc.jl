@@ -23,8 +23,7 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1.11'
-          - 'pre'
+          - '1'
           # - 'lts' broken: expects SolePostHoc to be registered
         os:
           - ubuntu-latest
