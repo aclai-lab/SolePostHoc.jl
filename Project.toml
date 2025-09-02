@@ -1,7 +1,7 @@
 name = "SolePostHoc"
 uuid = "cf1aa0c3-12c9-4ebe-9bdc-bd6c2ca79b72"
 authors = ["Michele Ghiotti", "Giovanni Pagliarini", "Riccardo Pasini", "Marco Perrotta", "Eduard I. Stan"]
-version = "0.2.1"
+version = "0.2.2"
 
 [deps]
 AbstractTrees = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
