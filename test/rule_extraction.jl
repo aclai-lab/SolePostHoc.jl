@@ -3,6 +3,16 @@ using SoleModels, SolePostHoc
 using MLJ
 using DataFrames, Random
 
+using SoleData.Artifacts
+
+# fill your Artifacts.toml file;
+@test_nowarn fillartifacts()
+
+
+# Loader lists
+abcloader = ABCLoader()
+mitloader = MITESPRESSOLoader()
+
 Xc, yc = @load_iris
 Xc = DataFrame(Xc)
 
@@ -35,7 +45,7 @@ logiset = scalarlogiset(Xc[test, :], allow_propositional = true)
 apply!(solem_rf, logiset, yc[test])
 
 # ---------------------------------------------------------------------------- #
-#                          in trees rules extraction                           #
+#                          intrees rules extraction                           #
 # ---------------------------------------------------------------------------- #
 extractor = InTreesRuleExtractor()
 
