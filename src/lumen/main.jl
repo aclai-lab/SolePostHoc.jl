@@ -762,7 +762,7 @@ function generate_combinations(model, alphabet, atoms, vertical, config::LumenCo
     # Algorithm selection based on processing requirements
     # The choice between standard and optimized mode significantly impacts
     # both memory usage and computational characteristics
-    
+    vertical = 1.0 # FIXME HARDCODED VALUE YOU DONT WANT HERE THE VERTICAL DIPENDENCE
     if config.ott_mode
         # Optimized processing for large-scale problems
         # This mode uses specialized data structures and algorithms
@@ -945,7 +945,7 @@ function process_rules(combined_results, config::LumenConfig)
         if config.return_info
             original_formulas[result] = formula
         end
-        
+
         minimized_formula = minimize_formula(formula, config)
         config.silent || println("End of minimization for: $result ")
         
@@ -1239,6 +1239,9 @@ function minimize_formula(formula, config::LumenConfig)
     return Lumen.minimizza_dnf(
         Val(config.minimization_scheme),  # Compile-time algorithm selection
         formula;                          # The formula to minimize
+        vertical = config.vertical,
+        horizontal = config.horizontal,
+        vetImportance = config.vetImportance,
         config.minimization_kwargs...     # Forward algorithm-specific parameters
     )
 end
@@ -1536,7 +1539,7 @@ function create_rule(formula, result, config::LumenConfig)
         # Incorporates horizontal coverage and feature importance
         formula_string = leftmost_disjunctive_form_to_string(
             formula, 
-            config.horizontal,      # Controls rule breadth/specificity, TODO: IN FUTURE WE DONT WONT THIS HERE
+            1.0, #config.horizontal,  # Controls rule breadth/specificity, TODO: IN FUTURE WE DONT WONT THIS HERE
             config.vetImportance    # Influences feature prioritization TODO: IDEM "
         )
         
@@ -1560,7 +1563,7 @@ function create_rule(formula, result, config::LumenConfig)
     else
         # Direct conversion path for simpler algorithms
         # This path is more efficient but with limited feature support
-        return convert_DNF_formula(formula, result, config.horizontal) # MAYBE IS REALY BUSY FUNCTION
+        return convert_DNF_formula(formula, result, 1.0) # MAYBE IS REALY BUSY FUNCTION
     end
 end
 

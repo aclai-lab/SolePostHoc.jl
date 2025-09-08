@@ -41,12 +41,32 @@ function minimizza_dnf(
     ::Val{:abc},
     formula::TwoLevelDNFFormula;
     silent = true,
+    horizontal = 1.0,
+    vertical = 1.0,
+    vetImportance = [],
     boom_kwargs...,
 )
     formula = convert(SoleLogics.DNF, formula)
     silent || (println(); @show formula)
 
+    silent ||  println("||====================||")
+    silent ||  println(dnf(formula))
+    #@show vetImportance
+    #@show horizontal
+    #@show vertical
+    silent ||  println("||====================||")
+    
+    silent || println("pre rc comparison: ",dnf(formula))
+
+    if ((vertical != 1.0) && !isempty(vetImportance)) ||  (horizontal != 1.0)
+        formula = dnf_rc_compression(formula,horizontal,vertical,vetImportance)
+    end
+    silent || println("||====================||")
+    silent || println("post rc comparison: ",dnf(formula))
+    silent || println("||====================||")
+
     formula = SoleData.abc_minimize(formula, silent; boom_kwargs...)
+
 
     silent || (println(); @show formula)
 
@@ -2639,3 +2659,5 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
         final_coverage_unified,
     )
 end
+
+include("dnf_rc_compression.jl")
