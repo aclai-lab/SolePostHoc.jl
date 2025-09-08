@@ -73,7 +73,7 @@ function safe_get_variable_id_from_literal(literal)
 end
 
 """
-    dnf_rc_compression(formula, horizontal_rate, vertical_rate, importance_vector) -> Formula
+    dnf_rc_compression(formula, r, c, importance_vector) -> Formula
 
 Sample a DNF formula using two-dimensional reduction:
 - **Horizontal sampling**: Reduces the number of disjuncts (OR clauses)
@@ -81,8 +81,8 @@ Sample a DNF formula using two-dimensional reduction:
 
 # Arguments
 - `formula`: Input DNF formula
-- `horizontal_rate::Float64`: Fraction of disjuncts to keep ∈ (0,1]
-- `vertical_rate::Float64`: Fraction of variables to keep ∈ (0,1] 
+- `r::Float64`: Fraction of disjuncts to keep ∈ (0,1]
+- `c::Float64`: Fraction of variables to keep ∈ (0,1] 
 - `importance_vector::Vector{Int}`: Variable importance ranks (1=most important, n=least important)
 
 # Returns
@@ -97,14 +97,14 @@ sampled = dnf_rc_compression(formula, 0.7, 0.5, importance)
 """
 function dnf_rc_compression(
     formula, 
-    horizontal_rate::Float64, 
-    vertical_rate::Float64, 
+    c::Float64, 
+    r::Float64, 
     importance_vector::Vector{Int};
     silent = true
 )
     # Input validation
-    @assert 0 < horizontal_rate <= 1 "horizontal_rate must be in (0,1]"
-    @assert 0 < vertical_rate <= 1 "vertical_rate must be in (0,1]"
+    @assert 0 < r <= 1 "r must be in (0,1]"
+    @assert 0 < c <= 1 "c must be in (0,1]"
     
     original_disjuncts = formula.grandchildren
     n_original_disjuncts = length(original_disjuncts)
@@ -114,7 +114,7 @@ function dnf_rc_compression(
     # ==========================================================================
     # PHASE 1: HORIZONTAL SAMPLING - Reduce number of disjuncts
     # ==========================================================================
-    n_keep_disjuncts = max(1, round(Int, n_original_disjuncts * horizontal_rate))
+    n_keep_disjuncts = max(1, round(Int, n_original_disjuncts * r))
     
     # Random sampling without external dependencies
     disjunct_indices = collect(1:n_original_disjuncts)
@@ -122,13 +122,13 @@ function dnf_rc_compression(
     selected_indices = disjunct_indices[1:n_keep_disjuncts]
     horizontally_sampled = original_disjuncts[selected_indices]
     
-    silent || println("After horizontal sampling ($(horizontal_rate)): $(n_keep_disjuncts) disjuncts")
+    silent || println("After horizontal sampling ($(r)): $(n_keep_disjuncts) disjuncts")
     
     # ==========================================================================
     # PHASE 2: VERTICAL SAMPLING - Remove less important variables
     # ==========================================================================
     n_variables = length(importance_vector)
-    n_keep_variables = max(1, round(Int, n_variables * vertical_rate))
+    n_keep_variables = max(1, round(Int, n_variables * c))
     
     # Sort variable indices by importance (ascending rank = descending importance)
     importance_order = importance_vector

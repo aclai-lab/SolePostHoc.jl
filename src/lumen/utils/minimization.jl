@@ -59,7 +59,7 @@ function minimizza_dnf(
     silent || println("pre rc comparison: ",dnf(formula))
 
     if ((vertical != 1.0) && !isempty(vetImportance)) ||  (horizontal != 1.0)
-        formula = dnf_rc_compression(formula,horizontal,vertical,vetImportance)
+        formula = dnf_rc_compression(formula,horizontal,vertical,vetImportance;silent)
     end
     silent || println("||====================||")
     silent || println("post rc comparison: ",dnf(formula))
