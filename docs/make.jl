@@ -6,7 +6,7 @@ DocMeta.setdocmeta!(SolePostHoc, :DocTestSetup, :(using SolePostHoc); recursive=
 
 makedocs(;
     modules=[SolePostHoc],
-    authors="Michele Ghiotti, Giovanni Pagliarini, Eduard I. Stan",
+    authors="Michele Ghiotti, Giovanni Pagliarini, Eduard I. Stan, Marco Perrotta",
     repo=Documenter.Remotes.GitHub("aclai-lab", "SolePostHoc.jl"),
     sitename="SolePostHoc.jl",
     checkdocs=:none,
@@ -17,7 +17,13 @@ makedocs(;
         assets=String[],
     ),
     pages=[
-        "Home" => "index.md"
+        "Home" => "index.md",
+
+        "Getting started" => "getting-started.md",
+        "Extract with algorithms" => "extract-algorithms.md",
+
+        # "Hands on" => "hands-on.md",
+        "Contributing" => "contributing.md"
     ],
     warnonly = :true,
 )

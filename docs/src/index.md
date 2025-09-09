@@ -6,61 +6,30 @@ CurrentModule = SolePostHoc
 
 Welcome!!! to the documentation for [SolePostHoc](https://github.com/aclai-lab/SolePostHoc.jl).
 
-```@autodocs
-Modules = [SolePostHoc]
-Order = [:type, :constant, :function, :macro]
-Private = false
+## Installation
+
+To install SolePostHoc, simply launch:
+```julia
+using Pkg
+Pkg.add("SolePostHoc")
 ```
 
-## Rule Extraction Methods
+## [Feature](@id feature)
+SolePostHoc.jl provides knowledge extraction algorithms through a uniform interface, allowing for the comparison of different post-hoc interpretation methods while maintaining a coherent and intuitive user experience:
 
-```@autodocs
-Modules = [SolePostHoc.RuleExtraction]
-Order = [:function, :type]
-Private = false
+```
+struct ALGORITHMNAME <: RuleExtractor end
+modalextractrules(:ALGORITHMNAME, model, args...)
 ```
 
-### Lumen
+SolePostHoc.jl integrates a wide range of algorithms for knowledge extraction, including:
 
-```@autodocs
-Modules = [SolePostHoc.RuleExtraction.Lumen]
-Order = [:function, :type]
-Private = false
-```
+- **Surrogate Trees**, algorithms that approximate complex models such as neural networks or random forests with more interpretable decision trees;
+- **Knowledge Distillation**, techniques for transferring knowledge from complex models to simpler and more transparent ones;
+- **Rule Extraction**, methods for deriving clear and understandable logical rules from any machine learning model.
 
-### REFNE
+## About
 
-```@autodocs
-Modules = [SolePostHoc.RuleExtraction.REFNE]
-Order = [:function, :type]
-Private = false
-```
+The package is developed by the [ACLAI Lab](https://aclai.unife.it/en/) @ University of Ferrara.
 
-### TREPAN
-
-```@autodocs
-Modules = [SolePostHoc.RuleExtraction.TREPAN]
-Order = [:function, :type]
-Private = false
-```
-
-### BATrees
-
-```@autodocs
-Modules = [SolePostHoc.RuleExtraction.BATrees]
-Order = [:function, :type]
-Private = false
-```
-
-### RULECOSIPLUS
-
-```@autodocs
-Modules = [SolePostHoc.RuleExtraction.RULECOSIPLUS]
-Order = [:function, :type]
-Private = false
-```
-
-## Index
-
-```@index
-```
+*ModalAssociationRules.jl* lives in the context of [*Sole.jl*](https://github.com/aclai-lab/Sole.jl), an open-source framework for *symbolic machine learning*, originally designed for machine learning based on modal logics (see [Eduard I. Stan](https://eduardstan.github.io/)'s PhD thesis *'Foundations of Modal Symbolic Learning'* [here](https://www.repository.unipr.it/bitstream/1889/5219/5/main.pdf)).
