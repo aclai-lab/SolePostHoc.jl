@@ -17,7 +17,7 @@ Pkg.add("SolePostHoc")
 ## [Feature](@id feature)
 SolePostHoc.jl provides knowledge extraction algorithms through a uniform interface, allowing for the comparison of different post-hoc interpretation methods while maintaining a coherent and intuitive user experience:
 
-```
+```julia
 struct ALGORITHMNAME <: RuleExtractor end
 modalextractrules(:ALGORITHMNAME, model, args...)
 ```
