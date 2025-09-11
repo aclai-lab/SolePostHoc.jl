@@ -41,9 +41,9 @@ The foundation of SolePostHoc.jl lies in providing interpretable explanations fo
 abstract type RuleExtractor
 ```
 
-A [`RuleExtractor`](@ref) is an abstract type that defines the interface for all post-hoc explanation algorithms. Each concrete implementation represents a specific knowledge extraction method.
+A `RuleExtractor` is an abstract type that defines the interface for all post-hoc explanation algorithms. Each concrete implementation represents a specific knowledge extraction method.
 
-A [`DecisionSet`](@ref) represents the extracted knowledge as a collection of logical rules, where each rule corresponds to a specific class or decision outcome in Disjunctive Normal Form.
+A `DecisionSet` represents the extracted knowledge as a collection of logical rules, where each rule corresponds to a specific class or decision outcome in Disjunctive Normal Form.
 
 The main entry point for rule extraction is:
 
@@ -130,7 +130,7 @@ SolePostHoc.jl can leverage logical reasoning to obtain a more succinct and equa
 
 ## Customization and Extension
 
-Users can implement their own rule extraction algorithms by extending the [`RuleExtractor`](@ref) interface:
+Users can implement their own rule extraction algorithms by extending the `RuleExtractor` interface:
 
 ```julia
 
