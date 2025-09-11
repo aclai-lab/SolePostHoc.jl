@@ -31,7 +31,6 @@ Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 Setfield = "efcf1570-3423-57d1-acb7-fd33fddbac46"
 SoleBase = "4475fa32-7023-44a0-aa70-4813b230e492"
-SoleData = "123f1ae1-6307-4526-ab5b-aab3a92a2b8c"
 SoleLogics = "b002da8f-3cb3-4d91-bbe3-2953433912b5"
 SoleModels = "4249d9c7-3290-4ddd-961c-e1d3ec2467f8"
 StatProfilerHTML = "a8a75453-ed82-57c9-9e16-4cd1196ecbf5"
@@ -55,9 +54,6 @@ MLJBase = "a7f614a8-145f-11e9-1d2a-a57a1082229d"
 MLJDecisionTreeInterface = "c6f25543-311c-4c74-83dc-3ea6d1015661"
 RDatasets = "ce6b1742-4840-55fa-b093-852dadbb1d8b"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[sources]
-SoleData = {rev = "main", url = "https://github.com/aclai-lab/SoleData.jl"}
 
 [targets]
 test = ["Test", "MLJ", "MLJBase", "MLJDecisionTreeInterface", "DataFrames", "DecisionTree"]
