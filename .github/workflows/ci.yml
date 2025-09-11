@@ -36,6 +36,20 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v2
+      
+      # Setup Python and install Python dependencies
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install rulecosi
+        env:
+          PYTHON: ""
+      
       - uses: julia-actions/julia-buildpkg@v1
         env:
           PYTHON: ""
