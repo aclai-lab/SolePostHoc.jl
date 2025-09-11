@@ -340,7 +340,72 @@ end
 ##############################
 # 5) FUNCTION __init__
 ##############################
+"""
+    rulecosiplus(ensemble::Any, X_train::Any, y_train::Any)
 
+Extract interpretable rules from decision tree ensembles using the RuleCOSI+ algorithm.
+
+This function implements the RuleCOSI+ methodology for rule extraction from trained ensemble 
+classifiers, producing a simplified and interpretable rule-based model. The method combines 
+and simplifies rules extracted from individual trees in the ensemble to create a more 
+compact and understandable decision list.
+
+# Reference
+Obregon, J. (2022). RuleCOSI+: Rule extraction for interpreting classification tree ensembles. 
+*Information Fusion*, 89, 355-381. 
+Available at: https://www.sciencedirect.com/science/article/pii/S1566253522001129
+
+# Arguments
+- `ensemble::Any`: A trained ensemble classifier (e.g., Random Forest, Gradient Boosting) 
+  that will be serialized and converted to a compatible format for rule extraction.
+- `X_train::Any`: Training feature data. Can be a DataFrame or Matrix. If DataFrame, 
+  column names will be preserved in the extracted rules; otherwise, generic names (V1, V2, ...) 
+  will be generated.
+- `y_train::Any`: Training target labels corresponding to `X_train`. Will be converted to 
+  string format for processing.
+
+# Returns
+- `DecisionList`: A simplified decision list containing the extracted and combined rules 
+  from the ensemble, suitable for interpretable classification.
+
+# Details
+The function performs the following steps:
+1. Converts input data to appropriate matrix format
+2. Generates or extracts feature column names
+3. Serializes the Julia ensemble to a Python-compatible format
+4. Builds an sklearn-compatible model using the serialized ensemble
+5. Applies RuleCOSI+ algorithm with the following default parameters:
+   - `metric="fi"`: Optimization metric for rule combination
+   - `n_estimators=100`: Number of estimators considered
+   - `tree_max_depth=100`: Maximum depth of trees
+   - `conf_threshold=0.25` (α): Confidence threshold for rule filtering
+   - `cov_threshold=0.1` (β): Coverage threshold for rule filtering
+   - `verbose=2`: Detailed output during processing
+6. Extracts and converts rules to a decision list format
+
+# Configuration
+The algorithm uses fixed parameters optimized for interpretability:
+- Confidence threshold (α) = 0.25: Rules below this confidence are discarded
+- Coverage threshold (β) = 0.1: Rules covering fewer samples are excluded
+- Maximum rules = max(20, n_classes × 5): Adaptive limit based on problem complexity
+
+# Example
+```julia
+# Assuming you have a trained ensemble and training data
+ensemble = ... # your trained ensemble
+X_train = ... # training features
+y_train = ... # training labels
+
+# Extract interpretable rules
+decision_list = rulecosiplus(ensemble, X_train, y_train)
+```
+
+# Notes
+- The function prints diagnostic information including the number of trees and dataset statistics
+- Raw rules are displayed before conversion to decision list format
+- Requires Python interoperability and the RuleCOSI implementation
+- The resulting decision list provides an interpretable alternative to the original ensemble
+"""
 function rulecosiplus(ensemble::Any, X_train::Any, y_train::Any)
 
     # Convert training data to matrix format if needed
