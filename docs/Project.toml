@@ -20,7 +20,6 @@ JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 MLJDecisionTreeInterface = "c6f25543-311c-4c74-83dc-3ea6d1015661"
-ModalDecisionTrees = "e54bda2e-c571-11ec-9d64-0242ac120002"
 MultivariateStats = "6f286f6a-111f-5878-ab1e-185364afe411"
 NearestNeighbors = "b8a86587-4115-5ab1-83bc-aa920d37bbce"
 Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
@@ -58,7 +57,6 @@ RDatasets = "ce6b1742-4840-55fa-b093-852dadbb1d8b"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [sources]
-ModalDecisionTrees = {rev = "64-modaladaboost", url = "https://github.com/aclai-lab/ModalDecisionTrees.jl"}
 SoleData = {rev = "main", url = "https://github.com/aclai-lab/SoleData.jl"}
 
 [targets]
