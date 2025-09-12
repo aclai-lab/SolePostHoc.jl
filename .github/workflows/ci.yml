@@ -2,7 +2,7 @@ name: CI
 on:
   push:
     branches:
-      - main
+      - devXGB
     tags: ['*']
   pull_request:
   workflow_dispatch:
@@ -30,7 +30,7 @@ jobs:
         arch:
           - x64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: julia-actions/setup-julia@latest
         with:
           version: ${{ matrix.version }}
