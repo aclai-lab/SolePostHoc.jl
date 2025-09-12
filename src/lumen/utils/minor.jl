@@ -110,7 +110,7 @@ function process_alphabet(
     atom_prop::Vector{
         <:Atom{
             <:ScalarCondition{
-                Float64,
+                <:AbstractFloat,
                 <:VariableNamedValue,
                 <:ScalarMetaCondition{<:VariableNamedValue,typeof(<)},
             },

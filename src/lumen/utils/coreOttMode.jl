@@ -24,7 +24,7 @@ function truth_combinations_ott(
     atoms::Vector{
         <:Atom{
             <:ScalarCondition{
-                Float64,
+                <:AbstractFloat,
                 <:VariableNamedValue,
                 <:ScalarMetaCondition{<:VariableNamedValue,typeof(<)},
             },
