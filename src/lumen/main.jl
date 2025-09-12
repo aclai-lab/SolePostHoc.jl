@@ -627,6 +627,7 @@ function extract_atoms(model, filteralphabetcallback)
     
     # Step 4: Build and filter the logical alphabet
     # The alphabet defines the vocabulary available for constructing logical formulas
+    @show my_atoms
     my_alphabet = filteralphabetcallback(process_alphabet(my_atoms, n_features))
     
     # Step 5: Validate supported operators
