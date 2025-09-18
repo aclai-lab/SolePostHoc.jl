@@ -107,15 +107,16 @@ The function processes the `Atom` objects to extract the thresholds and test ope
 If a feature is not present in the `Atom` objects, a default threshold of 42.0 is used, and the test operator is set to the first `Atom`'s test operator.
 """
 function process_alphabet(
-    atom_prop::Vector{
-        <:Atom{
-            <:ScalarCondition{
-                Float64,
-                <:VariableNamedValue,
-                <:ScalarMetaCondition{<:VariableNamedValue,typeof(<)},
-            },
-        },
-    },
+    # atom_prop::Vector{
+    #     <:Atom{
+    #         <:ScalarCondition{
+    #             <:AbstractFloat,
+    #             <:VariableNamedValue,
+    #             <:ScalarMetaCondition{<:VariableNamedValue,typeof(<)},
+    #         },
+    #     },
+    # },
+    atom_prop::Vector{<:Atom{<:ScalarCondition}},
     n::Int,
 )
     thresholds_by_feature = Dict{Int64,Vector{Float64}}()

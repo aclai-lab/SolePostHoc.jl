@@ -21,15 +21,16 @@ Returns:
 function truth_combinations_ott(
     model::Any,
     alphabet,
-    atoms::Vector{
-        <:Atom{
-            <:ScalarCondition{
-                Float64,
-                <:VariableNamedValue,
-                <:ScalarMetaCondition{<:VariableNamedValue,typeof(<)},
-            },
-        },
-    },
+    # atoms::Vector{
+    #     <:Atom{
+    #         <:ScalarCondition{
+    #             <:AbstractFloat,
+    #             <:VariableNamedValue,
+    #             <:ScalarMetaCondition{<:VariableNamedValue,typeof(<)},
+    #         },
+    #     },
+    # },
+    atoms::Vector{<:Atom{<:ScalarCondition}},
     vertical::Float64;
     apply_function = SoleModels.apply,
     print_progress = true,
