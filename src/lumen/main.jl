@@ -207,6 +207,8 @@ struct LumenResult
     LumenResult(ds) = new(ds, (;), 0.0)
 end
 
+Base.length(lr::LumenResult) = length(lr.decision_set)
+
 ##
 # Validation Functions
 ##

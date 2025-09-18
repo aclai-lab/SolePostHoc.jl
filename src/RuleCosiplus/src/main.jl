@@ -29,8 +29,26 @@ PyCall.Conda.pip("install", "git+https://github.com/jobregon1212/rulecosi.git", 
 PyCall.Conda.pip("install", "scikit-learn", PyCall.Conda.ROOTENV)
 
 function __init__()
-    copy!(rulecosi, pyimport_conda("rulecosi", "rulecosi"))
-    copy!(sklearn, pyimport_conda("sklearn.ensemble", "sklearn"))
+    # First ensure pip interop is enabled
+    Conda.pip_interop(true, PyCall.Conda.ROOTENV)
+    
+    # Try to import rulecosi, if it fails, install it via pip
+    try
+        copy!(rulecosi, pyimport("rulecosi"))
+    catch
+        @info "Installing rulecosi via pip..."
+        PyCall.Conda.pip("install", "git+https://github.com/jobregon1212/rulecosi.git", PyCall.Conda.ROOTENV)
+        copy!(rulecosi, pyimport("rulecosi"))
+    end
+    
+    # Try to import sklearn, if it fails, install it via pip  
+    try
+        copy!(sklearn, pyimport("sklearn.ensemble"))
+    catch
+        @info "Installing scikit-learn via pip..."
+        PyCall.Conda.pip("install", "scikit-learn", PyCall.Conda.ROOTENV)
+        copy!(sklearn, pyimport("sklearn.ensemble"))
+    end
 
     py"""
     import numpy as np
