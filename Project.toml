@@ -59,9 +59,5 @@ MLJDecisionTreeInterface = "c6f25543-311c-4c74-83dc-3ea6d1015661"
 RDatasets = "ce6b1742-4840-55fa-b093-852dadbb1d8b"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
-[sources]
-ModalDecisionTrees = {rev = "64-modaladaboost", url = "https://github.com/aclai-lab/ModalDecisionTrees.jl"}
-SoleData = {rev = "main", url = "https://github.com/aclai-lab/SoleData.jl"}
-
 [targets]
 test = ["Test", "MLJ", "MLJBase", "MLJDecisionTreeInterface", "DataFrames", "DecisionTree"]
