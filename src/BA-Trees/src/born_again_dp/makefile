@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -O2 -std=c++11 -static-libstdc++ -static-libgcc
+CXXFLAGS = -O2 -std=c++11 
 
 SRCS = main.cpp BornAgainDecisionTree.cpp FSpace.cpp RandomForest.cpp
 OBJS = $(SRCS:.cpp=.o)
