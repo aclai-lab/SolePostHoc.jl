@@ -480,9 +480,8 @@ Prepare and run BA-Trees algorithm.
 - `max_depth`: Maximum tree depth
 """
 function prepare_and_run_ba_trees_hardcoded(; dataset_name = "iris", num_trees = 3, max_depth = 3)
-    # <-- PATH FIX: usa @__DIR__ invece di pwd()
     base_dir = @__DIR__
-    # Se il CSV è nella stessa cartella di questo file:
+
     dataset_path = joinpath(base_dir, dataset_name * ".csv")
     @show dataset_path
 
@@ -766,20 +765,12 @@ function prepare_and_run_ba_trees(;
         """)
         return
     end
-    # <-- PATH FIX: usa @__DIR__ invece di pwd()
-    base_dir = @__DIR__
 
-    println("=============================================")
-    println("__@dir__ ",base_dir)
-    println(" pwd(): ",pwd()) 
-    println("=============================================")
-       
-    dataset_path = joinpath(base_dir, dataset_name * ".csv")
-    @show dataset_path
+    base_dir = @__DIR__
  
     # Check if born_again_dp exists
     db_path = joinpath(base_dir,"born_again_dp")
-    println(db_path)
+
     if !isdir(db_path)
         println("""
         ERROR: The 'born_again_dp' directory is missing!
@@ -808,24 +799,6 @@ function prepare_and_run_ba_trees(;
         return
     end
  
-    # Check if the dataset exists
-    if !isfile(dataset_path)
-        println("ERROR: Dataset file not found: $dataset_path")
-        println("Current directory: ", pwd())
-        println("Content of src directory:")
-        if isdir("src")
-            for file in readdir("src")
-                println(" - $file")
-            end
-        else
-            println("The 'src' directory doesn't exist!")
-        end
-        return
-    end
- 
-    # Carica il dataset
-    dataset = DataFrame(CSV.File(dataset_path))
- 
     # <-- PATH FIX: cartella temporanea affiancata a main.jl
     temp_dir = joinpath(base_dir, "temp_ba_trees")
     isdir(temp_dir) || mkdir(temp_dir)
@@ -834,9 +807,6 @@ function prepare_and_run_ba_trees(;
     output_base  = joinpath(temp_dir, "result.txt")
     output_stats = output_base * ".out"
     output_tree  = output_base * ".tree"
- 
-    # <-- PATH FIX: if "bornAgain" is in the same folder
-    executable_path = joinpath(base_dir, "bornAgain")
  
     try
         println("Preparing random forest data...")
