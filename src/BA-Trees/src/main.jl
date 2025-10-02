@@ -29,7 +29,7 @@ Builds and trains a set of binary decision trees OR using the specified function
 
 # Example
 """
-function batrees(f=nothing; dataset_name="iris", num_trees=10, max_depth=10, dsOutput=true, mode_obj = 0)
+function batrees(f=nothing; dataset_name="iris", num_trees=10, max_depth=10, dsOutput=true, mode_obj = 0, silent = true)
     if (isnothing(f))
         if (dsOutput)
             WRAP_batrees(nothing, max_depth, dataset_name=dataset_name, num_trees=num_trees, mod = mode_obj)
@@ -40,16 +40,17 @@ function batrees(f=nothing; dataset_name="iris", num_trees=10, max_depth=10, dsO
         if (dsOutput)
             class_map = WRAP_batrees(f,max_depth, mod = mode_obj)
 
-            println("FINITO WRAPPPP======>",class_map)
+            silent || println("FINISH WRAP working for DS.")
             ds = BAinDS(class_map)
             t = BAinSoleTree()
-            println("=========================")
-            println("ds: ", ds)
-            println("t: ", t)
-            println("=========================")
+            silent || println("=========================")
+            silent || println("ds: ", ds)
+            silent || println("t: ", t)
+            silent || println("=========================")
             return ds
         else
             WRAP_batrees(f , max_depth, mod = mode_obj)
+            silent || println("FINISH WRAP working for SoleTrees conversion.")
             t = BAinSoleTree()
             return t
         end
