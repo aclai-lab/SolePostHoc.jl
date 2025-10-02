@@ -745,14 +745,223 @@ function demonstrate_conversion(ba_tree_file::String, dataset::DataFrame)
     return dt
 end
 
+"""
+Creates a simplified Makefile that works cross-platform without CPLEX dependencies.
+"""
+function create_simple_makefile(born_again_dp_path::String)
+
+    makefile_content = """
+CXX = g++
+CXXFLAGS = -O2 -std=c++11
+
+SRCS = main.cpp BornAgainDecisionTree.cpp FSpace.cpp RandomForest.cpp
+OBJS = \$(SRCS:.cpp=.o)
+TARGET = bornAgain
+
+all: \$(TARGET)
+
+\$(TARGET): \$(OBJS)
+\t\$(CXX) \$(CXXFLAGS) -o \$@ \$(OBJS)
+
+%.o: %.cpp
+\t\$(CXX) \$(CXXFLAGS) -c \$< -o \$@
+
+clean:
+\trm -f \$(OBJS) \$(TARGET)
+
+.PHONY: all clean
+"""
+    
+    makefile_path = joinpath(born_again_dp_path, "Makefile.simple")
+    write(makefile_path, makefile_content)
+    println("✓ Created simplified Makefile at: $makefile_path")
+    return makefile_path
+end
+
+
+"""
+Automatically clones, compiles and sets up BA-Trees if not present.
+Returns true if setup is successful, false otherwise.
+"""
+function setup_ba_trees(base_dir::String)
+    
+    born_again_dp_path = joinpath(base_dir, "born_again_dp")
+    executable_path = joinpath(base_dir, "bornAgain")
+    
+    # Check if born_again_dp directory exists, if not clone it
+    if !isdir(born_again_dp_path)
+        println("BA-Trees repository not found. Cloning...")
+        try
+            # Clone the repository
+            repo_url = "https://github.com/vidalt/BA-Trees.git"
+            temp_clone_dir = joinpath(base_dir, "BA-Trees_temp")
+            
+            run(`git clone $repo_url $temp_clone_dir`)
+            
+            # Move born_again_dp directory to the correct location
+            cloned_dp_path = joinpath(temp_clone_dir, "born_again_dp")
+            if isdir(cloned_dp_path)
+                mv(cloned_dp_path, born_again_dp_path)
+                println("✓ BA-Trees repository cloned successfully")
+            else
+                println("ERROR: born_again_dp directory not found in cloned repository")
+                rm(temp_clone_dir, recursive=true, force=true)
+                return false
+            end
+            
+            # Clean up temporary clone directory
+            rm(temp_clone_dir, recursive=true, force=true)
+            
+        catch e
+            println("ERROR: Failed to clone BA-Trees repository")
+            println("Error details: ", e)
+            println("Please ensure git is installed and you have internet connection")
+            return false
+        end
+    end
+    
+    # Check if executable exists, if not compile it
+    if !isfile(executable_path)
+        println("bornAgain executable not found. Compiling...")
+        try
+            # Detect OS
+            os_type = Sys.iswindows() ? "windows" : (Sys.isapple() ? "macos" : "linux")
+            println("Detected OS: $os_type")
+            
+            # Change to born_again_dp directory for compilation
+            cd(born_again_dp_path) do
+                # Create simplified Makefile for reliable compilation
+                simple_makefile = create_simple_makefile(born_again_dp_path)
+                
+                # Check if original makefile exists (backup for reference)
+                original_makefile = nothing
+                if isfile("makefile")
+                    original_makefile = "makefile"
+                elseif isfile("Makefile")
+                    original_makefile = "Makefile"
+                end
+                
+                if original_makefile !== nothing
+                    println("ℹ Original Makefile found: $original_makefile (keeping as backup)")
+                    println("ℹ Using simplified Makefile for compilation")
+                end
+                
+                # Try compilation with simplified Makefile first
+                compilation_success = false
+                
+                println("Running make with simplified Makefile...")
+                try
+                    if Sys.iswindows()
+                        # For Windows, try different make commands
+                        try
+                            run(`make -f Makefile.simple`)
+                            compilation_success = true
+                        catch
+                            println("Trying mingw32-make...")
+                            run(`mingw32-make -f Makefile.simple`)
+                            compilation_success = true
+                        end
+                    else
+                        # For Unix-like systems (Linux/Mac)
+                        run(`make -f Makefile.simple`)
+                        compilation_success = true
+                    end
+                catch e
+                    println("⚠ Simplified Makefile compilation failed: ", e)
+                    
+                    # Fallback: try original Makefile without CPLEX
+                    if original_makefile !== nothing
+                        println("Attempting compilation with original Makefile (without CPLEX)...")
+                        try
+                            if Sys.iswindows()
+                                try
+                                    run(`make -f $original_makefile`)
+                                    compilation_success = true
+                                catch
+                                    run(`mingw32-make -f $original_makefile`)
+                                    compilation_success = true
+                                end
+                            else
+                                run(`make -f $original_makefile`)
+                                compilation_success = true
+                            end
+                        catch e2
+                            println("⚠ Original Makefile compilation also failed: ", e2)
+                        end
+                    end
+                end
+                
+                if !compilation_success
+                    println("ERROR: All compilation attempts failed")
+                    println("\nPlease check:")
+                    println("1. C++ compiler is installed (g++ or clang)")
+                    println("2. Make is installed")
+                    println("3. All source files are present")
+                    return false
+                end
+                
+                # Check if executable was created
+                possible_names = ["bornAgain", "bornAgain.exe", "main", "main.exe"]
+                compiled_exec = nothing
+                
+                for name in possible_names
+                    if isfile(name)
+                        compiled_exec = name
+                        println("✓ Found compiled executable: $name")
+                        break
+                    end
+                end
+                
+                if compiled_exec === nothing
+                    println("ERROR: Compilation completed but executable not found")
+                    println("Looking for: ", join(possible_names, ", "))
+                    println("Directory contents:")
+                    for file in readdir()
+                        println("  ", file)
+                    end
+                    return false
+                end
+                
+                # Move executable to base directory
+                target_name = Sys.iswindows() ? "bornAgain.exe" : "bornAgain"
+                target_path = joinpath(base_dir, target_name)
+                cp(compiled_exec, target_path, force=true)
+                
+                # Make executable on Unix systems
+                if !Sys.iswindows()
+                    run(`chmod +x $target_path`)
+                end
+                
+                println("✓ bornAgain compiled successfully and moved to: $target_path")
+            end
+            
+        catch e
+            println("ERROR: Failed to compile bornAgain")
+            println("Error details: ", e)
+            println("\nPlease check:")
+            println("1. C++ compiler is installed (g++ or clang)")
+            println("2. Make is installed")
+            println("3. All dependencies are available")
+            return false
+        end
+    else
+        println("✓ bornAgain executable already exists")
+    end
+    
+    println("✓ BA-Trees setup complete")
+    return true
+end
+
+
 function prepare_and_run_ba_trees(; 
-    dataset_name::String = "iris", 
-    num_trees::Int = 10, 
-    max_depth::Int = 3, 
+    dataset_name::String = "", 
+    num_trees::Int = nothing, 
+    max_depth::Int = -1, 
     forest = nothing,
     mode_obj = 0
- )
+)
     class_map = nothing
+    
     # Check if mode_obj is valid
     if !(mode_obj in [0, 1, 2, 4])
         println("""
@@ -767,39 +976,27 @@ function prepare_and_run_ba_trees(;
     end
 
     base_dir = @__DIR__
- 
-    # Check if born_again_dp exists
-    db_path = joinpath(base_dir,"born_again_dp")
-
-    if !isdir(db_path)
-        println("""
-        ERROR: The 'born_again_dp' directory is missing!
-        Please follow these steps:
-        1. Clone the BA-Trees repository: git clone https://github.com/vidalt/BA-Trees.git
-        2. Follow the installation instructions in the README
-        3. Make sure the 'born_again_dp' directory is present in the same folder as this script
-        
-        For more details, visit: https://github.com/vidalt/BA-Trees
-        """)
+    
+    # Automatic setup: clone and compile if needed
+    println("Checking BA-Trees setup...")
+    if !setup_ba_trees(base_dir)
+        println("ERROR: Failed to setup BA-Trees. Please check the error messages above.")
+        return
+    end
+    
+    # Verify paths after setup
+    db_path = joinpath(base_dir, "born_again_dp")
+    executable_name = Sys.iswindows() ? "bornAgain.exe" : "bornAgain"
+    executable_path = joinpath(base_dir, executable_name)
+    
+    if !isdir(db_path) || !isfile(executable_path)
+        println("ERROR: Setup verification failed")
+        println("born_again_dp exists: ", isdir(db_path))
+        println("bornAgain exists: ", isfile(executable_path))
         return
     end
  
-    # Check if bornAgain executable exists
-    executable_path = joinpath(base_dir, "bornAgain")
-    if !isfile(executable_path)
-        println("""
-        ERROR: The 'bornAgain' executable is missing!
-        Please follow these steps:
-        1. If you haven't already, clone the BA-Trees repository: git clone https://github.com/vidalt/BA-Trees.git
-        2. Follow the compilation instructions in the README to build the executable
-        3. Make sure the 'bornAgain' executable is present in the same folder as this script
-        
-        For more details, visit: https://github.com/vidalt/BA-Trees
-        """)
-        return
-    end
- 
-    # <-- PATH FIX: cartella temporanea affiancata a main.jl
+    # Create temporary directory
     temp_dir = joinpath(base_dir, "temp_ba_trees")
     isdir(temp_dir) || mkdir(temp_dir)
  
@@ -813,73 +1010,77 @@ function prepare_and_run_ba_trees(;
  
         forest_content = ""
         if forest === nothing
-            forest, model, start_time = learn_and_convert(num_trees, "iris", max_depth)
-            forest_content,class_map = create_random_forest_input_from_model(forest)
+            if num_trees <= 0 || dataset_name == ""
+                println("ERROR: Invalid parameters for random forest generation.")
+                return
+            end
+            forest, model, start_time = learn_and_convert(num_trees, dataset_name, max_depth)
+            forest_content, class_map = create_random_forest_input_from_model(forest)
         else
-            forest_content,class_map = create_random_forest_input_from_model(forest)
+            forest_content, class_map = create_random_forest_input_from_model(forest)
         end
  
         # Write the content to file
-        #write(output_tree, "")
-        #write(output_stats, "")
         write(input_file, forest_content)
  
-        # number of tree you are interesad
+        # Number of trees
         num_trees = length(forest.models)
-        # Comando per eseguire l'analisi Born-Again
-        #=
-        Usage:
-            ./bornAgain input_ensemble_path output_BAtree_path [list of options]
-              Available options:
-            -obj X	       Objective used in the algorithm: 0 = Depth ; 1 = NbLeaves ; 2 = Depth then NbLeaves ; 4 = Heuristic BA-Tree (defaults to 4)
-            -trees X      Limits the number of trees read by the algorithm from the input file (X in 3 to 10, defaults to 10)
-            -seed X       Defines the random seed (defaults to 1)
- 
-            TODO more parameterization
-        =#
+        
+        # Run Born-Again
         cmd = `$executable_path $input_file $output_base -trees $num_trees -obj $mode_obj`
         println("Executing command: ", cmd)
         run(cmd)
  
         # Read results
         if isfile(output_stats)
-            println("\nBorn-Again Tree Analysis Results:")
+            println("\n" * "="^60)
+            println("Born-Again Tree Analysis Results:")
+            println("="^60)
             println(read(output_stats, String))
             
             if isfile(output_tree)
-                println("\nBorn-Again Tree Structure:")
+                println("\n" * "="^60)
+                println("Born-Again Tree Structure:")
+                println("="^60)
                 println(read(output_tree, String))
             else
-                println("Tree structure file not found: $output_tree")
+                println("⚠ Tree structure file not found: $output_tree")
             end
         else
-            println("Statistics file not found: $output_stats")
+            println("⚠ Statistics file not found: $output_stats")
         end
  
     catch e
-        println("\nError during execution:")
+        println("\n" * "="^60)
+        println("ERROR during execution:")
+        println("="^60)
         println(e)
         println("\nDebug information:")
         println("Current directory: ", pwd())
         println("Executable exists? ", isfile(executable_path))
-        println("Temporary directory contents:")
-        for (root, dirs, files) in walkdir(temp_dir)
-            println("Files: ", join(files, ", "))
+        println("Executable path: ", executable_path)
+        println("\nTemporary directory contents:")
+        if isdir(temp_dir)
+            for (root, dirs, files) in walkdir(temp_dir)
+                println("Directory: ", root)
+                println("Files: ", join(files, ", "))
+            end
         end
         if isfile(input_file)
             println("\nFirst 10 lines of input file:")
             println(join(collect(Iterators.take(eachline(input_file), 10)), "\n"))
         end
+        rethrow(e)
     finally
         if !@isdefined(e)
             return class_map
-            # Example: final cleanup (if desired)
-            # rm(temp_dir, recursive = true, force = true) its better if not do that for now 
+            # Optional cleanup (commented out for debugging)
+            # rm(temp_dir, recursive=true, force=true)
         end
     end
- end
+end
 
-function WRAP_batrees(f, max_depth=10; dataset_name="iris", num_trees=10, mod = 0)
+function WRAP_batrees(f, max_depth=10; dataset_name="", num_trees=nothing, mod = 0)
     println("Born-Again Tree Analysis")
     println("="^30)
 
@@ -899,9 +1100,7 @@ function WRAP_batrees(f, max_depth=10; dataset_name="iris", num_trees=10, mod = 
         )
     else
         class_map = prepare_and_run_ba_trees(
-            dataset_name = dataset_name, # is indifferent
             num_trees    = length(f.models),
-            max_depth    = max_depth,    # is indifferent ? 
             forest       = f,
             mode_obj = mod
         )
