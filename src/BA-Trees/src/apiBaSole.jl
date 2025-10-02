@@ -182,16 +182,16 @@ end
 
 
 function BAinSoleTree()
-    println("Converting the tree in : ", joinpath(@__DIR__, "temp_ba_trees", "forest.txt"))
-    tree = convert_tree(joinpath(@__DIR__, "temp_ba_trees", "forest.txt"))
+    println("Converting the tree in : ", joinpath(@__DIR__, "temp_ba_trees", "result.txt.tree"))
+    tree = convert_tree(joinpath(@__DIR__, "temp_ba_trees", "result.txt.tree"))
     t = solemodel(tree)
     return t
 end
 
 
 function BAinDS(class_map)
-    println("Converting the tree in : ", joinpath(@__DIR__, "temp_ba_trees", "forest.txt"))
-    tree = convert_tree(joinpath(@__DIR__, "temp_ba_trees", "forest.txt"))
+    println("Converting the tree in : ", joinpath(@__DIR__, "temp_ba_trees", "result.txt.tree"))
+    tree = convert_tree(joinpath(@__DIR__, "temp_ba_trees", "result.txt.tree"))
     t = solemodel(tree)
 
     ll = listrules(t)
