@@ -749,7 +749,6 @@ end
 Creates a simplified Makefile that works cross-platform without CPLEX dependencies.
 """
 function create_simple_makefile(born_again_dp_path::String)
-
     makefile_content = """
 CXX = g++
 CXXFLAGS = -O2 -std=c++11
@@ -778,7 +777,6 @@ clean:
     return makefile_path
 end
 
-
 """
 Automatically clones, compiles and sets up BA-Trees if not present.
 Returns true if setup is successful, false otherwise.
@@ -798,13 +796,27 @@ function setup_ba_trees(base_dir::String)
             
             run(`git clone $repo_url $temp_clone_dir`)
             
-            # Move born_again_dp directory to the correct location
-            cloned_dp_path = joinpath(temp_clone_dir, "born_again_dp")
+            # The born_again_dp is inside src/ folder in the repository
+            cloned_dp_path = joinpath(temp_clone_dir, "src", "born_again_dp")
+            
             if isdir(cloned_dp_path)
                 mv(cloned_dp_path, born_again_dp_path)
-                println("✓ BA-Trees repository cloned successfully")
+                println("BA-Trees repository cloned successfully")
+                println("Moved born_again_dp from src/born_again_dp to $(born_again_dp_path)")
             else
                 println("ERROR: born_again_dp directory not found in cloned repository")
+                println("Expected location: $cloned_dp_path")
+                println("\nRepository structure:")
+                for (root, dirs, files) in walkdir(temp_clone_dir)
+                    level = count(c -> c == '/', replace(root, temp_clone_dir => ""))
+                    indent = "  " ^ level
+                    println("$(indent)$(basename(root))/")
+                    if level < 2  # Only show first 2 levels
+                        for dir in dirs
+                            println("$(indent)  $(dir)/")
+                        end
+                    end
+                end
                 rm(temp_clone_dir, recursive=true, force=true)
                 return false
             end
@@ -818,6 +830,8 @@ function setup_ba_trees(base_dir::String)
             println("Please ensure git is installed and you have internet connection")
             return false
         end
+    else
+        println("born_again_dp directory already exists")
     end
     
     # Check if executable exists, if not compile it
