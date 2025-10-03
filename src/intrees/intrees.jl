@@ -48,7 +48,7 @@ function intrees(
     #
     rule_selection_method::Symbol = :CBC,
     rule_complexity_metric::Symbol = :natoms,
-# - `accuracy_rule_selection::Union{Float64,Nothing}=nothing`: percentage of rules that rule selection must follow
+    # - `accuracy_rule_selection::Union{Float64,Nothing}=nothing`: percentage of rules that rule selection must follow
     # accuracy_rule_selection = nothing,
     # New parameter to limit the number of rules
     max_rules::Int = -1,
@@ -58,7 +58,7 @@ function intrees(
     return_info::Bool = false,
     # kwargs...,
 )
-@show min_coverage
+    @show min_coverage
     isnothing(pruning_s) && !isnothing(pruning_decay_threshold) && (prune_rules = false)
     isnothing(pruning_decay_threshold) && !isnothing(pruning_s) && (prune_rules = false)
     isnothing(pruning_s) && (pruning_s = 1.0e-6)
@@ -81,10 +81,7 @@ function intrees(
     [`Rule`](@ref),
     [`rulemetrics`](@ref).
     """
-    function cfs(
-        X,
-        y::AbstractVector{<:Label},
-    )
+    function cfs(X, y::AbstractVector{<:Label})
         entropyd(_x) = ComplexityMeasures.entropy(probabilities(_x))
         midd(_x, _y) = -entropyd(collect(zip(_x, _y)))+entropyd(_x)+entropyd(_y)
         information_gain(f1, f2) = entropyd(f1) - (entropyd(f1) - midd(f1, f2))
@@ -119,9 +116,9 @@ function intrees(
 
             for i in collect(1:n_features)
                 if i ∉ F
-                    append!(F,i)
+                    append!(F, i)
                     idxs_column = F[findall(F .> 0)]
-                    t = merit_calculation(X[:,idxs_column],y)
+                    t = merit_calculation(X[:, idxs_column], y)
 
                     if t > merit
                         merit = t
@@ -132,14 +129,15 @@ function intrees(
                 end
             end
 
-            append!(F,idx)
-            append!(M,merit)
+            append!(F, idx)
+            append!(M, merit)
 
             (length(M) > 5) &&
                 (M[length(M)] <= M[length(M)-1]) &&
-                    (M[length(M)-1] <= M[length(M)-2]) &&
-                        (M[length(M)-2] <= M[length(M)-3]) &&
-                            (M[length(M)-3] <= M[length(M)-4]) && break
+                (M[length(M)-1] <= M[length(M)-2]) &&
+                (M[length(M)-2] <= M[length(M)-3]) &&
+                (M[length(M)-3] <= M[length(M)-4]) &&
+                break
         end
 
         valid_idxs = findall(F .> 0)
@@ -149,7 +147,9 @@ function intrees(
     end
 
     function starterruleset(model; kwargs...)
-        unique(reduce(vcat, [listrules(subm; kwargs...) for subm in SoleModels.models(model)]))
+        unique(
+            reduce(vcat, [listrules(subm; kwargs...) for subm in SoleModels.models(model)]),
+        )
         # TODO maybe also sort?
     end
 
@@ -164,12 +164,14 @@ function intrees(
     ########################################################################################
     silent || println("Extracting starting rules...")
     listrules_kwargs = (;
-        use_shortforms=true,
+        use_shortforms = true,
         # flip_atoms = true,
         normalize = true,
         # normalize_kwargs = (; forced_negation_removal = true, reduce_negations = true, allow_atom_flipping = true, rotate_commutatives = false)
     )
-    ruleset = isensemble(model) ? starterruleset(model; listrules_kwargs...) : listrules(model; listrules_kwargs...)
+    ruleset =
+        isensemble(model) ? starterruleset(model; listrules_kwargs...) :
+        listrules(model; listrules_kwargs...)
 
     ########################################################################################
     # Prune rules with respect to a dataset
@@ -181,13 +183,14 @@ function intrees(
         end
         ruleset = @time begin
             afterpruningruleset = Vector{Rule}(undef, length(ruleset))
-            Threads.@threads for (i,r) in collect(enumerate(ruleset))
+            Threads.@threads for (i, r) in collect(enumerate(ruleset))
                 if r.antecedent isa SoleLogics.BooleanTruth
                     # this case happens with XgBoost: the rule is a simply BooleanTruth
                     # TODO Marco, is this the correct way to handle this case?
                     afterpruningruleset[i] = r
                 else
-                    afterpruningruleset[i] = intrees_prunerule(r, X, y; pruning_s, pruning_decay_threshold)
+                    afterpruningruleset[i] =
+                        intrees_prunerule(r, X, y; pruning_s, pruning_decay_threshold)
                 end
             end
             afterpruningruleset
@@ -197,30 +200,32 @@ function intrees(
     ########################################################################################
     # Rule selection to obtain the best rules
     ########################################################################################
-    silent || println("Selecting via $(string(rule_selection_method)) from a pool of $(length(ruleset)) rules...")
+    silent || println(
+        "Selecting via $(string(rule_selection_method)) from a pool of $(length(ruleset)) rules...",
+    )
     ruleset = @time begin
         if return_info
             info = merge(info, (; unselected_ruleset = ruleset))
         end
         if rule_selection_method == :CBC
-            matrixrulemetrics = Matrix{Float64}(undef,length(ruleset),3)
+            matrixrulemetrics = Matrix{Float64}(undef, length(ruleset), 3)
             afterselectionruleset = Vector{BitVector}(undef, length(ruleset))
-            Threads.@threads for (i,rule) in collect(enumerate(ruleset))
+            Threads.@threads for (i, rule) in collect(enumerate(ruleset))
                 eval_result = rulemetrics(rule, X, y)
                 afterselectionruleset[i] = eval_result[:checkmask,]
-                matrixrulemetrics[i,1] = eval_result[:coverage]
-                matrixrulemetrics[i,2] = eval_result[:error]
-                matrixrulemetrics[i,3] = eval_result[rule_complexity_metric]
+                matrixrulemetrics[i, 1] = eval_result[:coverage]
+                matrixrulemetrics[i, 2] = eval_result[:error]
+                matrixrulemetrics[i, 3] = eval_result[rule_complexity_metric]
             end
             #M = hcat([evaluaterule(rule, X, y)[:checkmask,] for rule in ruleset]...)
             M = hcat(afterselectionruleset...)
-            
+
             #best_idxs = findcorrelation(Statistics.cor(M); threshold = accuracy_rule_selection) using Statistics
             #best_idxs = cfs(M,y)
-            
+
             #coefReg = 0.95 .- (0.01*matrixrulemetrics[:,3]/max(matrixrulemetrics[:,3]...))
             #@show coefReg
-            rf = DT.build_forest(y,M,2,50,0.7,-1; rng=rng)
+            rf = DT.build_forest(y, M, 2, 50, 0.7, -1; rng = rng)
             importances = begin
                 #importance = impurity_importance(rf, coefReg)
                 importance = DT.impurity_importance(rf)
@@ -230,14 +235,23 @@ function intrees(
             best_idxs = begin
                 selected_features = findall(importances .> 0.01)
                 # @show selected_features
-                ruleSetPrunedRRF = hcat(matrixrulemetrics[selected_features,:],importances[selected_features],selected_features)
-                finalmatrix = sortslices(ruleSetPrunedRRF, dims=1, by=x->(x[4],x[2],x[3]), rev=true)
-                
+                ruleSetPrunedRRF = hcat(
+                    matrixrulemetrics[selected_features, :],
+                    importances[selected_features],
+                    selected_features,
+                )
+                finalmatrix = sortslices(
+                    ruleSetPrunedRRF,
+                    dims = 1,
+                    by = x->(x[4], x[2], x[3]),
+                    rev = true,
+                )
+
                 # Get all selected rules indices or limit if max_rules is specified
                 if max_rules > 0
                     best_idxs = Int.(finalmatrix[1:min(max_rules, size(finalmatrix, 1)), 5])
                 else
-                    best_idxs = Int.(finalmatrix[:,5])
+                    best_idxs = Int.(finalmatrix[:, 5])
                 end
             end
             # @show best_idxs
@@ -247,12 +261,12 @@ function intrees(
         end
     end
     silent || println("# rules selected: $(length(ruleset)).")
-    
+
     ########################################################################################
     # Construct a rule-based model from the set of best rules
     ########################################################################################
     silent || println("Applying STEL...")
-    
+
     dl = STEL(ruleset, X, y; max_rules, min_coverage, rule_complexity_metric, rng, silent)
 
     if return_info
@@ -266,7 +280,16 @@ end
 
 
 
-function STEL(ruleset, X, y; max_rules::Int = -1, min_coverage, rule_complexity_metric = :natoms, rng::AbstractRNG = MersenneTwister(1), silent = false)
+function STEL(
+    ruleset,
+    X,
+    y;
+    max_rules::Int = -1,
+    min_coverage,
+    rule_complexity_metric = :natoms,
+    rng::AbstractRNG = MersenneTwister(1),
+    silent = false,
+)
     D = deepcopy(X) # Copy of the original dataset
     L = deepcopy(y)
     R = Rule[]      # Ordered rule list
@@ -275,8 +298,8 @@ function STEL(ruleset, X, y; max_rules::Int = -1, min_coverage, rule_complexity_
     # Rules with a frequency less than min_coverage
     S = begin
         rules_coverage = Vector{Float64}(undef, length(S))
-        
-        Threads.@threads for (i,s) in collect(enumerate(S))
+
+        Threads.@threads for (i, s) in collect(enumerate(S))
             if isa(antecedent(s), BooleanTruth)
                 # Se l'antecedente è BooleanTruth, verifica il valore
                 if antecedent(s) == BooleanTruth(true) || string(antecedent(s)) == "⊤"
@@ -285,10 +308,10 @@ function STEL(ruleset, X, y; max_rules::Int = -1, min_coverage, rule_complexity_
                     rules_coverage[i] = 0.0
                 end
             else
-                rules_coverage[i] = rulemetrics(s,X,y)[:coverage]
+                rules_coverage[i] = rulemetrics(s, X, y)[:coverage]
             end
         end
-        
+
         idxs_undeleted = findall(rules_coverage .>= min_coverage)
         S[idxs_undeleted]
     end
@@ -305,20 +328,21 @@ function STEL(ruleset, X, y; max_rules::Int = -1, min_coverage, rule_complexity_
         silent || println()
         silent || println()
         silent || println()
-        
+
         # Check if we've reached the maximum number of rules (excluding the default rule)
         if max_rules > 0 && length(R) >= max_rules - 1
-            silent || println("Maximum number of rules reached ($(max_rules-1) + default rule).")
+            silent ||
+                println("Maximum number of rules reached ($(max_rules-1) + default rule).")
             return DecisionList(R, bestguess(L; suppress_parity_warning = true))
         end
-        
+
         resize!(rules_coverage, length(S))
         resize!(rules_error, length(S))
         resize!(rules_length, length(S))
 
         silent || println("Rules left: $(length(rules_coverage)).")
 
-        Threads.@threads for (i,s) in collect(enumerate(S))
+        Threads.@threads for (i, s) in collect(enumerate(S))
             if isa(antecedent(s), BooleanTruth)                                             #TODO ASK MICHI {}
                 # Gestione speciale per BooleanTruth
                 if antecedent(s) == BooleanTruth(true) || string(antecedent(s)) == "⊤"
@@ -338,7 +362,7 @@ function STEL(ruleset, X, y; max_rules::Int = -1, min_coverage, rule_complexity_
                 end
                 rules_length[i] = 1  # Lunghezza minima per BooleanTruth
             else # TODO ASK MICHI }
-                metrics = rulemetrics(s,D,L)
+                metrics = rulemetrics(s, D, L)
                 rules_coverage[i] = metrics[:coverage]
                 rules_error[i] = metrics[:error]
                 rules_length[i] = metrics[rule_complexity_metric]
@@ -405,7 +429,8 @@ function STEL(ruleset, X, y; max_rules::Int = -1, min_coverage, rule_complexity_
         # Indices of the remaining instances
         idx_remaining = begin
             if isa(antecedent(S[idx_best]), BooleanTruth)                                                       # TODO ASK MICHI {
-                if antecedent(S[idx_best]) == BooleanTruth(true) || string(antecedent(S[idx_best])) == "⊤"
+                if antecedent(S[idx_best]) == BooleanTruth(true) ||
+                   string(antecedent(S[idx_best])) == "⊤"
                     # Se l'antecedente è true, nessuna istanza rimane
                     Int[]
                 else
@@ -424,12 +449,12 @@ function STEL(ruleset, X, y; max_rules::Int = -1, min_coverage, rule_complexity_
             # @show S
             # @show R
             # @show DecisionList(R[1:end-1], consequent(R[end]))
-            return DecisionList(R[1:end-1], consequent(R[end]))
+            return DecisionList(R[1:(end-1)], consequent(R[end]))
         elseif length(idx_remaining) == 0
             return DecisionList(R, bestguess(y; suppress_parity_warning = true))
         end
-        
-        D = slicedataset(D, idx_remaining; return_view=true)
+
+        D = slicedataset(D, idx_remaining; return_view = true)
         L = L[idx_remaining]
         # Delete the best rule from S
         deleteat!(S, idx_best)

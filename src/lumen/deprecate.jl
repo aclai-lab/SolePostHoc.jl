@@ -173,28 +173,28 @@ end
 function print_filtered_dnf(f::TwoLevelDNFFormula)
     # Get all conditions
     all_conditions = conditions(f)
-    
+
     # Initialize result string
     result = ""
-    
+
     # Process each combination with its corresponding mask
     for (i, (combination, mask)) in enumerate(zip(eachcombination(f), f.prime_mask))
         # Skip if this is an empty combination
         if isempty(combination)
             continue
         end
-        
+
         # Add OR separator if this isn't the first term
         if i > 1 && !isempty(result)
             result *= " ∨ "
         end
-        
+
         # Start this conjunction term
         result *= "("
-        
+
         # Track if we've added any atoms to this conjunction
         added_atoms = false
-        
+
         # Process each atom position
         for (j, (bit, mask_val)) in enumerate(zip(combination, mask))
             # Only process if mask value is not -1
@@ -203,32 +203,32 @@ function print_filtered_dnf(f::TwoLevelDNFFormula)
                 if added_atoms
                     result *= " ∧ "
                 end
-                
+
                 # Get the corresponding condition
                 condition = all_conditions[j]
-                
+
                 if condition isa ScalarCondition
                     feature = condition.metacond.feature.i_variable
                     threshold = condition.threshold
-                    
+
                     # Use bit value to determine operator (0 -> <, 1 -> ≥)
                     op_str = bit == 0 ? "<" : "≥"
-                    
+
                     # Add the formatted condition
                     result *= "x$feature $op_str $threshold"
                     added_atoms = true
                 end
             end
         end
-        
+
         # Close this conjunction term
         result *= ")"
     end
-    
+
     # Handle empty result
     if isempty(result)
         return "⊤"  # Return top symbol for empty formula
     end
-    
+
     return result
 end

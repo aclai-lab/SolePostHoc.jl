@@ -2,9 +2,14 @@
 # Since conditions are now written as scalar conditions, we use the parser for ScalarCondition here.
 atom_parser = function (a::String)
     #println("Parsing atom: ", a)
-    return Atom(parsecondition(SoleData.ScalarCondition, a;
-        featuretype=SoleData.VariableValue,
-        featvaltype=Real))
+    return Atom(
+        parsecondition(
+            SoleData.ScalarCondition,
+            a;
+            featuretype = SoleData.VariableValue,
+            featvaltype = Real,
+        ),
+    )
 end
 
 # Function to convert a DNF formula back to SyntaxBranch representation
@@ -26,9 +31,10 @@ function dnf_to_syntaxbranch(dnf_formula)
             current_branch = conjunction_to_syntaxbranch(disjuncts[1])
 
             # Combine with each remaining disjunct using binary disjunction
-            for i in 2:length(disjuncts)
+            for i = 2:length(disjuncts)
                 next_disjunct = conjunction_to_syntaxbranch(disjuncts[i])
-                current_branch = SyntaxBranch(NamedConnective{:∨}(), (current_branch, next_disjunct))
+                current_branch =
+                    SyntaxBranch(NamedConnective{:∨}(), (current_branch, next_disjunct))
             end
 
             return current_branch
@@ -65,9 +71,10 @@ function conjunction_to_syntaxbranch(conjunction)
         current_branch = literal_to_syntaxbranch(literals[1])
 
         # Combine with each remaining literal using binary conjunction
-        for i in 2:length(literals)
+        for i = 2:length(literals)
             next_literal = literal_to_syntaxbranch(literals[i])
-            current_branch = SyntaxBranch(NamedConnective{:∧}(), (current_branch, next_literal))
+            current_branch =
+                SyntaxBranch(NamedConnective{:∧}(), (current_branch, next_literal))
         end
 
         return current_branch
@@ -87,4 +94,3 @@ function literal_to_syntaxbranch(literal)
         return SyntaxBranch(NamedConnective{:¬}(), (literal.atom,))
     end
 end
-

@@ -24,27 +24,19 @@ using StatsBase
 
 using DecisionTree
 
-function learn_and_convert(
-    numero_alberi::Int,
-    nome_dataset::String,
-    max_depth::Int=-1,
-)
+function learn_and_convert(numero_alberi::Int, nome_dataset::String, max_depth::Int = -1)
     start_time = time()
-    println(
-        "\n\nPART 0 DATASET CONFIGURATION \n",
-    )
+    println("\n\nPART 0 DATASET CONFIGURATION \n")
 
 
     features, labels = load_data(nome_dataset)
     features = float.(features)
     labels = string.(labels)
-    
+
 
     @info "dataset loaded: $nome_dataset correctly... good luck!"
 
-    println(
-        "\n\n PART 1 GENERATION OF THE FOREST with decisionTree.jl \n",
-    )
+    println("\n\n PART 1 GENERATION OF THE FOREST with decisionTree.jl \n")
 
     # set of classification parameters and respective default values
 
@@ -77,15 +69,13 @@ function learn_and_convert(
         min_samples_leaf,
         min_samples_split,
         min_purity_increase;
-        rng=seed,
+        rng = seed,
     )
 
 
     println(model)
 
-    println(
-        "\n\n PART 2 CONVERSION OF THE FOREST INTO SOLE with solemodel variant \n",
-    )
+    println("\n\n PART 2 CONVERSION OF THE FOREST INTO SOLE with solemodel variant \n")
 
     f = solemodel(model) # f = solemodel(model; classlabels = labels)
     println(f)

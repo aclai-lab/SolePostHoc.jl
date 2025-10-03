@@ -57,7 +57,7 @@ function truth_combinations(
     println("num_atoms: ", num_atoms)
     println("2^num_atoms: ", all_combinations)
     println("vertical: ", vertical)
-    
+
     if isone(vertical)
         num_combinations = all_combinations
     else
@@ -99,7 +99,7 @@ function truth_combinations(
     contradictions = 0
     i_rand = 0
     update_interval = max(1, num_combinations ÷ 100)  # Update every 1% of progress
-    
+
     for i = 0:(num_combinations-1)
         i_v = i  # Index for the progress bar
         if isone(vertical)
@@ -124,7 +124,7 @@ function truth_combinations(
         else
             combination_dict = SortedDict(combination)
             combination_vector = vcat(collect(values(combination_dict))...)
-            
+
             if !(combination_vector in values(results))
                 result = if model isa AbstractModel
                     apply_function(model, DataFrame(reshape(combination_vector, 1, :), :auto))

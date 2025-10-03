@@ -56,11 +56,10 @@ algorithm = intrees
 for task in tasks
     checkpoint_stdout("Running Task $(task)")
 
-    isprop, isspatial, models, dataset =  inner[task]
+    isprop, isspatial, models, dataset = inner[task]
 
     # Path to save models and corresponding csv file
-    father_dir =
-        "/home/lele7x/results9/rule-extraction/granular-computing/$(task)/$(algorithm)/"
+    father_dir = "/home/lele7x/results9/rule-extraction/granular-computing/$(task)/$(algorithm)/"
     results_dir = father_dir * "models_cache/"
     csvpath = father_dir * "$(task)-$(algorithm).csv"
     touch(csvpath)
@@ -73,19 +72,21 @@ for task in tasks
     # Global variables
     tablesforest = []
 
-    @showprogress for (i,model) in enumerate(models)
+    @showprogress for (i, model) in enumerate(models)
         modelpath, nontest_ids, test_ids = model
 
         rng = MersenneTwister(1)
         println("Computing Testing Dataset in ...")
-        X_test,Y_test = @time slicedataset((X,Y), test_ids; return_view = true)
+        X_test, Y_test = @time slicedataset((X, Y), test_ids; return_view = true)
         println("Computing Training Dataset in ...")
-        X_nontest,Y_nontest = @time slicedataset((X,Y), nontest_ids; return_view = true)
+        X_nontest, Y_nontest = @time slicedataset((X, Y), nontest_ids; return_view = true)
 
         #memostruct_test = @view memostruct[test_ids]
         #memostruct_nontest = @view memostruct[nontest_ids]
 
-        checkpoint_stdout("\nExtracting and translating Forest $(i)/$(length(models)) in ...")
+        checkpoint_stdout(
+            "\nExtracting and translating Forest $(i)/$(length(models)) in ...",
+        )
         model = @time begin
             m = JLD2.load(modelpath)
             m = m["model_pruned"]
@@ -98,7 +99,7 @@ for task in tasks
         println()
         @show model
 
-        finaldl = algorithm(model,X_nontest,Y_nontest; rng=rng)
+        finaldl = algorithm(model, X_nontest, Y_nontest; rng = rng)
         #=
         finaldl = algorithm(
             model,X_test,Y_test;
@@ -122,64 +123,33 @@ for task in tasks
         end
 
         # Computing metrics for initial DecisionForest
-        moriginalforest = finalmetrics(model,X_test,Y_test)
+        moriginalforest = finalmetrics(model, X_test, Y_test)
 
         # Computing average metrics for DecisionTrees in DecisionForest
-        maveragetrees = finalmetrics(
-            trees(model),X_test,Y_test;
-            originalmodel=model,
-        )
+        maveragetrees = finalmetrics(trees(model), X_test, Y_test; originalmodel = model)
 
         # Computing metrics for final DecisionList
-        mfinaldl = finalmetrics(finaldl,X_test,Y_test)
+        mfinaldl = finalmetrics(finaldl, X_test, Y_test)
 
         # Table construction
         itable = DataFrame(
-            Whoami = ["DF","ADT","DL"],
-            Path = [
-                modelpath,
-                modelpath,
-                submodelpath,
-            ],
-            Kappa = [
-                moriginalforest[2],
-                maveragetrees[2],
-                mfinaldl[1],
-            ],
+            Whoami = ["DF", "ADT", "DL"],
+            Path = [modelpath, modelpath, submodelpath],
+            Kappa = [moriginalforest[2], maveragetrees[2], mfinaldl[1]],
             Accuracy = [
                 (100.0 - moriginalforest[3]),
                 (100.0 - maveragetrees[3]),
                 (100.0 - mfinaldl[2]),
             ],
-            Error = [
-                moriginalforest[3],
-                maveragetrees[3],
-                mfinaldl[2],
-            ],
-            NRules = [
-                NaN,
-                maveragetrees[4],
-                mfinaldl[3],
-            ],
-            NSymbols = [
-                NaN,
-                maveragetrees[5],
-                mfinaldl[4],
-            ],
-            Delay = [
-                NaN,
-                maveragetrees[6],
-                mfinaldl[5],
-            ],
-            AbsNRules = [
-                NaN,
-                maveragetrees[7],
-                mfinaldl[6],
-            ],
+            Error = [moriginalforest[3], maveragetrees[3], mfinaldl[2]],
+            NRules = [NaN, maveragetrees[4], mfinaldl[3]],
+            NSymbols = [NaN, maveragetrees[5], mfinaldl[4]],
+            Delay = [NaN, maveragetrees[6], mfinaldl[5]],
+            AbsNRules = [NaN, maveragetrees[7], mfinaldl[6]],
             NLeaves = [moriginalforest[1], maveragetrees[1], NaN],
         )
-        push!(tablesforest,itable)
-        CSV.write(csvpath, itable, append=true)
+        push!(tablesforest, itable)
+        CSV.write(csvpath, itable, append = true)
 
         println("Results for Forest $(i): ")
         println(itable)
@@ -195,35 +165,31 @@ for task in tasks
     avgcolumns = []
     stdcolumns = []
 
-    for ncolumn in 3:10
-        cols = [filter(a -> !isnan(a), t[:,ncolumn]) for t in tablesforest]
-        push!(avgcolumns, first(mean(cols, dims=1)))
+    for ncolumn = 3:10
+        cols = [filter(a -> !isnan(a), t[:, ncolumn]) for t in tablesforest]
+        push!(avgcolumns, first(mean(cols, dims = 1)))
         push!(stdcolumns, std(cols))
     end
 
     finaltable = DataFrame(
-        Whoami = [
-            "DF","DF std",
-            "ADT","ADT std",
-            "DL","DL std",
-        ],
-        Path = [NaN,NaN,NaN,NaN,NaN,NaN],
-        Kappa = combining(avgcolumns[1],stdcolumns[1]),
-        Accuracy = combining(avgcolumns[2],stdcolumns[2]),
-        Error = combining(avgcolumns[3],stdcolumns[3]),
-        NRules = [NaN,NaN,combining(avgcolumns[4],stdcolumns[4])...],
-        NSymbols = [NaN,NaN,combining(avgcolumns[5],stdcolumns[5])...],
-        Delay = [NaN,NaN,combining(avgcolumns[6],stdcolumns[6])...],
-        AbsNRules = [NaN,NaN,combining(avgcolumns[7],stdcolumns[7])...],
-        NLeaves = [combining(avgcolumns[8],stdcolumns[8])...,NaN,NaN],
+        Whoami = ["DF", "DF std", "ADT", "ADT std", "DL", "DL std"],
+        Path = [NaN, NaN, NaN, NaN, NaN, NaN],
+        Kappa = combining(avgcolumns[1], stdcolumns[1]),
+        Accuracy = combining(avgcolumns[2], stdcolumns[2]),
+        Error = combining(avgcolumns[3], stdcolumns[3]),
+        NRules = [NaN, NaN, combining(avgcolumns[4], stdcolumns[4])...],
+        NSymbols = [NaN, NaN, combining(avgcolumns[5], stdcolumns[5])...],
+        Delay = [NaN, NaN, combining(avgcolumns[6], stdcolumns[6])...],
+        AbsNRules = [NaN, NaN, combining(avgcolumns[7], stdcolumns[7])...],
+        NLeaves = [combining(avgcolumns[8], stdcolumns[8])..., NaN, NaN],
     )
-    CSV.write(csvpath, finaltable, append=true)
+    CSV.write(csvpath, finaltable, append = true)
 
     checkpoint_stdout(
         "\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Final Results " *
-        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
     )
-    for (i,t) in enumerate(tablesforest)
+    for (i, t) in enumerate(tablesforest)
         println("Results for Forest $(i): ")
         println(t)
     end

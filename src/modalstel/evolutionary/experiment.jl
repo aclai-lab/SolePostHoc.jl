@@ -12,15 +12,14 @@ function scan_evolutionary_rule_extraction(
     Y::AbstractVector{<:Label};
     # Search space parameters
     exec_populationSize = [nothing],
-    exec_crossoverRate  = collect(0.75:0.05:0.95),
-    exec_mutationRate   = collect(0.05:0.05:0.2),
-    exec_selection      = [Evolutionary.tournament(2, select=twowaycomp)],
-    exec_crossover      = [GENERATE_CROSSOVER_FUNCTION()], # SBX
-    exec_mutation       = [
-        GENERATE_MUTATION_FUNCTION(nmaxmutations = nmaxmutations)
-        for nmaxmutations in [1]
+    exec_crossoverRate = collect(0.75:0.05:0.95),
+    exec_mutationRate = collect(0.05:0.05:0.2),
+    exec_selection = [Evolutionary.tournament(2, select = twowaycomp)],
+    exec_crossover = [GENERATE_CROSSOVER_FUNCTION()], # SBX
+    exec_mutation = [
+        GENERATE_MUTATION_FUNCTION(nmaxmutations = nmaxmutations) for nmaxmutations in [1]
     ],
-    exec_ntrees        = [100],
+    exec_ntrees = [100],
     exec_metricfuns::AbstractVector{<:AbstractVector{<:Function}}, # Evolutionary metrics
     # Hyper-optimization
     Hyperopt_metricfun::Function,
@@ -28,7 +27,9 @@ function scan_evolutionary_rule_extraction(
     # Other
     traintesting::Union{Vector{<:Tuple{Any,AbstractVector{<:Label}}},Nothing} = nothing,
     dataset_slices::Union{Integer,Vector{<:Tuple{Vector,Vector}}} = 10,
-    memostruct = [ThreadSafeDict{SyntaxTree,Vector{worldtype(X)}}() for i in 1:ninstances(X)],
+    memostruct = [
+        ThreadSafeDict{SyntaxTree,Vector{worldtype(X)}}() for i = 1:ninstances(X)
+    ],
     _alphabet::AbstractConditionalAlphabet = SoleModels.alphabet(X),
     _classes::AbstractVector{<:Label} = sort(unique(Y)),
     rng = default_rng(),
@@ -37,17 +38,20 @@ function scan_evolutionary_rule_extraction(
     dataset_slices = begin
         if dataset_slices isa Integer
             @assert isnothing(traintesting) "Can't pass training and testing dataset if" *
-                " dataset_slices isa Integer: $(dataset_slices)"
-            balanced_cv_dataset_slices(Y, dataset_slices, rng; strict=false)
+                                            " dataset_slices isa Integer: $(dataset_slices)"
+            balanced_cv_dataset_slices(Y, dataset_slices, rng; strict = false)
         else
             dataset_slices
         end
     end
 
-    @assert isnothing(traintesting) || (!isnothing(traintesting) && length(traintesting) == 2 &&
-        length(dataset_slices) == 1) "With traintesting, dataset_slices must be " *
-        "[(Training Dataset, Training Labels), (Testing Dataset, Testing Labels)]" *
-        "\ndataset_slices = $(dataset_slices)"
+    @assert isnothing(traintesting) || (
+        !isnothing(traintesting) &&
+        length(traintesting) == 2 &&
+        length(dataset_slices) == 1
+    ) "With traintesting, dataset_slices must be " *
+      "[(Training Dataset, Training Labels), (Testing Dataset, Testing Labels)]" *
+      "\ndataset_slices = $(dataset_slices)"
 
     println("Dataset slices for internal cross validation")
     @show dataset_slices
@@ -73,7 +77,9 @@ function scan_evolutionary_rule_extraction(
         Hyperopt_niterations = round(Int, Hyperopt_niterations * Hyperopt_tot_niterations)
     end
 
-    println("\nSearch space (size = $(join(cube_dim_lengths, "×")) = $(Hyperopt_tot_niterations))")
+    println(
+        "\nSearch space (size = $(join(cube_dim_lengths, "×")) = $(Hyperopt_tot_niterations))",
+    )
     println(" - # Hyper-Iterations: $(Hyperopt_niterations)")
     println(" - Population Size: $(exec_populationSize)")
     println(" - Crossover Rate: $(exec_crossoverRate)")
@@ -84,12 +90,15 @@ function scan_evolutionary_rule_extraction(
     println(" - Metrics: $(exec_metricfuns)")
     println(" - # Trees: $(exec_ntrees)")
 
-    @assert ! (Hyperopt_niterations == 1 && Hyperopt_tot_niterations != 1 &&
-        !isnothing(dataset_slices)) "Hyperopt_niterations = $(Hyperopt_niterations), " *
-        "cube_dim_lengths = $(cube_dim_lengths) (Hyperopt_tot_niterations = $(Hyperopt_tot_niterations))"
+    @assert ! (
+        Hyperopt_niterations == 1 &&
+        Hyperopt_tot_niterations != 1 &&
+        !isnothing(dataset_slices)
+    ) "Hyperopt_niterations = $(Hyperopt_niterations), " *
+      "cube_dim_lengths = $(cube_dim_lengths) (Hyperopt_tot_niterations = $(Hyperopt_tot_niterations))"
 
     @assert Hyperopt_niterations <= Hyperopt_tot_niterations "$(Hyperopt_niterations) " *
-        "<= $(Hyperopt_tot_niterations) must hold for Hyper-optimization to make sense!"
+                                                             "<= $(Hyperopt_tot_niterations) must hold for Hyper-optimization to make sense!"
 
     best_best_dls = nothing
     best_best_metric = nothing
@@ -98,91 +107,129 @@ function scan_evolutionary_rule_extraction(
     # https://github.com/baggepinnen/Hyperopt.jl
     global ho
     #Hyperband(R=50, η=3, inner=RandomSampler(rng)),
-    ho = @hyperopt for i = Hyperopt_niterations,
-        sampler = RandomSampler(rng),
-        populationSize = exec_populationSize,
-        crossoverRate  = exec_crossoverRate,
-        mutationRate   = exec_mutationRate,
-        selection      = exec_selection,
-        crossover      = exec_crossover,
-        mutation       = exec_mutation,
-        metricfuns     = exec_metricfuns,
-        ntrees         = exec_ntrees
+    ho = @hyperopt for i in Hyperopt_niterations,
+        sampler in RandomSampler(rng),
+        populationSize in exec_populationSize,
+        crossoverRate in exec_crossoverRate,
+        mutationRate in exec_mutationRate,
+        selection in exec_selection,
+        crossover in exec_crossover,
+        mutation in exec_mutation,
+        metricfuns in exec_metricfuns,
+        ntrees in exec_ntrees
 
         best_dls = []
         best_niterations = []
-        best_metric = [begin
+        best_metric = [
+            begin
 
-            train_ids, val_ids = dataset_slice
+                train_ids, val_ids = dataset_slice
 
-            X_train, Y_train, X_val, Y_val = begin
-                if isnothing(traintesting)
-                    println("\nComputing Training Dataset in ...")
-                    X_train,Y_train = @time slicedataset((X,Y), train_ids; return_view = true)
-                    println("Computing Testing Dataset in ...")
-                    X_val,Y_val = @time slicedataset((X,Y), val_ids; return_view = true)
+                X_train, Y_train, X_val, Y_val = begin
+                    if isnothing(traintesting)
+                        println("\nComputing Training Dataset in ...")
+                        X_train, Y_train = @time slicedataset(
+                            (X, Y),
+                            train_ids;
+                            return_view = true,
+                        )
+                        println("Computing Testing Dataset in ...")
+                        X_val, Y_val = @time slicedataset(
+                            (X, Y),
+                            val_ids;
+                            return_view = true,
+                        )
 
-                    (X_train, Y_train, X_val, Y_val)
-                else
-                    # Note: should use train_ids and val_ids here...
-                    (first(traintesting)..., last(traintesting)...)
+                        (X_train, Y_train, X_val, Y_val)
+                    else
+                        # Note: should use train_ids and val_ids here...
+                        (first(traintesting)..., last(traintesting)...)
+                    end
                 end
-            end
 
-            memostruct_train = @view memostruct[train_ids]
-            memostruct_val = @view memostruct[val_ids]
+                memostruct_train = @view memostruct[train_ids]
+                memostruct_val = @view memostruct[val_ids]
 
-            function evaluate(indiv::DLIndividual)
-                return map(f->f(indiv; X=X_train, Y=Y_train, memostruct = memostruct_train), metricfuns)
-            end
-            function evaluate(indivs::AbstractVector{<:DLIndividual})
-                return map(indiv->evaluate(indiv), indivs)
-            end
-
-            @show countmap(Y_train)
-            @show countmap(Y_val)
-
-            dls = begin
-                tmpdls = extract_decision_lists(model, (X_train, Y_train))
-                ntmpdls = length(tmpdls)
-                if ntmpdls > ntrees
-                    length(tmpdls) % 2 == 0 ? tmpdls : [tmpdls..., rand(rng, tmpdls)]
-                elseif ntmpdls < ntrees
-                    [tmpdls..., StatsBase.sample(rng, tmpdls, (ntrees-ntmpdls))...]
-                else
-                    tmpdls
+                function evaluate(indiv::DLIndividual)
+                    return map(
+                        f->f(
+                            indiv;
+                            X = X_train,
+                            Y = Y_train,
+                            memostruct = memostruct_train,
+                        ),
+                        metricfuns,
+                    )
                 end
-            end
-            println("Numero di individui: $(length(dls))")
-            _alldls = Ref(dls)
-            indivs = map(dl->DLIndividual(dl, _alphabet, _classes, _alldls), dls)
-            constrs = Evolutionary.NoConstraints()
-            F = zeros(length(metricfuns)) # TODO check fill(-Inf, length(metricfuns))
-            # https://wildart.github.io/Evolutionary.jl/stable/moea/
-            alg = Evolutionary.NSGA2(;
-                populationSize = isnothing(populationSize) ? length(dls) : populationSize,
-                crossoverRate = crossoverRate,
-                mutationRate = mutationRate,
-                selection = selection,
-                crossover = crossover,
-                mutation = mutation,
-            )
-            opts = Evolutionary.Options(rng=rng, iterations=500, parallelization=:thread)
+                function evaluate(indivs::AbstractVector{<:DLIndividual})
+                    return map(indiv->evaluate(indiv), indivs)
+                end
 
-            println("\nEvolutionary Computation in ...")
-            # l = ReentrantLock()
-            # res = Evolutionary.optimize(indiv->(lock(l); evaluate(indiv); unlock(l)), F, constrs, alg, indivs, opts)
-            res = @time Evolutionary.optimize(indiv->evaluate(indiv), F, constrs, alg, indivs, opts)
+                @show countmap(Y_train)
+                @show countmap(Y_val)
 
-            _best_dls = Evolutionary.minimizer(res)
-            push!(best_niterations, Evolutionary.iterations(res))
-            append!(best_dls, _best_dls)
+                dls = begin
+                    tmpdls = extract_decision_lists(model, (X_train, Y_train))
+                    ntmpdls = length(tmpdls)
+                    if ntmpdls > ntrees
+                        length(tmpdls) % 2 == 0 ? tmpdls : [tmpdls..., rand(rng, tmpdls)]
+                    elseif ntmpdls < ntrees
+                        [tmpdls..., StatsBase.sample(rng, tmpdls, (ntrees-ntmpdls))...]
+                    else
+                        tmpdls
+                    end
+                end
+                println("Numero di individui: $(length(dls))")
+                _alldls = Ref(dls)
+                indivs = map(dl->DLIndividual(dl, _alphabet, _classes, _alldls), dls)
+                constrs = Evolutionary.NoConstraints()
+                F = zeros(length(metricfuns)) # TODO check fill(-Inf, length(metricfuns))
+                # https://wildart.github.io/Evolutionary.jl/stable/moea/
+                alg = Evolutionary.NSGA2(;
+                    populationSize = isnothing(populationSize) ? length(dls) :
+                                     populationSize,
+                    crossoverRate = crossoverRate,
+                    mutationRate = mutationRate,
+                    selection = selection,
+                    crossover = crossover,
+                    mutation = mutation,
+                )
+                opts = Evolutionary.Options(
+                    rng = rng,
+                    iterations = 500,
+                    parallelization = :thread,
+                )
 
-            meanmetric = map(bdl->(Hyperopt_metricfun(bdl; X=X_val, Y=Y_val, memostruct = memostruct_val)),_best_dls)
-            meanmetric = mean(meanmetric)
+                println("\nEvolutionary Computation in ...")
+                # l = ReentrantLock()
+                # res = Evolutionary.optimize(indiv->(lock(l); evaluate(indiv); unlock(l)), F, constrs, alg, indivs, opts)
+                res = @time Evolutionary.optimize(
+                    indiv->evaluate(indiv),
+                    F,
+                    constrs,
+                    alg,
+                    indivs,
+                    opts,
+                )
 
-            meanmetric
-        end for (i_fold, dataset_slice) in enumerate(dataset_slices)]
+                _best_dls = Evolutionary.minimizer(res)
+                push!(best_niterations, Evolutionary.iterations(res))
+                append!(best_dls, _best_dls)
+
+                meanmetric = map(
+                    bdl->(Hyperopt_metricfun(
+                        bdl;
+                        X = X_val,
+                        Y = Y_val,
+                        memostruct = memostruct_val,
+                    )),
+                    _best_dls,
+                )
+                meanmetric = mean(meanmetric)
+
+                meanmetric
+            end for (i_fold, dataset_slice) in enumerate(dataset_slices)
+        ]
 
         best_metric = mean(best_metric)
         if isnothing(best_best_metric) || best_best_metric > best_metric

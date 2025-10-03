@@ -25,22 +25,30 @@ if !@isdefined sklearn
 end
 
 Conda.pip_interop(true, PyCall.Conda.ROOTENV)
-PyCall.Conda.pip("install", "git+https://github.com/jobregon1212/rulecosi.git", PyCall.Conda.ROOTENV)
+PyCall.Conda.pip(
+    "install",
+    "git+https://github.com/jobregon1212/rulecosi.git",
+    PyCall.Conda.ROOTENV,
+)
 PyCall.Conda.pip("install", "scikit-learn", PyCall.Conda.ROOTENV)
 
 function __init__()
     # First ensure pip interop is enabled
     Conda.pip_interop(true, PyCall.Conda.ROOTENV)
-    
+
     # Try to import rulecosi, if it fails, install it via pip
     try
         copy!(rulecosi, pyimport("rulecosi"))
     catch
         @info "Installing rulecosi via pip..."
-        PyCall.Conda.pip("install", "git+https://github.com/jobregon1212/rulecosi.git", PyCall.Conda.ROOTENV)
+        PyCall.Conda.pip(
+            "install",
+            "git+https://github.com/jobregon1212/rulecosi.git",
+            PyCall.Conda.ROOTENV,
+        )
         copy!(rulecosi, pyimport("rulecosi"))
     end
-    
+
     # Try to import sklearn, if it fails, install it via pip  
     try
         copy!(sklearn, pyimport("sklearn.ensemble"))
@@ -153,7 +161,7 @@ mutable struct SkNode
     counts::Vector{Float64}
 end
 
-const TreeType = Union{String, CategoricalArrays.CategoricalValue{String, UInt32}}
+const TreeType = Union{String,CategoricalArrays.CategoricalValue{String,UInt32}}
 
 """
 build_sklearnlike_arrays(branch, n_classes, class_to_idx)
@@ -178,8 +186,9 @@ function build_sklearnlike_arrays(branch, n_classes::Int, class_to_idx::Dict{Str
             nodes[i+1].threshold = thr
             nodes[i+1].left = left_i
             nodes[i+1].right = right_i
-            for c in 1:n_classes
-                nodes[i+1].counts[c] = nodes[left_i+1].counts[c] + nodes[right_i+1].counts[c]
+            for c = 1:n_classes
+                nodes[i+1].counts[c] =
+                    nodes[left_i+1].counts[c] + nodes[right_i+1].counts[c]
             end
         else
             error("Unknown node type: $(typeof(b))")
@@ -193,22 +202,26 @@ function build_sklearnlike_arrays(branch, n_classes::Int, class_to_idx::Dict{Str
     feature = Vector{Int}(undef, n_nodes)
     threshold = Vector{Float64}(undef, n_nodes)
     value = Array{Float64,3}(undef, n_nodes, 1, n_classes)
-    for i in 1:n_nodes
+    for i = 1:n_nodes
         children_left[i] = nodes[i].left
         children_right[i] = nodes[i].right
         feature[i] = nodes[i].feature
         threshold[i] = nodes[i].threshold
-        for c in 1:n_classes
+        for c = 1:n_classes
             value[i, 1, c] = nodes[i].counts[c]
         end
     end
     return children_left, children_right, feature, threshold, value, n_nodes
 end
 
-function serialize_branch_sklearn(b, classes::Vector{String}, class_to_idx::Dict{String,Int})
+function serialize_branch_sklearn(
+    b,
+    classes::Vector{String},
+    class_to_idx::Dict{String,Int},
+)
     n_classes = length(classes)
     cl, cr, ft, th, val, nn = build_sklearnlike_arrays(b, n_classes, class_to_idx)
-    posfeats = ft[ft.>=0]
+    posfeats = ft[ft .>= 0]
     maxfeat = isempty(posfeats) ? 0 : maximum(posfeats)
     n_features = maxfeat + 1
     return Dict(
@@ -219,7 +232,7 @@ function serialize_branch_sklearn(b, classes::Vector{String}, class_to_idx::Dict
         "value" => val,
         "node_count" => nn,
         "n_features" => n_features,
-        "n_classes" => n_classes
+        "n_classes" => n_classes,
     )
 end
 
@@ -298,7 +311,10 @@ function process_rules_decision_list(rules::Vector{String})
     return structured, default_outcome
 end
 
-function build_rule_list(decision_list::Vector{Tuple{String,String}}, default_outcome::String)
+function build_rule_list(
+    decision_list::Vector{Tuple{String,String}},
+    default_outcome::String,
+)
     rules = Rule[]
 
     for (cond_str, out) in decision_list
@@ -310,14 +326,14 @@ function build_rule_list(decision_list::Vector{Tuple{String,String}}, default_ou
 
             φ = SoleLogics.parseformula(
                 cond_str;
-                atom_parser=a -> Atom(
+                atom_parser = a -> Atom(
                     parsecondition(
                         ScalarCondition,
                         a;
-                        featuretype=VariableValue,
-                        featvaltype=Real
-                    )
-                )
+                        featuretype = VariableValue,
+                        featvaltype = Real,
+                    ),
+                ),
             )
 
             push!(rules, Rule(φ, out))
@@ -339,10 +355,7 @@ function convertToDecisionList(raw_rules::Vector{String})
     rules, default = build_rule_list(structured_rules, default_outcome)
     #rules = dnf(rules)
     # Create the DecisionList
-    return DecisionList(
-        rules,
-        default
-    )
+    return DecisionList(rules, default)
 end
 
 ##############################
@@ -438,7 +451,7 @@ function rulecosiplus(ensemble::Any, X_train::Any, y_train::Any)
         column_names = names(X_train)
     else
         num_features = size(X_train_matrix, 2)
-        column_names = ["V$i" for i in 1:num_features]
+        column_names = ["V$i" for i = 1:num_features]
     end
 
     # Serialize the ensemble
@@ -593,15 +606,15 @@ function rulecosiplus(ensemble::Any, X_train::Any, y_train::Any)
         0.95
     =#
     rc = rulecosi.RuleCOSIClassifier(
-        base_ensemble=base_ensemble,
-        metric="fi",
-        n_estimators=100,
-        tree_max_depth=100,
-        conf_threshold=0.25, # α
-        cov_threshold=0.1, # β
-        random_state=3,
-        column_names=column_names,
-        verbose=2
+        base_ensemble = base_ensemble,
+        metric = "fi",
+        n_estimators = 100,
+        tree_max_depth = 100,
+        conf_threshold = 0.25, # α
+        cov_threshold = 0.1, # β
+        random_state = 3,
+        column_names = column_names,
+        verbose = 2,
     )
 
     @time rc.fit(X_train_matrix, Vector(String.(y_train)))

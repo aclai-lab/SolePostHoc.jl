@@ -52,20 +52,20 @@ function minimizza_dnf(
     formula = convert(SoleLogics.DNF, formula)
     silent || (println(); @show formula)
 
-    silent ||  println("||====================||")
-    silent ||  println(dnf(formula))
+    silent || println("||====================||")
+    silent || println(dnf(formula))
     #@show vetImportance
     #@show horizontal
     #@show vertical
-    silent ||  println("||====================||")
-    
-    silent || println("pre rc comparison: ",dnf(formula))
+    silent || println("||====================||")
 
-    if ((vertical != 1.0) && !isempty(vetImportance)) ||  (horizontal != 1.0)
-        formula = dnf_rc_compression(formula,horizontal,vertical,vetImportance;silent)
+    silent || println("pre rc comparison: ", dnf(formula))
+
+    if ((vertical != 1.0) && !isempty(vetImportance)) || (horizontal != 1.0)
+        formula = dnf_rc_compression(formula, horizontal, vertical, vetImportance; silent)
     end
     silent || println("||====================||")
-    silent || println("post rc comparison: ",dnf(formula))
+    silent || println("post rc comparison: ", dnf(formula))
     silent || println("||====================||")
 
     formula = SoleData.abc_minimize(formula, silent; boom_kwargs...)
@@ -141,11 +141,13 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
         used = fill(false, length(terms))
 
         # Iterate over all term pairs for combinations
-        for i in 1:(length(terms) - 1)
-            for j in (i + 1):length(terms)
+        for i = 1:(length(terms)-1)
+            for j = (i+1):length(terms)
                 diff_count = 0
                 for k in eachindex(terms[i])
-                    if terms[i][k] != terms[j][k] && terms[i][k] != Int8(-1) && terms[j][k] != Int8(-1)
+                    if terms[i][k] != terms[j][k] &&
+                       terms[i][k] != Int8(-1) &&
+                       terms[j][k] != Int8(-1)
                         diff_count += 1
                         if diff_count > 1
                             break
@@ -162,7 +164,7 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
         end
 
         # Add unused terms
-        for i in 1:length(terms)
+        for i = 1:length(terms)
             if !used[i]
                 push!(new_terms, terms[i])
             end
@@ -182,14 +184,18 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
     function find_minimal_cover(terms::Vector{Vector{Int8}}, primes::Vector{Vector{Int8}})
         coverage = falses(length(primes), length(terms))
 
-        for i in 1:length(primes)
-            for j in 1:length(terms)
+        for i = 1:length(primes)
+            for j = 1:length(terms)
                 coverage[i, j] = covers(primes[i], terms[j])
             end
         end
 
         # Find minimal cover using backtracking
-        function find_cover_backtrack(covered::BitVector, selected_implicants::Vector{Int}, candidates::Vector{Int})
+        function find_cover_backtrack(
+            covered::BitVector,
+            selected_implicants::Vector{Int},
+            candidates::Vector{Int},
+        )
             if all(covered)
                 return selected_implicants
             end
@@ -198,9 +204,16 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
 
             for candidate in candidates
                 new_covered = covered .| coverage[candidate, :]
-                new_solution = find_cover_backtrack(new_covered, [selected_implicants; candidate], setdiff(candidates, [candidate]))
+                new_solution = find_cover_backtrack(
+                    new_covered,
+                    [selected_implicants; candidate],
+                    setdiff(candidates, [candidate]),
+                )
 
-                if new_solution !== nothing && (best_solution === nothing || length(new_solution) < length(best_solution))
+                if new_solution !== nothing && (
+                    best_solution === nothing ||
+                    length(new_solution) < length(best_solution)
+                )
                     best_solution = new_solution
                 end
             end
@@ -251,18 +264,18 @@ function minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula)
         @warn "Error during minimization: $e"
         return formula  # Return the original formula in case of error
     end
-end
+end#=MINIMUMS THAT DON'T SEEM GLOBAL TO ME=#
 
 
-#=MINIMUMS THAT DON'T SEEM GLOBAL TO ME=#
+
 function minimizza_dnf(::Val{:quine_naive}, formula::TwoLevelDNFFormula)
     # Convert terms into binary vectors
     terms = [Vector{Int}([x ? 1 : 0 for x in term]) for term in eachcombination(formula)]
-    
+
     if isempty(terms)
         return formula
     end
-    
+
     # 1. Find all possible prime implicants
     function find_prime_implicants(terms)
         function can_combine(t1, t2)
@@ -279,22 +292,22 @@ function minimizza_dnf(::Val{:quine_naive}, formula::TwoLevelDNFFormula)
             end
             return diff == 1, pos
         end
-        
+
         function combine(t1, t2, pos)
             result = copy(t1)
             result[pos] = -1
             return result
         end
-        
+
         primes = Set{Vector{Int}}()
         used = Set{Vector{Int}}()
         current = copy(terms)
-        
+
         while !isempty(current)
             next_terms = Vector{Vector{Int}}()
-            
-            for i in 1:length(current)
-                for j in (i+1):length(current)
+
+            for i = 1:length(current)
+                for j = (i+1):length(current)
                     combinable, pos = can_combine(current[i], current[j])
                     if combinable
                         push!(used, current[i])
@@ -303,21 +316,21 @@ function minimizza_dnf(::Val{:quine_naive}, formula::TwoLevelDNFFormula)
                     end
                 end
             end
-            
+
             # Add unused terms as prime implicants
             for term in current
                 if term ∉ used
                     push!(primes, term)
                 end
             end
-            
+
             current = unique(next_terms)
             empty!(used)
         end
-        
+
         return collect(primes)
     end
-    
+
     # 2. Check if a prime implicant covers a term
     function covers(prime, term)
         for i in eachindex(prime)
@@ -327,43 +340,43 @@ function minimizza_dnf(::Val{:quine_naive}, formula::TwoLevelDNFFormula)
         end
         return true
     end
-    
+
     # 3. Generate all possible combinations of k elements from an array
     function generate_combinations(arr, k)
         n = length(arr)
         if k > n
             return Vector{Vector{eltype(arr)}}()
         end
-        
+
         result = Vector{Vector{eltype(arr)}}()
-        
+
         # Recursive function to generate combinations
         function recursive_combine(start, current)
             if length(current) == k
                 push!(result, copy(current))
                 return
             end
-            
-            for i in start:n
+
+            for i = start:n
                 push!(current, arr[i])
                 recursive_combine(i + 1, current)
                 pop!(current)
             end
         end
-        
+
         recursive_combine(1, eltype(arr)[])
         return result
     end
-    
+
     # 4. Generate all possible combinations of prime implicants
     function all_combinations(primes)
         result = Vector{Vector{Vector{Int}}}()
-        for k in 1:length(primes)
+        for k = 1:length(primes)
             append!(result, generate_combinations(primes, k))
         end
         return result
     end
-    
+
     # 5. Check if a combination covers all terms
     function covers_all(combo, terms)
         for term in terms
@@ -373,16 +386,16 @@ function minimizza_dnf(::Val{:quine_naive}, formula::TwoLevelDNFFormula)
         end
         return true
     end
-    
+
     # Execute the full algorithm
     try
         # Find all prime implicants
         primes = find_prime_implicants(terms)
-        
+
         # Find the minimum combination that covers all terms
         min_cover = primes  # Fallback to the complete solution
         min_size = length(primes)
-        
+
         # Try all possible combinations of prime implicants
         for combo in all_combinations(primes)
             if covers_all(combo, terms) && length(combo) < min_size
@@ -390,11 +403,11 @@ function minimizza_dnf(::Val{:quine_naive}, formula::TwoLevelDNFFormula)
                 min_size = length(combo)
             end
         end
-        
+
         # Convert the result into a BitVector
         result_combinations = BitVector[]
         seen = Set{BitVector}()
-        
+
         for term in min_cover
             combo = falses(nuberofatoms(formula))
             for (i, val) in enumerate(term)
@@ -402,29 +415,29 @@ function minimizza_dnf(::Val{:quine_naive}, formula::TwoLevelDNFFormula)
                     combo[i] = true
                 end
             end
-            
+
             if combo ∉ seen
                 push!(seen, combo)
                 push!(result_combinations, combo)
             end
         end
-        
+
         sort!(result_combinations)
         return TwoLevelDNFFormula(
             result_combinations,
             nuberofatoms(formula),
             eachthresholdsbyfeature(formula),
             eachatomsbyfeature(formula),
-            collect(min_cover)
+            collect(min_cover),
         )
     catch e
         @warn "Error during minimization: $e"
         return formula
     end
-end
+end#=GLOBAL MINIMUMS BUT INCORRECT=#
 
 
-#=GLOBAL MINIMUMS BUT INCORRECT=#
+
 function minimizza_dnf(::Val{:quine_oldstyle}, formula::TwoLevelDNFFormula)
     # Initialization of starting terms
     terms = [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
@@ -433,7 +446,7 @@ function minimizza_dnf(::Val{:quine_oldstyle}, formula::TwoLevelDNFFormula)
             terms[i][j] = x ? Int8(1) : Int8(0)
         end
     end
-    
+
     if isempty(terms)
         return formula  # If there are no terms, return the empty formula directly
     end
@@ -462,16 +475,18 @@ function minimizza_dnf(::Val{:quine_oldstyle}, formula::TwoLevelDNFFormula)
         if length(terms) <= 1
             return terms
         end
-        
+
         new_terms = Vector{Vector{Int8}}()
         used = fill(false, length(terms))
-        
+
         # Iterate over all term pairs for combinations
-        for i in 1:(length(terms)-1)
-            for j in (i+1):length(terms)
+        for i = 1:(length(terms)-1)
+            for j = (i+1):length(terms)
                 diff_count = 0
                 for k in eachindex(terms[i])
-                    if terms[i][k] != terms[j][k] && terms[i][k] != Int8(-1) && terms[j][k] != Int8(-1)
+                    if terms[i][k] != terms[j][k] &&
+                       terms[i][k] != Int8(-1) &&
+                       terms[j][k] != Int8(-1)
                         diff_count += 1
                         if diff_count > 1
                             break
@@ -486,80 +501,86 @@ function minimizza_dnf(::Val{:quine_oldstyle}, formula::TwoLevelDNFFormula)
                 end
             end
         end
-        
+
         # Add unused terms
-        for i in 1:length(terms)
+        for i = 1:length(terms)
             if !used[i]
                 push!(new_terms, terms[i])
             end
         end
-        
+
         # Remove duplicates and sort
         unique!(new_terms)
-        
+
         if length(new_terms) == length(terms)
             return new_terms  # No new combinations, terminate
         end
-        
+
         return minimize_step!(new_terms)  # Continue iterating
     end
 
     # Find the minimal coverage of original terms using prime implicants
-    function find_minimal_coverage(terms::Vector{Vector{Int8}}, primes::Vector{Vector{Int8}})
+    function find_minimal_coverage(
+        terms::Vector{Vector{Int8}},
+        primes::Vector{Vector{Int8}},
+    )
         if isempty(primes)
             return terms
         end
-        
+
         # Construct coverage matrix
         coverage = falses(length(primes), length(terms))
-        for i in 1:length(primes)
-            for j in 1:length(terms)
+        for i = 1:length(primes)
+            for j = 1:length(terms)
                 coverage[i, j] = covers(primes[i], terms[j])
             end
         end
-        
+
         # Find essential implicants
         selected_primes = Int[]
         essential_coverage = falses(size(coverage, 2))
-        
-        for j in 1:size(coverage, 2)
+
+        for j = 1:size(coverage, 2)
             covering_primes = findall(coverage[:, j])
             if length(covering_primes) == 1
                 push!(selected_primes, covering_primes[1])
                 essential_coverage .|= coverage[covering_primes[1], :]
             end
         end
-        
+
         # If needed, select additional implicants using a greedy approach
         if !all(essential_coverage)
             remaining_terms = .!essential_coverage
             selected = Set(selected_primes)
-            
+
             while any(remaining_terms)
                 best_prime = -1
                 max_coverage = 0
-                
+
                 for (i, prime) in enumerate(primes)
                     if i ∉ selected
-                        coverage_count = count(j -> remaining_terms[j] && coverage[i, j], 1:size(coverage, 2))
+                        coverage_count = count(
+                            j -> remaining_terms[j] && coverage[i, j],
+                            1:size(coverage, 2),
+                        )
                         if coverage_count > max_coverage
                             max_coverage = coverage_count
                             best_prime = i
                         end
                     end
                 end
-                
+
                 if best_prime == -1 || max_coverage == 0
                     break
                 end
-                
+
                 push!(selected, best_prime)
                 remaining_terms .&= .!coverage[best_prime, :]
             end
-            
+
             return primes[collect(selected)]
         end
-        
+
         return primes[selected_primes]
     end
 
@@ -568,7 +589,7 @@ function minimizza_dnf(::Val{:quine_oldstyle}, formula::TwoLevelDNFFormula)
         prime_implicants = minimize_step!(terms)
         # Phase 2: Find minimal coverage of terms
         minimized_terms = find_minimal_coverage(terms, prime_implicants)
-        
+
         # Convert minimized terms into readable combinations
         new_combinations = BitVector[]
         seen = Set{BitVector}()  # Set to avoid duplicates
@@ -585,7 +606,7 @@ function minimizza_dnf(::Val{:quine_oldstyle}, formula::TwoLevelDNFFormula)
                 push!(new_combinations, combo)
             end
         end
-        
+
         sort!(new_combinations)
         return TwoLevelDNFFormula(
             new_combinations,
@@ -601,14 +622,18 @@ function minimizza_dnf(::Val{:quine_oldstyle}, formula::TwoLevelDNFFormula)
 end
 
 
- #CLASSIC ESPRESSO STABLE (LOCAL MINIMAL)
- function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula; minimization_method_kwargs...)
+#CLASSIC ESPRESSO STABLE (LOCAL MINIMAL)
+function minimizza_dnf(
+    ::Val{:espresso},
+    formula::TwoLevelDNFFormula;
+    minimization_method_kwargs...,
+)
     # Convert TritVectors to the internal representation used by Espresso
     # We'll map: 1 -> 1, 0 -> 0, -1 -> 0 (since we only care about positive terms)
     terms = Vector{Vector{Int}}()
     for tritvec in eachcombination(formula)
         term = Vector{Int}()
-        for i in 1:length(tritvec)
+        for i = 1:length(tritvec)
             val = tritvec[i]
             push!(term, val == 1 ? 1 : 0)
         end
@@ -755,7 +780,7 @@ end
     for term in minimized_terms
         # Create a new TritVector for this term
         trit_combo = TritVector(nuberofatoms(formula))
-        
+
         for (i, val) in enumerate(term)
             if val == 1
                 trit_combo[i] = 1
@@ -780,7 +805,7 @@ end
         eachthresholdsbyfeature(formula),
         eachatomsbyfeature(formula),
     )
-end
+end#=quine resolution...=#
 
 
 #=
@@ -954,7 +979,7 @@ function minimizza_dnf(::Val{:espresso}, formula::TwoLevelDNFFormula; minimizati
 end
 =#
 
-#=quine resolution...=#
+
 function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
     # Initialize terms
     terms = [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
@@ -963,7 +988,7 @@ function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
             terms[i][j] = x ? Int8(1) : Int8(0)
         end
     end
-    
+
     if isempty(terms)
         return formula
     end
@@ -980,11 +1005,15 @@ function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
 
     # Function to check if two terms can be combined
     # without introducing new coverage points
-    function can_combine_safely(cube1::Vector{Int8}, cube2::Vector{Int8}, original_terms::Vector{Vector{Int8}})
+    function can_combine_safely(
+        cube1::Vector{Int8},
+        cube2::Vector{Int8},
+        original_terms::Vector{Vector{Int8}},
+    )
         # First check if they differ in only one position
         diff_count = 0
         diff_pos = -1
-        
+
         for i in eachindex(cube1)
             if cube1[i] != Int8(-1) && cube2[i] != Int8(-1) && cube1[i] != cube2[i]
                 diff_count += 1
@@ -994,15 +1023,15 @@ function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
                 end
             end
         end
-        
+
         if diff_count != 1
             return false, -1
         end
-        
+
         # Create the combined term for testing
         combined = copy(cube1)
         combined[diff_pos] = Int8(-1)
-        
+
         # For each original term
         for original in original_terms
             # If the combined term covers this point
@@ -1013,22 +1042,25 @@ function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
                 end
             end
         end
-        
+
         return true, diff_pos
     end
 
-    function minimize_step!(terms::Vector{Vector{Int8}}, original_terms::Vector{Vector{Int8}})
+    function minimize_step!(
+        terms::Vector{Vector{Int8}},
+        original_terms::Vector{Vector{Int8}},
+    )
         if length(terms) <= 1
             return terms
         end
-        
+
         new_terms = Vector{Vector{Int8}}()
         used = fill(false, length(terms))
-        
-        for i in 1:length(terms)-1
-            for j in i+1:length(terms)
+
+        for i = 1:(length(terms)-1)
+            for j = (i+1):length(terms)
                 can_combine, pos = can_combine_safely(terms[i], terms[j], original_terms)
-                
+
                 if can_combine
                     new_term = copy(terms[i])
                     new_term[pos] = Int8(-1)
@@ -1037,81 +1069,85 @@ function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
                 end
             end
         end
-        
+
         # Add unused terms
-        for i in 1:length(terms)
+        for i = 1:length(terms)
             if !used[i]
                 push!(new_terms, terms[i])
             end
         end
-        
+
         unique!(new_terms)
-        
+
         if length(new_terms) == length(terms)
             return new_terms
         end
-        
+
         return minimize_step!(new_terms, original_terms)
     end
 
-    function find_minimum_coverage(terms::Vector{Vector{Int8}}, primes::Vector{Vector{Int8}})
+    function find_minimum_coverage(
+        terms::Vector{Vector{Int8}},
+        primes::Vector{Vector{Int8}},
+    )
         if isempty(primes)
             return terms
         end
-        
+
         coverage = falses(length(primes), length(terms))
-        for i in 1:length(primes)
-            for j in 1:length(terms)
-                coverage[i,j] = is_point_covered(terms[j], primes[i])
+        for i = 1:length(primes)
+            for j = 1:length(terms)
+                coverage[i, j] = is_point_covered(terms[j], primes[i])
             end
         end
-        
+
         # Find essential implicants
         selected_primes = Int[]
-        for j in 1:size(coverage, 2)
+        for j = 1:size(coverage, 2)
             covering_primes = findall(coverage[:, j])
             if length(covering_primes) == 1
                 push!(selected_primes, covering_primes[1])
             end
         end
-        
+
         if !isempty(selected_primes)
-            covered_terms = vec(any(coverage[selected_primes, :], dims=1))
+            covered_terms = vec(any(coverage[selected_primes, :], dims = 1))
             if all(covered_terms)
                 return primes[unique(selected_primes)]
             end
         end
-        
+
         # Greedy approach for remaining terms
         selected = Set(selected_primes)
         uncovered = Set(1:size(coverage, 2))
-        
+
         for i in selected_primes
             filter!(t -> !coverage[i, t], uncovered)
         end
-        
+
         while !isempty(uncovered)
             best_coverage = 0
             best_prime = 0
-            
+
             for (i, prime) in enumerate(primes)
                 if i ∉ selected
-                    coverage_count = count(j -> j in uncovered && coverage[i, j], 1:size(coverage, 2))
+                    coverage_count =
+                        count(j -> j in uncovered && coverage[i, j], 1:size(coverage, 2))
                     if coverage_count > best_coverage
                         best_coverage = coverage_count
                         best_prime = i
                     end
                 end
             end
-            
+
             if best_coverage == 0
                 break
             end
-            
+
             push!(selected, best_prime)
             filter!(j -> !coverage[best_prime, j], uncovered)
         end
-        
+
         return primes[collect(selected)]
     end
 
@@ -1120,7 +1156,7 @@ function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
         original_terms = copy(terms)
         primes = minimize_step!(terms, original_terms)
         minimized = find_minimum_coverage(original_terms, primes)
-        
+
         result = Vector{BitVector}(undef, length(minimized))
         for (i, term) in enumerate(minimized)
             combo = falses(numberofatoms(formula))
@@ -1131,15 +1167,15 @@ function minimizza_dnf(::Val{:quine_strict}, formula::TwoLevelDNFFormula)
             end
             result[i] = combo
         end
-        
+
         return TwoLevelDNFFormula(
             result,
             numberofatoms(formula),
             eachthresholdsbyfeature(formula),
             eachatomsbyfeature(formula),
-            minimized
+            minimized,
         )
-        
+
     catch e
         @warn "Error during minimization: $e"
         @warn "Stack trace: " * sprint(showerror, e, catch_backtrace())
@@ -1185,8 +1221,8 @@ function minimizza_dnf(::Val{:quine_petrick}, formula::TwoLevelDNFFormula)
         while !isempty(current)
             next_terms = Vector{Vector{Int}}()
 
-            for i in 1:length(current)
-                for j in (i+1):length(current)
+            for i = 1:length(current)
+                for j = (i+1):length(current)
                     combinable, pos = can_combine(current[i], current[j])
                     if combinable
                         push!(used, current[i])
@@ -1274,7 +1310,7 @@ function minimizza_dnf(::Val{:quine_petrick}, formula::TwoLevelDNFFormula)
         numberofatoms(formula),
         eachthresholdsbyfeature(formula),
         eachatomsbyfeature(formula),
-        minimized_cover
+        minimized_cover,
     )
 end
 
@@ -1284,14 +1320,14 @@ function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
         function show_progress(desc::String, current::Int, total::Int)
             spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
             percentage = round(Int, current * 100 / total)
-            
+
             # Update spinner state
             spinner_state[] = spinner_state[] % length(spinner) + 1
-            
+
             # Use spinner_state instead of current for spinner animation
             print("\r$desc: $(spinner[spinner_state[]]) $percentage%")
             flush(stdout)  # Ensure output is displayed immediately
-            
+
             current == total && println()
         end
 
@@ -1299,7 +1335,7 @@ function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
             function can_combine(cube1, cube2)
                 diff_count = 0
                 diff_pos = -1
-                
+
                 for (i, (b1, b2)) in enumerate(zip(cube1, cube2))
                     if b1 != -1 && b2 != -1 && b1 != b2
                         diff_count += 1
@@ -1309,7 +1345,7 @@ function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
                         end
                     end
                 end
-                
+
                 return diff_count == 1, diff_pos
             end
 
@@ -1321,23 +1357,27 @@ function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
 
             function find_combinations_for_quine(terms)
                 result = Vector{Vector{Int8}}()
-                combined = Set{Tuple{Vector{Int8}, Vector{Int8}}}()
+                combined = Set{Tuple{Vector{Int8},Vector{Int8}}}()
                 iteration = 1
-                
+
                 while true
                     found_new = false
                     total_combinations = div(length(terms) * (length(terms) - 1), 2)
                     progress_counter = 0
-                    
+
                     println("\nEspresso - Iteration $iteration")
-                    
-                    for i in 1:length(terms)
-                        for j in (i+1):length(terms)
+
+                    for i = 1:length(terms)
+                        for j = (i+1):length(terms)
                             progress_counter += 1
                             if progress_counter % 1000 == 0
-                                show_progress("Combinations", progress_counter, total_combinations)
+                                show_progress(
+                                    "Combinations",
+                                    progress_counter,
+                                    total_combinations,
+                                )
                             end
-                            
+
                             if (terms[i], terms[j]) ∉ combined
                                 can_combine, pos = can_combine(terms[i], terms[j])
                                 if can_combine
@@ -1349,25 +1389,25 @@ function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
                             end
                         end
                     end
-                    
+
                     if !found_new
                         break
                     end
-                    
-                # Add new terms to terms for the next round
+
+                    # Add new terms to terms for the next round
                     append!(terms, result)
                     empty!(result)
                     iteration += 1
                 end
-                
-            # Filter redundant terms
+
+                # Filter redundant terms
                 return unique(terms)
             end
 
             return find_combinations_for_quine(terms)
         end
 
-    # Step 2: Modified version of Quine that works on the results of modified_espresso
+        # Step 2: Modified version of Quine that works on the results of modified_espresso
         function modified_quine(terms)
             function covers(cube1::Vector{Int8}, cube2::Vector{Int8})
                 for i in eachindex(cube1)
@@ -1381,7 +1421,7 @@ function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
             function find_essential_coverage(terms, primes)
                 essential = Vector{Vector{Int8}}()
                 covered = Set{Vector{Int8}}()
-                
+
                 println("\nQuine - Essential implicants phase")
                 for (i, term) in enumerate(terms)
                     if i % 1000 == 0
@@ -1393,37 +1433,40 @@ function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
                         push!(covered, term)
                     end
                 end
-                
-            # Then use a greedy approach for the remaining
+
+                # Then use a greedy approach for the remaining
                 remaining_terms = setdiff(Set(terms), covered)
                 progress_counter = 0
-                
+
                 println("\nQuine - Greedy phase")
                 while !isempty(remaining_terms)
                     progress_counter += 1
                     if progress_counter % 1000 == 0
                         show_progress("Optimization", progress_counter, length(terms))
                     end
-                    
+
                     best_prime = nothing
                     max_coverage = 0
-                    
+
                     for prime in primes
-                        coverage = count(term -> term ∈ remaining_terms && covers(prime, term), terms)
+                        coverage = count(
+                            term -> term ∈ remaining_terms && covers(prime, term),
+                            terms,
+                        )
                         if coverage > max_coverage
                             max_coverage = coverage
                             best_prime = prime
                         end
                     end
-                    
+
                     if best_prime === nothing || max_coverage == 0
                         break
                     end
-                    
+
                     push!(essential, best_prime)
                     filter!(term -> !covers(best_prime, term), remaining_terms)
                 end
-                
+
                 return essential
             end
 
@@ -1432,7 +1475,8 @@ function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
         end
 
         println("\nInitialization")
-        initial_terms = [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
+        initial_terms =
+            [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
         for (i, term) in enumerate(eachcombination(formula))
             if i % 1000 == 0
                 show_progress("Converting terms", i, length(eachcombination(formula)))
@@ -1441,17 +1485,17 @@ function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
                 initial_terms[i][j] = x ? Int8(1) : Int8(0)
             end
         end
-        
+
         if isempty(initial_terms)
             return formula
         end
 
         try
             println("\nStarting DNF minimization")
-            
+
             espresso_terms = modified_espresso(initial_terms)
             final_terms = modified_quine(espresso_terms)
-            
+
             println("\nFinalization")
             result_combinations = Vector{BitVector}()
             for (i, term) in enumerate(final_terms)
@@ -1466,17 +1510,17 @@ function minimizza_dnf(::Val{:pina}, formula::TwoLevelDNFFormula)
                 end
                 push!(result_combinations, combo)
             end
-            
+
             println("\nMinimization completed!")
-            
+
             return TwoLevelDNFFormula(
                 result_combinations,
                 nuberofatoms(formula),
                 eachthresholdsbyfeature(formula),
                 eachatomsbyfeature(formula),
-                final_terms
+                final_terms,
             )
-            
+
         catch e
             @warn "Error during minimization: $e"
             @warn "Stack trace: " * sprint(showerror, e, catch_backtrace())
@@ -1529,12 +1573,12 @@ function minimizza_dnf(::Val{:pina_interrupted}, formula::TwoLevelDNFFormula)
 
             while true
                 found_new = false
-                combined = Set{Tuple{Vector{Int8}, Vector{Int8}}}()
+                combined = Set{Tuple{Vector{Int8},Vector{Int8}}}()
 
                 println("\nEspresso - Iteration $iteration")
 
-                for i in 1:length(terms)
-                    for j in (i + 1):length(terms)
+                for i = 1:length(terms)
+                    for j = (i+1):length(terms)
                         if (terms[i], terms[j]) ∉ combined
                             can_comb, pos = can_combine(terms[i], terms[j])
                             if can_comb
@@ -1593,7 +1637,8 @@ function minimizza_dnf(::Val{:pina_interrupted}, formula::TwoLevelDNFFormula)
                 max_coverage = 0
 
                 for prime in primes
-                    coverage = count(term -> term ∈ remaining_terms && covers(prime, term), terms)
+                    coverage =
+                        count(term -> term ∈ remaining_terms && covers(prime, term), terms)
                     if coverage > max_coverage
                         max_coverage = coverage
                         best_prime = prime
@@ -1612,7 +1657,8 @@ function minimizza_dnf(::Val{:pina_interrupted}, formula::TwoLevelDNFFormula)
         end
 
         println("\nInitialization")
-        initial_terms = [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
+        initial_terms =
+            [Vector{Int8}(undef, length(term)) for term in eachcombination(formula)]
         for (i, term) in enumerate(eachcombination(formula))
             if i % 1000 == 0
                 show_progress("Converting terms", i, length(eachcombination(formula)))
@@ -1654,7 +1700,7 @@ function minimizza_dnf(::Val{:pina_interrupted}, formula::TwoLevelDNFFormula)
                 nuberofatoms(formula),
                 eachthresholdsbyfeature(formula),
                 eachatomsbyfeature(formula),
-                final_terms
+                final_terms,
             )
 
         catch e
@@ -1670,10 +1716,8 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
     ########################################################################
     # 1) Original terms in 0/1 format to guarantee the same coverage
     ########################################################################
-    original_terms_bit = [
-        Vector{Int8}([b ? 1 : 0 for b in combo])
-        for combo in eachcombination(formula)
-    ]
+    original_terms_bit =
+        [Vector{Int8}([b ? 1 : 0 for b in combo]) for combo in eachcombination(formula)]
 
     ########################################################################
     # 2) Minimization with Espresso
@@ -1685,8 +1729,8 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
     ########################################################################
     espresso_terms = if isempty(espresso_result.prime_mask)
         [
-            Vector{Int8}([bit ? 1 : 0 for bit in combo])
-            for combo in eachcombination(espresso_result)
+            Vector{Int8}([bit ? 1 : 0 for bit in combo]) for
+            combo in eachcombination(espresso_result)
         ]
     else
         [Vector{Int8}(mask) for mask in espresso_result.prime_mask]
@@ -1730,8 +1774,8 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
         used = fill(false, length(implicants))
 
         # Try to combine each pair
-        for i in 1:length(implicants)-1
-            for j in i+1:length(implicants)
+        for i = 1:(length(implicants)-1)
+            for j = (i+1):length(implicants)
                 if can_combine(implicants[i], implicants[j])
                     push!(new_ones, combine(implicants[i], implicants[j]))
                     used[i] = true
@@ -1741,7 +1785,7 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
         end
 
         # Add uncombined ones
-        for i in 1:length(implicants)
+        for i = 1:length(implicants)
             if !used[i]
                 push!(new_ones, implicants[i])
             end
@@ -1762,7 +1806,7 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
     ########################################################################
     function quine_minimum_coverage(
         orig_terms::Vector{Vector{Int8}},
-        prime_impls::Vector{Vector{Int8}}
+        prime_impls::Vector{Vector{Int8}},
     )
         if isempty(prime_impls)
             return Vector{Vector{Int8}}()
@@ -1779,15 +1823,15 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
         end
 
         coverage = falses(length(prime_impls), length(orig_terms))
-        for i in 1:length(prime_impls)
-            for j in 1:length(orig_terms)
+        for i = 1:length(prime_impls)
+            for j = 1:length(orig_terms)
                 coverage[i, j] = covers(prime_impls[i], orig_terms[j])
             end
         end
 
         # Find essential prime implicants
         selected = Set{Int}()
-        for j in 1:size(coverage, 2)
+        for j = 1:size(coverage, 2)
             covering = findall(coverage[:, j])
             if length(covering) == 1
                 push!(selected, covering[1])
@@ -1796,7 +1840,7 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
 
         covered = falses(size(coverage, 2))
         for i in selected
-            for j in 1:size(coverage, 2)
+            for j = 1:size(coverage, 2)
                 if coverage[i, j]
                     covered[j] = true
                 end
@@ -1807,7 +1851,7 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
         while !isempty(uncovered)
             best_prime = 0
             best_score = 0
-            for i in 1:length(prime_impls)
+            for i = 1:length(prime_impls)
                 if i ∉ selected
                     c = count(j -> coverage[i, j], uncovered)
                     if c > best_score
@@ -1845,11 +1889,11 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
             newset = Set{Vector{Int8}}()
             used = fill(false, length(implicants))
 
-            for i in 1:length(implicants)-1
+            for i = 1:(length(implicants)-1)
                 if used[i]
                     continue
                 end
-                for j in i+1:length(implicants)
+                for j = (i+1):length(implicants)
                     if used[j]
                         continue
                     end
@@ -1876,7 +1920,11 @@ function minimizza_dnf(::Val{:espresso_quine}, formula::TwoLevelDNFFormula)
         return implicants
     end
 
-    function unify_entire_feature(c1::Vector{Int8}, c2::Vector{Int8}, formula::TwoLevelDNFFormula)
+    function unify_entire_feature(
+        c1::Vector{Int8},
+        c2::Vector{Int8},
+        formula::TwoLevelDNFFormula,
+    )
         diffpos = Int[]
         for k in eachindex(c1)
             if c1[k] != c2[k]
@@ -1975,10 +2023,8 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
     ########################################################################
     # 1) Original terms in 0/1 format to guarantee the same coverage
     ########################################################################
-    original_terms_bit = [
-        Vector{Int8}([b ? 1 : 0 for b in combo])
-        for combo in eachcombination(formula)
-    ]
+    original_terms_bit =
+        [Vector{Int8}([b ? 1 : 0 for b in combo]) for combo in eachcombination(formula)]
 
     ########################################################################
     # 2) Minimization with Espresso
@@ -1990,8 +2036,8 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
     ########################################################################
     espresso_terms = if isempty(espresso_result.prime_mask)
         [
-            Vector{Int8}([bit ? 1 : 0 for bit in combo])
-            for combo in eachcombination(espresso_result)
+            Vector{Int8}([bit ? 1 : 0 for bit in combo]) for
+            combo in eachcombination(espresso_result)
         ]
     else
         [Vector{Int8}(mask) for mask in espresso_result.prime_mask]
@@ -2035,8 +2081,8 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
         used = fill(false, length(implicants))
 
         # Try to combine each pair
-        for i in 1:length(implicants)-1
-            for j in i+1:length(implicants)
+        for i = 1:(length(implicants)-1)
+            for j = (i+1):length(implicants)
                 if can_combine(implicants[i], implicants[j])
                     push!(new_ones, combine(implicants[i], implicants[j]))
                     used[i] = true
@@ -2046,7 +2092,7 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
         end
 
         # Add uncombined ones
-        for i in 1:length(implicants)
+        for i = 1:length(implicants)
             if !used[i]
                 push!(new_ones, implicants[i])
             end
@@ -2067,7 +2113,7 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
     ########################################################################
     function quine_minimum_coverage(
         orig_terms::Vector{Vector{Int8}},
-        prime_impls::Vector{Vector{Int8}}
+        prime_impls::Vector{Vector{Int8}},
     )
         if isempty(prime_impls)
             return Vector{Vector{Int8}}()
@@ -2084,15 +2130,15 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
         end
 
         coverage = falses(length(prime_impls), length(orig_terms))
-        for i in 1:length(prime_impls)
-            for j in 1:length(orig_terms)
+        for i = 1:length(prime_impls)
+            for j = 1:length(orig_terms)
                 coverage[i, j] = covers(prime_impls[i], orig_terms[j])
             end
         end
 
         # Find essential prime implicants
         selected = Set{Int}()
-        for j in 1:size(coverage, 2)
+        for j = 1:size(coverage, 2)
             covering = findall(coverage[:, j])
             if length(covering) == 1
                 push!(selected, covering[1])
@@ -2101,7 +2147,7 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
 
         covered = falses(size(coverage, 2))
         for i in selected
-            for j in 1:size(coverage, 2)
+            for j = 1:size(coverage, 2)
                 if coverage[i, j]
                     covered[j] = true
                 end
@@ -2112,7 +2158,7 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
         while !isempty(uncovered)
             best_prime = 0
             best_score = 0
-            for i in 1:length(prime_impls)
+            for i = 1:length(prime_impls)
                 if i ∉ selected
                     c = count(j -> coverage[i, j], uncovered)
                     if c > best_score
@@ -2154,11 +2200,11 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
             used = fill(false, length(implicants))
 
             # Try to unify pairs
-            for i in 1:length(implicants)-1
+            for i = 1:(length(implicants)-1)
                 if used[i]
                     continue
                 end
-                for j in i+1:length(implicants)
+                for j = (i+1):length(implicants)
                     if used[j]
                         continue
                     end
@@ -2195,7 +2241,7 @@ function minimizza_dnf(::Val{:espresso_quine_2}, formula::TwoLevelDNFFormula)
     function unify_entire_feature(
         c1::Vector{Int8},
         c2::Vector{Int8},
-        formula::TwoLevelDNFFormula
+        formula::TwoLevelDNFFormula,
     )
         # 1) Understand how many features the two cubes differ on.
         #    If they differ on more than 1 feature, => nothing.
@@ -2328,10 +2374,8 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
     ########################################################################
     # 1) Original terms in 0/1 format to guarantee the same coverage
     ########################################################################
-    original_terms_bit = [
-        Vector{Int8}([b ? 1 : 0 for b in combo])
-        for combo in eachcombination(formula)
-    ]
+    original_terms_bit =
+        [Vector{Int8}([b ? 1 : 0 for b in combo]) for combo in eachcombination(formula)]
 
     ########################################################################
     # 2) Minimization with Espresso (initial step)
@@ -2344,8 +2388,8 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
     ########################################################################
     espresso_terms = if isempty(espresso_result.prime_mask)
         [
-            Vector{Int8}([bit ? 1 : 0 for bit in combo])
-            for combo in eachcombination(espresso_result)
+            Vector{Int8}([bit ? 1 : 0 for bit in combo]) for
+            combo in eachcombination(espresso_result)
         ]
     else
         [Vector{Int8}(mask) for mask in espresso_result.prime_mask]
@@ -2393,8 +2437,8 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
         used = fill(false, length(implicants))
 
         # Try to combine each pair
-        for i in 1:length(implicants)-1
-            for j in i+1:length(implicants)
+        for i = 1:(length(implicants)-1)
+            for j = (i+1):length(implicants)
                 if can_combine(implicants[i], implicants[j])
                     new_cube = combine(implicants[i], implicants[j])
 
@@ -2413,7 +2457,7 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
         end
 
         # Add the uncombined ones
-        for i in 1:length(implicants)
+        for i = 1:length(implicants)
             if !used[i]
                 push!(new_ones, implicants[i])
             end
@@ -2434,7 +2478,7 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
     ########################################################################
     function quine_minimum_coverage(
         orig_terms::Vector{Vector{Int8}},
-        prime_impls::Vector{Vector{Int8}}
+        prime_impls::Vector{Vector{Int8}},
     )
         if isempty(prime_impls)
             return Vector{Vector{Int8}}()
@@ -2451,15 +2495,15 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
         end
 
         coverage = falses(length(prime_impls), length(orig_terms))
-        for i in 1:length(prime_impls)
-            for j in 1:length(orig_terms)
+        for i = 1:length(prime_impls)
+            for j = 1:length(orig_terms)
                 coverage[i, j] = covers(prime_impls[i], orig_terms[j])
             end
         end
 
         # Find essential prime implicants
         selected = Set{Int}()
-        for j in 1:size(coverage, 2)
+        for j = 1:size(coverage, 2)
             covering = findall(coverage[:, j])
             if length(covering) == 1
                 push!(selected, covering[1])
@@ -2468,7 +2512,7 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
 
         covered = falses(size(coverage, 2))
         for i in selected
-            for j in 1:size(coverage, 2)
+            for j = 1:size(coverage, 2)
                 if coverage[i, j]
                     covered[j] = true
                 end
@@ -2479,7 +2523,7 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
         while !isempty(uncovered)
             best_prime = 0
             best_score = 0
-            for i in 1:length(prime_impls)
+            for i = 1:length(prime_impls)
                 if i ∉ selected
                     c = count(j -> coverage[i, j], uncovered)
                     if c > best_score
@@ -2513,11 +2557,11 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
             newset = Set{Vector{Int8}}()
             used = fill(false, length(implicants))
 
-            for i in 1:length(implicants)-1
+            for i = 1:(length(implicants)-1)
                 if used[i]
                     continue
                 end
-                for j in i+1:length(implicants)
+                for j = (i+1):length(implicants)
                     if used[j]
                         continue
                     end
@@ -2549,9 +2593,9 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
     end
 
     function unify_entire_feature(
-        c1::Vector{Int8}, 
-        c2::Vector{Int8}, 
-        formula::TwoLevelDNFFormula
+        c1::Vector{Int8},
+        c2::Vector{Int8},
+        formula::TwoLevelDNFFormula,
     )
         diffpos = Int[]
         for k in eachindex(c1)
@@ -2633,7 +2677,8 @@ function minimizza_dnf(::Val{:espresso_quine_pp}, formula::TwoLevelDNFFormula)
 
     # 4) POSSIBLE check for "residual tautology"
     # If there is exactly 1 cube and it's all -1, discard it:
-    if length(final_coverage_unified) == 1 && all(x -> x == Int8(-1), final_coverage_unified[1])
+    if length(final_coverage_unified) == 1 &&
+       all(x -> x == Int8(-1), final_coverage_unified[1])
         @warn "minimizza_dnf: found 1 completely -1 cube (tautology). Forcibly removing it!"
         final_coverage_unified = Vector{Vector{Int8}}()  # e.g. empty formula ("false")
         # Or you could go back to prime implicants, etc. Depends on your logic.

@@ -37,29 +37,29 @@ tasks = begin
     ks = collect(keys(inner))
     if length(ARGS) == 0
         [
-            [(k,:rantic) for k in ks]...,
-            [(k,:increment) for k in ks]...,
-            [(k,:genetic) for k in ks]...,
+            [(k, :rantic) for k in ks]...,
+            [(k, :increment) for k in ks]...,
+            [(k, :genetic) for k in ks]...,
         ]
     else
         # Tasks
-        availabletasks = filter(a -> a ∈ ["T1","B1"], ARGS)
+        availabletasks = filter(a -> a ∈ ["T1", "B1"], ARGS)
         @assert length(availabletasks) != 0 "At least one of the passed arguments is " *
-            "unknown, ARGS: $(ARGS)"
+                                            "unknown, ARGS: $(ARGS)"
 
-        availablepolicies = filter(p -> p ∈ ["rantic","increment","genetic"], ARGS)
+        availablepolicies = filter(p -> p ∈ ["rantic", "increment", "genetic"], ARGS)
 
         if length(availablepolicies) == 0
             [
-                [(k,:rantic) for k in ks]...,
-                [(k,:increment) for k in ks]...,
-                [(k,:genetic) for k in ks]...,
+                [(k, :rantic) for k in ks]...,
+                [(k, :increment) for k in ks]...,
+                [(k, :genetic) for k in ks]...,
             ]
         else
             tasks = []
             for p in availablepolicies
                 for t in availabletasks
-                    push!(tasks, (t,:p))
+                    push!(tasks, (t, :p))
                 end
             end
             tasks
@@ -72,12 +72,12 @@ checkpoint_stdout("Chosen tasks: $(tasks)")
 # Global variables
 #tablesforest = nothing
 
-for (task,policy) in tasks
+for (task, policy) in tasks
     checkpoint_stdout("Running Task $(task) with Policy $(policy)")
 
     rng = MersenneTwister(1)
 
-    isprop, isspatial, models, dataset, nametask =  inner["$(task-policy)"]
+    isprop, isspatial, models, dataset, nametask = inner["$(task-policy)"]
 
     # Path to save models and corresponding csv file
     father_dir = "/home/lele7x/results9/rule-extraction/pruning/"
@@ -95,16 +95,16 @@ for (task,policy) in tasks
     _alphabet = @time SoleData.alphabet(X)
     println("Extracting Classes in ...")
     _classes = @time sort(unique(Y))
-    memostruct = [ThreadSafeDict{SyntaxTree,Vector{worldtype(X)}}() for i in 1:ninstances(X)]
+    memostruct = [ThreadSafeDict{SyntaxTree,Vector{worldtype(X)}}() for i = 1:ninstances(X)]
 
-    @showprogress "Computing Forests..." for (i,m) in enumerate(models)
+    @showprogress "Computing Forests..." for (i, m) in enumerate(models)
 
         modelpath, nontest_ids, test_ids = m
 
         println("Computing Testing Dataset in ...")
-        X_test,Y_test = @time slicedataset((X,Y), test_ids; return_view = true)
+        X_test, Y_test = @time slicedataset((X, Y), test_ids; return_view = true)
         println("Computing Training Dataset in ...")
-        X_nontest,Y_nontest = @time slicedataset((X,Y), nontest_ids; return_view = true)
+        X_nontest, Y_nontest = @time slicedataset((X, Y), nontest_ids; return_view = true)
 
         memostruct_test = @view memostruct[test_ids]
         memostruct_nontest = @view memostruct[nontest_ids]
@@ -125,12 +125,12 @@ for (task,policy) in tasks
             policy,
             X_nontest,
             Y_nontest;
-            step=10,
-            nforests=1000,
-            npopulation=10,
-            bounds=[[0,1],[100,10]],
-            rng=rng,
-            fileplots=plotpath,
+            step = 10,
+            nforests = 1000,
+            npopulation = 10,
+            bounds = [[0, 1], [100, 10]],
+            rng = rng,
+            fileplots = plotpath,
         )
 
         println("\nSaving resulting model in ...")
@@ -144,25 +144,31 @@ for (task,policy) in tasks
         # Metrics: kappa, accuracy, sensitivity, specificity
 
         # Original DForest
-        cmorigforest = finalmetrics(model,X_test,Y_test; suppress_parity_warning=true)
+        cmorigforest = finalmetrics(model, X_test, Y_test; suppress_parity_warning = true)
         # Pruning DForest
-        cmsubforest = finalmetrics(subforest,X_test,Y_test; suppress_parity_warning=true)
+        cmsubforest =
+            finalmetrics(subforest, X_test, Y_test; suppress_parity_warning = true)
         # Average DTree
         cmavgsubforest = begin
             cmalls = nothing
 
             for tree in ModalDecisionTrees.trees(subforest)
-                currentcm = finalmetrics(tree; X=X_test, Y=Y_test, suppress_parity_warning=true)
+                currentcm = finalmetrics(
+                    tree;
+                    X = X_test,
+                    Y = Y_test,
+                    suppress_parity_warning = true,
+                )
 
                 cmalls = isnothing(cmalls) ? currentcm' : [cmalls; currentcm']
             end
 
-            mean(cmalls, dims=1)
+            mean(cmalls, dims = 1)
         end
 
         df = DataFrame(
-            Task = ["$(data)" for _ in 1:3],
-            Type = ["$(isstatic ? "static" : "modal")" for _ in 1:3],
+            Task = ["$(data)" for _ = 1:3],
+            Type = ["$(isstatic ? "static" : "modal")" for _ = 1:3],
             Forest = ["Original", "Subforest", "Avgforest"],
             Path = [modelpath, submodelpath, "Nothing"],
             NTrees = [
@@ -177,7 +183,7 @@ for (task,policy) in tasks
         )
         #push!(tablesforest,df)
 
-        CSV.write(csvpath, df, append=true)
+        CSV.write(csvpath, df, append = true)
         println("\nResults for task $(data) for policy $(policy):")
         println(df)
     end

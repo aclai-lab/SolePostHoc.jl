@@ -89,7 +89,7 @@ function concat_results(
             Vector{TritVector}(combinations),
             num_atoms,
             thresholds_by_feature,
-            atoms_by_feature
+            atoms_by_feature,
         )
     end
     return res
@@ -97,13 +97,13 @@ end
 
 function concat_results(results::Any, my_atoms::Vector)
     num_atoms = length(my_atoms)
-    
+
     # Handle tuple case 
     if results isa Tuple
         results_dict, _ = results  # Extract just the dictionary part
         results = results_dict     # Use only the dictionary for conversion
     end
-    
+
     # Convert dictionary to tritvector format
     results = dict_to_tritvector(results, num_atoms)
     res = Dict{Any,TwoLevelDNFFormula}()
@@ -205,4 +205,3 @@ function verify_simplification(original::TwoLevelDNFFormula, simplified::TwoLeve
     @info "Verification complete. Simplified formula is congruent with the original."
     return true
 end
-

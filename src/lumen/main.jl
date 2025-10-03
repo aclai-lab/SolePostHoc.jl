@@ -5,10 +5,10 @@ using Logging, Dates, DataStructures, DataFrames
 using Setfield
 using SoleBase: Label
 using SoleModels
-using SoleModels: DecisionSet  
+using SoleModels: DecisionSet
 using AbstractTrees
 using SoleData
-using SoleData: MultivariateScalarAlphabet, UnivariateScalarAlphabet  
+using SoleData: MultivariateScalarAlphabet, UnivariateScalarAlphabet
 using DecisionTree: load_data, build_forest, apply_forest
 using ModalDecisionTrees, SoleLogics
 using BenchmarkTools, StatProfilerHTML, Profile
@@ -115,7 +115,7 @@ Base.@kwdef struct LumenConfig
     testott = nothing
     alphabetcontroll = nothing
     #use_listrules::Bool = false
-    
+
     # Custom constructor with validation - ensures configuration integrity
     # This approach catches configuration errors at creation time rather than runtime
     function LumenConfig(args...)
@@ -198,10 +198,10 @@ struct LumenResult
     decision_set::DecisionSet  # Primary output: minimized logical rules
     info::NamedTuple          # Extensible metadata container
     processing_time::Float64   # Performance metric in seconds
-    
+
     # Full constructor - used when all information is available
     LumenResult(ds, info, time) = new(ds, info, time)
-    
+
     # Convenience constructor - for cases where only rules matter
     # Uses empty NamedTuple (;) and zero time as sensible defaults
     LumenResult(ds) = new(ds, (;), 0.0)
@@ -269,29 +269,35 @@ This structure makes it easy to add new validation rules as the algorithm evolve
 function validate_config(config::LumenConfig)
     # Validate coverage parameters - must be positive and ≤ 1.0
     # These parameters control the proportion of instances that must be covered by rules
-    if config.vertical <= 0.0 || config.vertical > 1.0 || 
-       config.horizontal <= 0.0 || config.horizontal > 1.0
-        throw(ArgumentError(
-            "vertical and horizontal parameters must be in range (0.0, 1.0]. " *
-            "Got vertical=$(config.vertical), horizontal=$(config.horizontal). " *
-            "These parameters control rule coverage and must be meaningful proportions."
-        ))
+    if config.vertical <= 0.0 ||
+       config.vertical > 1.0 ||
+       config.horizontal <= 0.0 ||
+       config.horizontal > 1.0
+        throw(
+            ArgumentError(
+                "vertical and horizontal parameters must be in range (0.0, 1.0]. " *
+                "Got vertical=$(config.vertical), horizontal=$(config.horizontal). " *
+                "These parameters control rule coverage and must be meaningful proportions.",
+            ),
+        )
     end
-    
+
     # Validate minimization scheme - only certain algorithms are implemented
     # Each algorithm has different trade-offs in speed vs. minimization quality
     valid_schemes = (:mitespresso, :boom, :abc)
     if config.minimization_scheme ∉ valid_schemes
-        throw(ArgumentError(
-            "minimization_scheme must be one of: $(valid_schemes). " *
-            "Got: $(config.minimization_scheme). " *
-            "Each scheme offers different performance characteristics:\n" *
-            "  :mitespresso - balanced speed/quality for most cases\n" *
-            "  :boom - aggressive minimization for complex formulas\n" *
-            "  :abc - basic minimization by Berkeley framework, fastest but less thorough"
-        ))
+        throw(
+            ArgumentError(
+                "minimization_scheme must be one of: $(valid_schemes). " *
+                "Got: $(config.minimization_scheme). " *
+                "Each scheme offers different performance characteristics:\n" *
+                "  :mitespresso - balanced speed/quality for most cases\n" *
+                "  :boom - aggressive minimization for complex formulas\n" *
+                "  :abc - basic minimization by Berkeley framework, fastest but less thorough",
+            ),
+        )
     end
-    
+
     # Additional consistency checks could be added here
     # For example, warning about potentially problematic parameter combinations
     if config.ott_mode && config.controllo
@@ -404,7 +410,7 @@ flexible rule representation.
 - Space complexity: O(k) where k is the number of leaves (rules)
 - Optimized for single-tree scenarios without ensemble overhead
 """
-function extract_rules(model, ::StandardExtraction; use_shortforms=true)
+function extract_rules(model, ::StandardExtraction; use_shortforms = true)
     return listrules(model; use_shortforms)
 end
 
@@ -443,11 +449,11 @@ The method handles the common case where `listrules` returns nested vectors
 by flattening them with `reduce(vcat, rs)`. This ensures consistent output
 format regardless of the specific ensemble implementation.
 """
-function extract_rules(model, ::EnsembleExtraction; use_shortforms=true)
+function extract_rules(model, ::EnsembleExtraction; use_shortforms = true)
     # Extract rules from each tree in the ensemble
     # Using list comprehension for clarity and potential parallelization
     rs = unique([listrules(tree; use_shortforms) for tree in SoleModels.models(model)])
-    
+
     # Handle nested vector structures that some ensemble types produce
     # The ternary operator provides robust handling of different return types
     return rs isa Vector{<:Vector{<:Any}} ? reduce(vcat, rs) : rs
@@ -494,7 +500,7 @@ rules = extract_rules(forest_model)
 # Automatic strategy selection handles both cases correctly
 ```
 """
-function extract_rules(model; use_shortforms=true)
+function extract_rules(model; use_shortforms = true)
     # Automatically select strategy based on model type
     # This design decision centralizes the type-checking logic
     strategy = isensemble(model) ? EnsembleExtraction() : StandardExtraction()
@@ -610,40 +616,44 @@ function extract_atoms(model, filteralphabetcallback)
     # The 'false' parameter requests the raw alphabet without preprocessing
     all_atoms = collect(atoms(SoleModels.alphabet(model, false)))
     num_all_atoms = length(all_atoms)
-    
+
     # Step 2: Remove duplicate atoms for efficiency
     # Decision trees often reuse the same conditions across different branches
     my_atoms = unique(all_atoms)
-    
+
     # Step 3: Validate feature indexing scheme
     # Extract the maximum feature index to determine the feature space size
     n_features = maximum(atom.value.metacond.feature.i_variable for atom in my_atoms)
     if !isa(n_features, Integer)
-        throw(ArgumentError(
-            "Symbolic feature names are not supported. " *
-            "All features must be indexed with integers. " *
-            "Found feature type: $(typeof(n_features)). " *
-            "Consider preprocessing your model to use integer feature indices."
-        ))
+        throw(
+            ArgumentError(
+                "Symbolic feature names are not supported. " *
+                "All features must be indexed with integers. " *
+                "Found feature type: $(typeof(n_features)). " *
+                "Consider preprocessing your model to use integer feature indices.",
+            ),
+        )
     end
-    
+
     # Step 4: Build and filter the logical alphabet
     # The alphabet defines the vocabulary available for constructing logical formulas
     my_alphabet = filteralphabetcallback(process_alphabet(my_atoms, n_features))
-    
+
     # Step 5: Validate supported operators
     # Currently only '<' comparison is fully implemented and tested
     supported_operators = SoleData.test_operator.(subalphabets(my_alphabet))
     if !all(x -> (x == (<)), supported_operators)
         unsupported = unique(filter(x -> x != (<), supported_operators))
-        throw(ArgumentError(
-            "Only '<' operator is currently supported. " *
-            "Found unsupported operators: $(unsupported). " *
-            "This limitation may be addressed in future versions. " *
-            "Consider preprocessing your model to use only '<' conditions."
-        ))
+        throw(
+            ArgumentError(
+                "Only '<' operator is currently supported. " *
+                "Found unsupported operators: $(unsupported). " *
+                "This limitation may be addressed in future versions. " *
+                "Consider preprocessing your model to use only '<' conditions.",
+            ),
+        )
     end
-    
+
     return num_all_atoms, my_atoms, my_alphabet
 end
 
@@ -770,18 +780,24 @@ function generate_combinations(model, alphabet, atoms, vertical, config::LumenCo
         # This mode uses specialized data structures and algorithms
         # to reduce memory footprint while maintaining correctness
         return truth_combinations_ott(
-            model, alphabet, atoms, vertical; 
-            silent=config.silent, 
-            apply_function=config.apply_function
+            model,
+            alphabet,
+            atoms,
+            vertical;
+            silent = config.silent,
+            apply_function = config.apply_function,
         )
     else
         # Standard processing for general use cases
         # This mode prioritizes simplicity and maintainability
         # while providing good performance for typical problems
         return truth_combinations(
-            model, alphabet, atoms, vertical; 
-            silent=config.silent, 
-            apply_function=config.apply_function
+            model,
+            alphabet,
+            atoms,
+            vertical;
+            silent = config.silent,
+            apply_function = config.apply_function,
         )
     end
 end
@@ -938,11 +954,11 @@ See also: [`minimize_formula`](@ref), [`create_rule`](@ref), [`LumenConfig`](@re
 function process_rules(combined_results, config::LumenConfig)
     minimized_rules = Rule[]
     vect_pre_post_number = Vector{Tuple{Int,Int}}()
-    original_formulas = config.return_info ? Dict{Any, Any}() : nothing
-    
+    original_formulas = config.return_info ? Dict{Any,Any}() : nothing
+
     for (result, formula) in combined_results
         config.silent || println("Performing minimization for: $result")
-        
+
 
         if config.return_info
             original_formulas[result] = formula
@@ -950,19 +966,19 @@ function process_rules(combined_results, config::LumenConfig)
 
         minimized_formula = minimize_formula(formula, config)
         config.silent || println("End of minimization for: $result ")
-        
+
         if should_track_statistics(config.minimization_scheme)
             pre_terms = get_formula_terms(formula)
             post_terms = get_formula_terms(minimized_formula)
             push!(vect_pre_post_number, (pre_terms, post_terms))
             log_minimization_stats(pre_terms, post_terms, config.silent)
         end
-        
+
         try
-            
-            config.silent || println("pre dnf-domain minimized_formula:",minimized_formula)      # this code is usable only if use SoleData `origin/ADD_new_function_refine_dnf` in this moment [20 August 2025]
+
+            config.silent || println("pre dnf-domain minimized_formula:", minimized_formula)      # this code is usable only if use SoleData `origin/ADD_new_function_refine_dnf` in this moment [20 August 2025]
             minimized_formula = SoleData.refine_dnf(minimized_formula)            # TODO EVALUATE IF THIS IS NEEDED IN THIS POSITION OR BEFORE
-            config.silent || println("post dnf-domain minimization:",minimized_formula)              # this code is usable only if use SoleData `origin/ADD_new_function_refine_dnf` in this moment [20 August 2025]
+            config.silent || println("post dnf-domain minimization:", minimized_formula)              # this code is usable only if use SoleData `origin/ADD_new_function_refine_dnf` in this moment [20 August 2025]
 
             rule = create_rule(minimized_formula, result, config)
             config.silent || println("Generated rule: $rule")
@@ -972,7 +988,7 @@ function process_rules(combined_results, config::LumenConfig)
             rethrow(e)
         end
     end
-    
+
     # TODO EVALUATE THIS, IS VERY BUSY
     unminimized_rules = nothing
     if config.return_info && !isempty(original_formulas)
@@ -988,7 +1004,7 @@ function process_rules(combined_results, config::LumenConfig)
         #    end
         #end
     end
-    
+
     return minimized_rules, unminimized_rules, vect_pre_post_number
 end
 
@@ -1126,7 +1142,7 @@ function determine_apply_function(model, config_apply_function)
     if !isnothing(config_apply_function)
         return config_apply_function
     end
-    
+
     # Automatic selection based on model type
     # This type-based dispatch ensures optimal performance for each model category
     return if model isa DT.Ensemble
@@ -1244,7 +1260,7 @@ function minimize_formula(formula, config::LumenConfig)
         vertical = config.vertical,
         horizontal = config.horizontal,
         vetImportance = config.vetImportance,
-        config.minimization_kwargs...     # Forward algorithm-specific parameters
+        config.minimization_kwargs...,     # Forward algorithm-specific parameters
     )
 end
 
@@ -1315,7 +1331,7 @@ function should_track_statistics(scheme::Symbol)
     # Define which algorithms support detailed statistics tracking
     # This list can be extended as new algorithms are added
     return scheme != :espresso  # Espresso is external and provides limited introspection
-    
+
     # Future implementation might include more sophisticated logic:
     # return scheme in (:espresso, :bbbb, :cccc) && detailed_stats_enabled()
 end
@@ -1412,14 +1428,14 @@ function log_minimization_stats(pre_terms, post_terms, silent)
     if !silent
         # Calculate meaningful metrics for user understanding
         reduction = pre_terms - post_terms
-        percentage = reduction > 0 ? round((reduction / pre_terms) * 100, digits=1) : 0.0
-        compression_ratio = post_terms > 0 ? round(pre_terms / post_terms, digits=1) : Inf
-        
+        percentage = reduction > 0 ? round((reduction / pre_terms) * 100, digits = 1) : 0.0
+        compression_ratio = post_terms > 0 ? round(pre_terms / post_terms, digits = 1) : Inf
+
         # Formatted output with clear visual separation
         println("==========================")
         println("Terms before: $pre_terms")
         println("Terms after: $post_terms")
-        
+
         # Additional insights when reduction occurred
         if reduction > 0
             println("Reduction: $reduction terms ($percentage% decrease)")
@@ -1429,7 +1445,7 @@ function log_minimization_stats(pre_terms, post_terms, silent)
         else
             println("No change in formula complexity")
         end
-        
+
         println("==========================")
     end
 end
@@ -1536,15 +1552,15 @@ function create_rule(formula, result, config::LumenConfig)
     if config.minimization_scheme in (:mitespresso, :boom, :abc)
         # String-based processing path for advanced algorithms
         # This path provides maximum flexibility and feature support
-        
+
         # Convert formula to canonical string representation
         # Incorporates horizontal coverage and feature importance
         formula_string = leftmost_disjunctive_form_to_string(
-            formula, 
+            formula,
             1.0, #config.horizontal,  # Controls rule breadth/specificity, TODO: IN FUTURE WE DONT WONT THIS HERE
-            config.vetImportance    # Influences feature prioritization TODO: IDEM "
+            config.vetImportance,    # Influences feature prioritization TODO: IDEM "
         )
-        
+
         # Parse the string representation back to logical formula
         # Custom atom parser handles domain-specific condition formats
         φ = SoleLogics.parseformula(
@@ -1554,9 +1570,9 @@ function create_rule(formula, result, config::LumenConfig)
                     SoleData.ScalarCondition,
                     a;
                     featuretype = SoleData.VariableValue,  # Feature type specification
-                    featvaltype = Real                      # Value type specification
-                )
-            )
+                    featvaltype = Real,                      # Value type specification
+                ),
+            ),
         )
         #@show first(result)
         #@show typeof(first(result))
@@ -1778,59 +1794,66 @@ end
 
 function lumen(model, config::LumenConfig)
     start_time = time()
-    
+
     # Handle special test modes
     if !isnothing(config.testott) || !isnothing(config.alphabetcontroll)
         return handle_test_modes(model, config)
     end
-    
+
     # Determine apply function
     apply_function = determine_apply_function(model, config.apply_function)
     config = @set config.apply_function = apply_function
-    
+
     # Create SOLE model if needed
     sole_model = SoleModels.solemodel(model)
-    
+
     try
         # Step 1: Extract rules
-        config.silent || println("\n$COLORED_TITLE$TITLE\n PART 2.a: STARTER RULESET EXTRACTION  \n$TITLE$RESET")
+        config.silent || println(
+            "\n$COLORED_TITLE$TITLE\n PART 2.a: STARTER RULESET EXTRACTION  \n$TITLE$RESET",
+        )
         ruleset_result = @timed extract_rules(sole_model)
-        config.silent || println("Extracted $(length(ruleset_result.value)) rules in $(ruleset_result.time)s")
-        
+        config.silent || println(
+            "Extracted $(length(ruleset_result.value)) rules in $(ruleset_result.time)s",
+        )
+
         # Step 2: Extract atoms and alphabet
-        config.silent || println("\n$COLORED_TITLE$TITLE\n PART 2.b: ATOM EXTRACTION  \n$TITLE$RESET")
-        num_atoms, atoms, alphabet = extract_atoms(sole_model, config.filteralphabetcallback)
-        config.silent || println("Extracted $(length(atoms)) unique atoms from $num_atoms total")
-        
+        config.silent ||
+            println("\n$COLORED_TITLE$TITLE\n PART 2.b: ATOM EXTRACTION  \n$TITLE$RESET")
+        num_atoms, atoms, alphabet =
+            extract_atoms(sole_model, config.filteralphabetcallback)
+        config.silent ||
+            println("Extracted $(length(atoms)) unique atoms from $num_atoms total")
+
         # Step 3: Generate truth combinations
-        config.silent || println("\n$COLORED_TITLE$TITLE\n PART 3: TABLE GENERATION  \n$TITLE$RESET")
-        results_dict, label_count = generate_combinations(model, alphabet, atoms, config.vertical, config)
-            
+        config.silent ||
+            println("\n$COLORED_TITLE$TITLE\n PART 3: TABLE GENERATION  \n$TITLE$RESET")
+        results_dict, label_count =
+            generate_combinations(model, alphabet, atoms, config.vertical, config)
+
         # Step 4: Process results
         # Modifichiamo questa riga per passare solo il dizionario dei risultati
-        config.silent || println("\n$COLORED_TITLE$TITLE\n PART 4: PROCESS RESULTS \n$TITLE$RESET")
-        combined_results = concat_results(results_dict, atoms)  
+        config.silent ||
+            println("\n$COLORED_TITLE$TITLE\n PART 4: PROCESS RESULTS \n$TITLE$RESET")
+        combined_results = concat_results(results_dict, atoms)
         minimized_rules, unminimized_rules, stats = process_rules(combined_results, config)
-        
+
         # Create result
         ds = DecisionSet(minimized_rules)
         processing_time = time() - start_time
-        
+
         if !config.return_info
             return LumenResult(ds)
         end
-        
-        info = (
-            vectPrePostNumber = stats,
-            processing_time = processing_time
-        )
-        
+
+        info = (vectPrePostNumber = stats, processing_time = processing_time)
+
         if !isnothing(unminimized_rules)
             info = merge(info, (unminimized_ds = DecisionSet(unminimized_rules),))
         end
-        
+
         return LumenResult(ds, info, processing_time)
-        
+
     catch e
         @error "Error in lumen processing" exception=(e, catch_backtrace())
         rethrow(e)
@@ -1847,19 +1870,34 @@ function handle_test_modes(model, config::LumenConfig)
     sole_model = SoleModels.solemodel(model)
     _, atoms, alphabet = extract_atoms(sole_model, config.filteralphabetcallback)
     apply_function = determine_apply_function(model, config.apply_function)
-    
+
     if !isnothing(config.testott)
-        config.silent || println("\n$COLORED_INFO PART 2.d: IS THE OPTIMIZATION VALID? $RESET")
-        testOttt(model, alphabet, atoms, config.vertical; 
-                config.silent, apply_function, config.testott)
+        config.silent ||
+            println("\n$COLORED_INFO PART 2.d: IS THE OPTIMIZATION VALID? $RESET")
+        testOttt(
+            model,
+            alphabet,
+            atoms,
+            config.vertical;
+            config.silent,
+            apply_function,
+            config.testott,
+        )
     end
-    
+
     if !isnothing(config.alphabetcontroll)
         config.silent || println("\n$COLORED_INFO ANALYZE ONLY ALPHABET $RESET")
-        debug_combinations(model, alphabet, atoms, config.vertical; 
-                          config.silent, apply_function, config.alphabetcontroll)
+        debug_combinations(
+            model,
+            alphabet,
+            atoms,
+            config.vertical;
+            config.silent,
+            apply_function,
+            config.alphabetcontroll,
+        )
     end
-    
+
     return nothing, nothing
 end
 
@@ -1869,7 +1907,7 @@ end
 
 # Types
 include("types/trit-vector.jl")
-include("types/balanced-trit-vector.jl") 
+include("types/balanced-trit-vector.jl")
 include("types/balanced-ternary-vector.jl")
 include("types/types.jl")
 

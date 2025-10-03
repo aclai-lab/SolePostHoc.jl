@@ -11,7 +11,7 @@ import SoleModels: listrules
 listrules(m, X::AbstractDataFrame, y, args...; kwargs...) = listrules(m, args...; kwargs...)
 
 # Function mse (from Metrics.jl)
-mse = (y_pred,t_true) -> (sum((y_true .- y_pred).^2) / length(y_true))
+mse = (y_pred, t_true) -> (sum((y_true .- y_pred) .^ 2) / length(y_true))
 
 include("rule-extraction.jl")
 

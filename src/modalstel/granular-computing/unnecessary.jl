@@ -5,7 +5,7 @@ function unnecessary(m::Union{AbstractModel,AbstractSyntaxStructure})
 end
 
 unnecessary(m::Vector{<:Rule}) = unnecessary.(m)
-unnecessary(m::Rule) = Rule(unnecessary(antecedent(m)),consequent(m),info(m))
+unnecessary(m::Rule) = Rule(unnecessary(antecedent(m)), consequent(m), info(m))
 # unneccessary(m::SyntaxTree)
 unnecessary(m::LeftmostLinearForm) = children(m)[end]
 unnecessary(m::Literal) = m
@@ -14,10 +14,7 @@ unnecessary(m::Literal) = m
 ############################################################################################
 ############################################################################################
 
-function convert(
-    tree::DTree,
-    info = (;),
-)
+function convert(tree::DTree, info = (;))
     new_root = convert(ModalDecisionTrees.root(tree))
 
     info = merge(info, SoleModels.info(new_root))
@@ -26,29 +23,24 @@ function convert(
     return DecisionTree(new_root, info)
 end
 
-function convert(
-    tree::DTInternal,
-    info = (;),
-)
+function convert(tree::DTInternal, info = (;))
     f = formula(ModalDecisionTrees.decision(tree))
     p = MultiFormula(i_modality(tree), SyntaxTree(get_atom(f)))
     ◊ = DiamondRelationalConnective{typeof(relation(f))}()
 
-    info = merge(info, (;
-        supporting_labels = ModalDecisionTrees.supp_labels(node),
-    ))
+    info = merge(info, (; supporting_labels = ModalDecisionTrees.supp_labels(node),))
 
     return SoleModels.Branch(◊p, convert(left(node), (;)), convert(right(node), (;)), info)
 end
 
-function convert(
-    tree::DTLeaf,
-    info = (;),
-)
-    info = merge(info, (;
-        supporting_labels      = ModalDecisionTrees.supp_labels(tree),
-        supporting_predictions = ModalDecisionTrees.predictions(tree),
-    ))
+function convert(tree::DTLeaf, info = (;))
+    info = merge(
+        info,
+        (;
+            supporting_labels = ModalDecisionTrees.supp_labels(tree),
+            supporting_predictions = ModalDecisionTrees.predictions(tree),
+        ),
+    )
 
     return SoleModels.ConstantModel(ModalDecisionTrees.prediction(tree), info)
 end

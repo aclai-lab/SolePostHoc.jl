@@ -7,26 +7,26 @@ using ModalDecisionTrees: DForest, apply
 ################################# UTILITIES ################################################
 ############################################################################################
 
-function from_to(n::Int; rng::AbstractRNG=default_rng(), one=false)
+function from_to(n::Int; rng::AbstractRNG = default_rng(), one = false)
     from, to = begin
         if one
-            idx = rand(rng,1:n)
-            (idx,idx)
+            idx = rand(rng, 1:n)
+            (idx, idx)
         else
-            rand(rng,1:n,2)
+            rand(rng, 1:n, 2)
         end
     end
-    return from > to ? (to,from) : (from,to)
+    return from > to ? (to, from) : (from, to)
 end
 
-default_rng(k::Int=1) = MersenneTwister(k)
+default_rng(k::Int = 1) = MersenneTwister(k)
 
-function combining(v1::Vector,v2::Vector)
+function combining(v1::Vector, v2::Vector)
     @assert length(v1) == length(v2) "Two vector must have same length"
     v = []
-    for i in 1:length(v1)
-        push!(v,v1[i])
-        push!(v,v2[i])
+    for i = 1:length(v1)
+        push!(v, v1[i])
+        push!(v, v2[i])
     end
 
     return v
@@ -41,41 +41,27 @@ nleaves(m::LeafModel) = 1
 
 nrules(m::DecisionList; kwargs...) = length(rulebase(m)) + 1
 
-function kappa(
-    m::AbstractModel,
-    X,
-    Y::AbstractVector{<:Label};
-    kwargs...
-)
+function kappa(m::AbstractModel, X, Y::AbstractVector{<:Label}; kwargs...)
     Y_pred = apply(m, X; kwargs...)
     return MLJ.Kappa()(Y_pred, Y)*100
 end
 
-global ApplyMemoStructure = Dict{Tuple{Union{DecisionForest,DecisionList},Any},Vector{Label}}()
+global ApplyMemoStructure =
+    Dict{Tuple{Union{DecisionForest,DecisionList},Any},Vector{Label}}()
 
-function accuracy(
-    m::AbstractModel,
-    X,
-    Y::AbstractVector{<:Label};
-    kwargs...
-)
+function accuracy(m::AbstractModel, X, Y::AbstractVector{<:Label}; kwargs...)
     Y_pred = begin
         if haskey(ApplyMemoStructure, (m, X))
-            ApplyMemoStructure[(m,X)]
+            ApplyMemoStructure[(m, X)]
         else
-            ApplyMemoStructure[(m,X)] = apply(m, X; kwargs...)
+            ApplyMemoStructure[(m, X)] = apply(m, X; kwargs...)
         end
     end
     return (MLJ.Accuracy()(Y_pred, Y))*100
 end
 
-function _error(
-    m::AbstractModel,
-    X,
-    Y::AbstractVector{<:Label};
-    kwargs...
-)
-    return (100 - accuracy(m,X,Y; kwargs...))
+function _error(m::AbstractModel, X, Y::AbstractVector{<:Label}; kwargs...)
+    return (100 - accuracy(m, X, Y; kwargs...))
 end
 
 function nsymbolscomplexity(m::Rule; kwargs...)
@@ -90,12 +76,8 @@ function symbolnumber(m::DecisionList; kwargs...)
     return length(formulas) == 0 ? 0 : sum(ntokens.(formulas))
 end
 
-function meandelay(
-    m::DecisionList,
-    X;
-    kwargs...
-)
-    newdl = apply!(m, X; compute_metrics=true, kwargs...)
+function meandelay(m::DecisionList, X; kwargs...)
+    newdl = apply!(m, X; compute_metrics = true, kwargs...)
 
     return meandelaydl(newdl)
 end
@@ -106,7 +88,7 @@ function absnrulescomplexity(m::DecisionList, Y::AbstractVector{<:Label}; kwargs
     #abs(nclasses - nrules(m))
     #
     # abs(log(nclasses,nrules(m)) - 1)*100
-    return abs(log(nclasses,nrls) - 1)*exp((nclasses)^2/nrls)/2
+    return abs(log(nclasses, nrls) - 1)*exp((nclasses)^2/nrls)/2
 end
 
 function nrulescomplexity(m::DecisionList, Y::AbstractVector{<:Label}; kwargs...)
@@ -132,17 +114,19 @@ function finalmetrics(
     X,
     Y::AbstractVector{<:Label};
     finalmetricsfuns::Vector{<:Function} = [
-        kappa, _error, nrules, symbolnumber, meandelay, absnrulescomplexity,
+        kappa,
+        _error,
+        nrules,
+        symbolnumber,
+        meandelay,
+        absnrulescomplexity,
     ],
     originalmodel::DecisionForest,
     kwargs...,
 )
     dlstrees = extract_decision_lists(originalmodel, (X, Y))
 
-    return [
-        mean(nleaves.(m)),
-        finalmetrics(dlstrees,X,Y)...,
-    ]
+    return [mean(nleaves.(m)), finalmetrics(dlstrees, X, Y)...]
 end
 
 function finalmetrics(
@@ -150,7 +134,12 @@ function finalmetrics(
     X,
     Y::AbstractVector{<:Label};
     finalmetricsfuns::Vector{<:Function} = [
-        kappa, _error, nrules, symbolnumber, meandelay, absnrulescomplexity
+        kappa,
+        _error,
+        nrules,
+        symbolnumber,
+        meandelay,
+        absnrulescomplexity,
     ],
     kwargs...,
 )
@@ -158,9 +147,9 @@ function finalmetrics(
 
     Y_pred = begin
         if haskey(ApplyMemoStructure, (m, X))
-            ApplyMemoStructure[(m,X)]
+            ApplyMemoStructure[(m, X)]
         else
-            ApplyMemoStructure[(m,X)] = apply(m, X; kwargs...)
+            ApplyMemoStructure[(m, X)] = apply(m, X; kwargs...)
         end
     end
 
@@ -179,15 +168,20 @@ function finalmetrics(
     X,
     Y::AbstractVector{<:Label};
     finalmetricsfuns::Vector{<:Function} = [
-        kappa, _error, nrules, symbolnumber, meandelay, absnrulescomplexity,
+        kappa,
+        _error,
+        nrules,
+        symbolnumber,
+        meandelay,
+        absnrulescomplexity,
     ],
-    kwargs...
+    kwargs...,
 )
     Y_pred = map(i->begin
         if haskey(ApplyMemoStructure, (i, X))
-            ApplyMemoStructure[(i,X)]
+            ApplyMemoStructure[(i, X)]
         else
-            ApplyMemoStructure[(i,X)] = apply(i, X; kwargs...)
+            ApplyMemoStructure[(i, X)] = apply(i, X; kwargs...)
         end
         #apply(i, X; kwargs...)
     end, m)
@@ -208,21 +202,17 @@ function finalmetrics(
     X,
     Y::AbstractVector{<:Label};
     finalmetricsfuns::Vector{<:Function} = [nleaves, kappa, _error],
-    kwargs...
+    kwargs...,
 )
     Y_pred = begin
         if haskey(ApplyMemoStructure, (m, X))
-            ApplyMemoStructure[(m,X)]
+            ApplyMemoStructure[(m, X)]
         else
-            ApplyMemoStructure[(m,X)] = apply(m, X; kwargs...)
+            ApplyMemoStructure[(m, X)] = apply(m, X; kwargs...)
         end
     end
 
-    return [
-        nleaves(m),
-        (MLJ.Kappa()(Y_pred, Y)*100),
-        100-((MLJ.Accuracy()(Y_pred, Y))*100),
-    ]
+    return [nleaves(m), (MLJ.Kappa()(Y_pred, Y)*100), 100-((MLJ.Accuracy()(Y_pred, Y))*100)]
 end
 
 ############################################################################################
@@ -234,7 +224,7 @@ function kappa(
     X,
     Y::AbstractVector{<:Label};
     suppress_parity_warning = false,
-    kwargs...
+    kwargs...,
 ) where {M<:Union{DTree,DForest}}
     Y_pred = begin
         if m isa DTree
@@ -252,13 +242,13 @@ function accuracy(
     X,
     Y::AbstractVector{<:Label};
     suppress_parity_warning = false,
-    kwargs...
+    kwargs...,
 ) where {M<:Union{DTree,DForest}}
     Y_pred = begin
         if m isa DTree
-            ModalDecisionTrees.apply(m,X)
+            ModalDecisionTrees.apply(m, X)
         else
-            ModalDecisionTrees.apply(m,X; suppress_parity_warning=suppress_parity_warning)
+            ModalDecisionTrees.apply(m, X; suppress_parity_warning = suppress_parity_warning)
         end
     end
 
@@ -270,11 +260,12 @@ function _error(
     X,
     Y::AbstractVector{<:Label};
     suppress_parity_warning = false,
-    kwargs...
+    kwargs...,
 ) where {M<:Union{DTree,DForest}}
-    return (100 - accuracy(
-        m,X,Y; suppress_parity_warning=suppress_parity_warning, kwargs...,
-    ))
+    return (
+        100 -
+        accuracy(m, X, Y; suppress_parity_warning = suppress_parity_warning, kwargs...)
+    )
 end
 
 function finalmetrics(
@@ -282,26 +273,26 @@ function finalmetrics(
     X,
     Y::AbstractVector{<:Label};
     suppress_parity_warning = false,
-    kwargs...
+    kwargs...,
 ) where {M<:Union{DTree,DForest}}
     levels = unique(Y)
 
     Y_pred = begin
         if m isa DTree
-            ModalDecisionTrees.apply(m,X)
+            ModalDecisionTrees.apply(m, X)
         else
-            ModalDecisionTrees.apply(m,X; suppress_parity_warning=suppress_parity_warning)
+            ModalDecisionTrees.apply(m, X; suppress_parity_warning = suppress_parity_warning)
         end
     end
-    Y_pred = categorical(Y_pred, ordered=true, levels = levels)
+    Y_pred = categorical(Y_pred, ordered = true, levels = levels)
 
-    Y_nonpred = categorical(Y, ordered=true, levels=levels)
+    Y_nonpred = categorical(Y, ordered = true, levels = levels)
 
     cm = ConfusionMatrix()(Y_pred, Y_nonpred)
 
     TP, FP, TN, FN = cm[1], cm[2], cm[4], cm[3]
 
-    k = kappa(m,X,Y; suppress_parity_warning=suppress_parity_warning)
+    k = kappa(m, X, Y; suppress_parity_warning = suppress_parity_warning)
     acc = (TP+TN) / (TP+TN+FP+FN)
     sensitivity = TP / (TP+FN)
     specificity = TN / (TN+FP)
@@ -315,12 +306,15 @@ end
 
 function extract_decision_lists(model::DecisionForest, args...; kwargs...)
     ts = trees(model)
-    map(i -> extract_decision_lists(
+    map(
+        i -> extract_decision_lists(
             ts[i],
             args...;
             additional_info = (; tree_id = i),
-            kwargs...), 1:length(ts)
-        )
+            kwargs...,
+        ),
+        1:length(ts),
+    )
 
     #=map((i,t)->extract_decision_lists(
             t,
@@ -353,9 +347,12 @@ function extract_decision_lists(
     additional_info = (),
     kwargs...,
 )
-    Y = (dataset isa NTuple{2,Union{SoleBase.AbstractDataset,AbstractVector}} ?
-                    last(dataset) : dataset)
-    default_consequent = SoleModels.ConstantModel(bestguess(Y; suppress_parity_warning = true))
+    Y = (
+        dataset isa NTuple{2,Union{SoleBase.AbstractDataset,AbstractVector}} ?
+        last(dataset) : dataset
+    )
+    default_consequent =
+        SoleModels.ConstantModel(bestguess(Y; suppress_parity_warning = true))
     extract_decision_lists(
         model,
         default_consequent,
@@ -370,7 +367,7 @@ function extract_decision_lists(
     default_consequent::AbstractModel,
     args...;
     additional_info = (),
-    kwargs...
+    kwargs...,
 )
     rules = listrules(model)
     i = merge(info(model), additional_info)
@@ -422,8 +419,11 @@ function compute_dataset(dataset::String, isspatial::Bool, isstatic::Bool)
                             apply_multimodal_modes(
                                 ((X1[1], Y1), (X2[1], Y2)),
                                 [:static],
-                                MixedCondition[SoleData.canonical_geq, SoleData.canonical_leq],
-                                AbstractRelation[]
+                                MixedCondition[
+                                    SoleData.canonical_geq,
+                                    SoleData.canonical_leq,
+                                ],
+                                AbstractRelation[],
                             )
                     end
                     (X1, Y1, X2, Y2)
@@ -432,7 +432,7 @@ function compute_dataset(dataset::String, isspatial::Bool, isstatic::Bool)
                 @assert length(X) == 1
                 X = (X[1])
 
-                (X,Y)
+                (X, Y)
             end
         end
 

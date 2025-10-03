@@ -49,8 +49,11 @@ function surrogatetree(
     treey, treepreds = begin
         if method == :modal_decision_tree
             XMFMD = MultiLogiset(X)
-            treey = ModalDecisionTrees.translate(ModalDecisionTrees.build_tree(XMFMD, Y))
-            treepreds = ModalDecisionTrees.translate(ModalDecisionTrees.build_tree(XMFMD, preds)) # TODO create alias
+            treey =
+                ModalDecisionTrees.translate(ModalDecisionTrees.build_tree(XMFMD, Y))
+            treepreds = ModalDecisionTrees.translate(
+                ModalDecisionTrees.build_tree(XMFMD, preds),
+            ) # TODO create alias
 
             (treey, treepreds)
         else
@@ -84,12 +87,14 @@ tasks, stat, temp = begin
     if length(ARGS) == 0
         (ks, true, true)
     else
-        availabletasks = filter(a -> a ∈ ["T1","T2","T3","S1","S2","S3"], ARGS)
+        availabletasks = filter(a -> a ∈ ["T1", "T2", "T3", "S1", "S2", "S3"], ARGS)
         if length(availabletasks) == 0
             error("At least one of the passed arguments is unknown, ARGS: $(ARGS)")
-        elseif length(findall(ARGS .== "static")) == 0 && length(findall(ARGS .== "temporal")) == 0
+        elseif length(findall(ARGS .== "static")) == 0 &&
+               length(findall(ARGS .== "temporal")) == 0
             (availabletasks, true, true)
-        elseif length(findall(ARGS .== "static")) == 1 && length(findall(ARGS .== "temporal")) == 1
+        elseif length(findall(ARGS .== "static")) == 1 &&
+               length(findall(ARGS .== "temporal")) == 1
             (availabletasks, true, true)
         elseif length(findall(ARGS .== "static")) == 1
             (availabletasks, true, false)
@@ -100,23 +105,24 @@ tasks, stat, temp = begin
 end
 tasks = begin
     if stat && temp
-        [[(t,true) for t in tasks]..., [(t,false) for t in tasks]...]
+        [[(t, true) for t in tasks]..., [(t, false) for t in tasks]...]
     elseif stat
-        [(t,true) for t in tasks]
-    else temp
-        [(t,false) for t in tasks]
+        [(t, true) for t in tasks]
+    else
+        temp
+        [(t, false) for t in tasks]
     end
 end
 checkpoint_stdout("Chosen tasks: $(tasks)")
 
-for (data,isstatic) in tasks
+for (data, isstatic) in tasks
     checkpoint_stdout("Running Task $(data) $(isstatic ? "static" : "temporal")")
     rng = Random.MersenneTwister(1)
     isspatial, staticmodels, temporalmodels, dataset = inner[data]
     models = isstatic ? staticmodels : temporalmodels
 
     X, Y = compute_dataset(dataset, isspatial, isstatic)
-    memostruct = [ThreadSafeDict{SyntaxTree,Vector{worldtype(X)}}() for i in 1:ninstances(X)]
+    memostruct = [ThreadSafeDict{SyntaxTree,Vector{worldtype(X)}}() for i = 1:ninstances(X)]
 
     accforests = []
     acctreesy = []
@@ -127,16 +133,16 @@ for (data,isstatic) in tasks
     #r2forests = []
     #r2trees = []
 
-    @showprogress "Computing Forests..." for (i,m) in enumerate(models)
+    @showprogress "Computing Forests..." for (i, m) in enumerate(models)
 
         checkpoint_stdout("Running Forest number $(i)")
 
         modelpath, nontest_ids, test_ids = m
 
         println("Computing Testing Dataset in ...")
-        X_test,Y_test = @time slicedataset((X,Y), test_ids; return_view = true)
+        X_test, Y_test = @time slicedataset((X, Y), test_ids; return_view = true)
         println("Computing Training Dataset in ...")
-        X_nontest,Y_nontest = @time slicedataset((X,Y), nontest_ids; return_view = true)
+        X_nontest, Y_nontest = @time slicedataset((X, Y), nontest_ids; return_view = true)
 
         memostruct_test = @view memostruct[test_ids]
         memostruct_nontest = @view memostruct[nontest_ids]
@@ -153,27 +159,79 @@ for (data,isstatic) in tasks
         println()
         @show model
 
-        preds_train = apply(model, X_nontest; check_kwargs = (; use_memo = memostruct_nontest), suppress_parity_warning=true)
-        preds_test = apply(model, X_test; check_kwargs = (; use_memo = memostruct_test), suppress_parity_warning=true)
+        preds_train = apply(
+            model,
+            X_nontest;
+            check_kwargs = (; use_memo = memostruct_nontest),
+            suppress_parity_warning = true,
+        )
+        preds_test = apply(
+            model,
+            X_test;
+            check_kwargs = (; use_memo = memostruct_test),
+            suppress_parity_warning = true,
+        )
 
         println("\nComputing Surrogate Tree in ...")
-        treey, treepreds = @time surrogatetree(model, X_nontest, Y_nontest, preds_train; method=:modal_decision_tree)
+        treey, treepreds = @time surrogatetree(
+            model,
+            X_nontest,
+            Y_nontest,
+            preds_train;
+            method = :modal_decision_tree,
+        )
         println(displaymodel(treey; header = false))
         println(displaymodel(treepreds; header = false))
 
         #accuracy
-        accf = accuracy(model; X=X_test, Y=Y_test, memostruct=memostruct_test, suppress_parity_warning=true)
+        accf = accuracy(
+            model;
+            X = X_test,
+            Y = Y_test,
+            memostruct = memostruct_test,
+            suppress_parity_warning = true,
+        )
         push!(accforests, accf)
-        accy = accuracy(treey; X=X_test, Y=Y_test, memostruct=memostruct_test, suppress_parity_warning=true)
+        accy = accuracy(
+            treey;
+            X = X_test,
+            Y = Y_test,
+            memostruct = memostruct_test,
+            suppress_parity_warning = true,
+        )
         push!(acctreesy, accy)
-        accpreds = accuracy(treepreds; X=X_test, Y=Y_test, memostruct=memostruct_test, suppress_parity_warning=true)
+        accpreds = accuracy(
+            treepreds;
+            X = X_test,
+            Y = Y_test,
+            memostruct = memostruct_test,
+            suppress_parity_warning = true,
+        )
         push!(acctreespreds, accpreds)
         #fidelity
-        fidf = accuracy(model; X=X_test, Y=preds_test, memostruct=memostruct_test, suppress_parity_warning=true)
+        fidf = accuracy(
+            model;
+            X = X_test,
+            Y = preds_test,
+            memostruct = memostruct_test,
+            suppress_parity_warning = true,
+        )
         push!(fidforests, fidf)
-        fidy = accuracy(treey; X=X_test, Y=preds_test, memostruct=memostruct_test, suppress_parity_warning=true)
+        fidy = accuracy(
+            treey;
+            X = X_test,
+            Y = preds_test,
+            memostruct = memostruct_test,
+            suppress_parity_warning = true,
+        )
         push!(fidtreesy, fidy)
-        fidpreds = accuracy(treepreds; X=X_test, Y=preds_test, memostruct=memostruct_test, suppress_parity_warning=true)
+        fidpreds = accuracy(
+            treepreds;
+            X = X_test,
+            Y = preds_test,
+            memostruct = memostruct_test,
+            suppress_parity_warning = true,
+        )
         push!(fidtreespreds, fidpreds)
 
         #r2f = r2(model; X=X_test, Y=Y_test, memostruct=memostruct_test, suppress_parity_warning=true)
@@ -185,7 +243,7 @@ for (data,isstatic) in tasks
         df = DataFrame(
             Who = ["Forest", "Tree", "Surrogate Tree"],
             Accuracy = [accf, accy, accpreds],
-            Fidelity = [fidf, fidy, fidpreds]
+            Fidelity = [fidf, fidy, fidpreds],
             #R2 = [r2f, r2t],
         )
         println(df)
@@ -212,9 +270,30 @@ for (data,isstatic) in tasks
 
     println("Average Results for Task $(data) $(isstatic ? "static" : "temporal"):")
     df = DataFrame(
-        Who = ["Forest mean", "Forest std", "Tree mean", "Tree std", "STree mean", "STree std"],
-        Accuracy = [meanaccforests, stdaccforests, meanacctreesy, stdacctreesy, meanacctreespreds, stdacctreespreds],
-        Fidelity = [meanfidforests, stdfidforests, meanfidtreesy, stdfidtreesy, meanfidtreespreds, stdfidtreespreds],
+        Who = [
+            "Forest mean",
+            "Forest std",
+            "Tree mean",
+            "Tree std",
+            "STree mean",
+            "STree std",
+        ],
+        Accuracy = [
+            meanaccforests,
+            stdaccforests,
+            meanacctreesy,
+            stdacctreesy,
+            meanacctreespreds,
+            stdacctreespreds,
+        ],
+        Fidelity = [
+            meanfidforests,
+            stdfidforests,
+            meanfidtreesy,
+            stdfidtreesy,
+            meanfidtreespreds,
+            stdfidtreespreds,
+        ],
         #R2 = [meanr2forests, stdr2forests, meanr2trees, stdr2trees],
     )
     println(df)

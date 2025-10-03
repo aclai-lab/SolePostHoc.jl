@@ -36,7 +36,7 @@ function parse_tree_file(filename::String)
             end
 
             if startswith(line, "[TREE")
-                current_tree = parse(Int, split(line)[2][1:end-1])
+                current_tree = parse(Int, split(line)[2][1:(end-1)])
                 continue
             end
 
@@ -55,8 +55,16 @@ function parse_tree_file(filename::String)
             depth = parse(Int, parts[7])
             majority_class = parse(Int, parts[8])
 
-            nodes[id] = TreeNode(id, node_type, left_child, right_child,
-                feature, threshold, depth, majority_class)
+            nodes[id] = TreeNode(
+                id,
+                node_type,
+                left_child,
+                right_child,
+                feature,
+                threshold,
+                depth,
+                majority_class,
+            )
         end
     end
     return nodes
@@ -93,7 +101,7 @@ function test_converted_tree(tree::Node, X::Matrix{Float64})
     n_samples = size(X, 1)
     predictions = zeros(Int, n_samples)
 
-    for i in 1:n_samples
+    for i = 1:n_samples
         predictions[i] = apply_tree(tree, X[i, :])
     end
 
@@ -122,11 +130,9 @@ function antecedent_to_string(antecedent)
         op = cond.metacond.test_operator
         thr = cond.threshold
 
-        op_str = op === (<) ? "<" :
-                 op === (<=) ? "≤" :
-                 op === (>) ? ">" :
-                 op === (>=) ? "≥" :
-                 string(op)
+        op_str =
+            op === (<) ? "<" :
+            op === (<=) ? "≤" : op === (>) ? ">" : op === (>=) ? "≥" : string(op)
 
         push!(parts, "(V$feat $op_str $thr)")
     end
@@ -136,7 +142,7 @@ end
 
 function build_dnf_rules(rules, class_map)
     # Map: from integer (0,1,2) to string with the name of the iris
-    
+
     # 1) Group antecedent strings (conjunctions) by class
     class_to_antecedents = Dict{Int,Vector{String}}()
     for r in rules
@@ -159,14 +165,14 @@ function build_dnf_rules(rules, class_map)
         # Parse the string into a SoleLogics formula
         φ = SoleLogics.parseformula(
             big_dnf_str;
-            atom_parser=a -> Atom(
+            atom_parser = a -> Atom(
                 parsecondition(
                     ScalarCondition,
                     a;
-                    featuretype=VariableValue,
-                    featvaltype=Real
-                )
-            )
+                    featuretype = VariableValue,
+                    featvaltype = Real,
+                ),
+            ),
         )
 
         # NOTE: Convert the numeric class c to the corresponding string name
@@ -182,7 +188,10 @@ end
 
 
 function BAinSoleTree()
-    println("Converting the tree in : ", joinpath(@__DIR__, "temp_ba_trees", "result.txt.tree"))
+    println(
+        "Converting the tree in : ",
+        joinpath(@__DIR__, "temp_ba_trees", "result.txt.tree"),
+    )
     tree = convert_tree(joinpath(@__DIR__, "temp_ba_trees", "result.txt.tree"))
     t = solemodel(tree)
     return t
@@ -190,7 +199,10 @@ end
 
 
 function BAinDS(class_map)
-    println("Converting the tree in : ", joinpath(@__DIR__, "temp_ba_trees", "result.txt.tree"))
+    println(
+        "Converting the tree in : ",
+        joinpath(@__DIR__, "temp_ba_trees", "result.txt.tree"),
+    )
     tree = convert_tree(joinpath(@__DIR__, "temp_ba_trees", "result.txt.tree"))
     t = solemodel(tree)
 

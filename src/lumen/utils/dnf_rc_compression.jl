@@ -96,85 +96,88 @@ sampled = dnf_rc_compression(formula, 0.7, 0.5, importance)
 ```
 """
 function dnf_rc_compression(
-    formula, 
-    c::Float64, 
-    r::Float64, 
+    formula,
+    c::Float64,
+    r::Float64,
     importance_vector::Vector{Int};
-    silent = true
+    silent = true,
 )
     # Input validation
     @assert 0 < r <= 1 "r must be in (0,1]"
     @assert 0 < c <= 1 "c must be in (0,1]"
-    
+
     original_disjuncts = formula.grandchildren
     n_original_disjuncts = length(original_disjuncts)
-    
+
     silent || println("Original formula: $(n_original_disjuncts) disjuncts")
-    
+
     # ==========================================================================
     # PHASE 1: HORIZONTAL SAMPLING - Reduce number of disjuncts
     # ==========================================================================
     n_keep_disjuncts = max(1, round(Int, n_original_disjuncts * r))
-    
+
     # Random sampling without external dependencies
     disjunct_indices = collect(1:n_original_disjuncts)
     shuffle!(disjunct_indices)
     selected_indices = disjunct_indices[1:n_keep_disjuncts]
     horizontally_sampled = original_disjuncts[selected_indices]
-    
+
     silent || println("After horizontal sampling ($(r)): $(n_keep_disjuncts) disjuncts")
-    
+
     # ==========================================================================
     # PHASE 2: VERTICAL SAMPLING - Remove less important variables
     # ==========================================================================
     n_variables = length(importance_vector)
     n_keep_variables = max(1, round(Int, n_variables * c))
-    
+
     # Sort variable indices by importance (ascending rank = descending importance)
     importance_order = importance_vector
     variables_to_keep = Set(importance_vector[1:n_keep_variables])
 
     @show variables_to_keep
-    
-    silent || println("Variables to keep: $(sort(collect(variables_to_keep))) (top $(n_keep_variables) most important)")
-    
+
+    silent || println(
+        "Variables to keep: $(sort(collect(variables_to_keep))) (top $(n_keep_variables) most important)",
+    )
+
     # ==========================================================================
     # PHASE 3: FILTER LITERALS - Keep only literals with important variables
     # ==========================================================================
     filtered_disjuncts = []
     skipped_literals = 0
-    
+
     for disjunct in horizontally_sampled
         filtered_literals = []
-        
+
         # Filter literals containing only important variables
         for literal in disjunct.grandchildren
             variable_id = safe_get_variable_id_from_literal(literal)
-            
+
             if variable_id === nothing
                 skipped_literals += 1
                 @warn "Skipping literal due to variable ID extraction failure"
                 continue
             end
-            
+
             if variable_id in variables_to_keep
                 push!(filtered_literals, literal)
             end
         end
-        
+
         # Keep disjuncts that have at least one literal after filtering
         if !isempty(filtered_literals)
             new_disjunct = typeof(disjunct)(filtered_literals)
             push!(filtered_disjuncts, new_disjunct)
         end
     end
-    
+
     if skipped_literals > 0
         @warn "Skipped $skipped_literals literals due to extraction errors"
     end
-    
-    silent || println("Final disjuncts after vertical filtering: $(length(filtered_disjuncts))")
-    
+
+    silent ||
+        println("Final disjuncts after vertical filtering: $(length(filtered_disjuncts))")
+
     # ==========================================================================
     # PHASE 4: CONSTRUCT NEW FORMULA
     # ==========================================================================
@@ -182,12 +185,12 @@ function dnf_rc_compression(
         @warn " No disjuncts remaining after filtering!"
         return nothing
     end
-    
+
     # Create new formula with same structure as original
-    silent || println("pre unique",filtered_disjuncts)
+    silent || println("pre unique", filtered_disjuncts)
     unique!(filtered_disjuncts)
-    silent || println("post unique",filtered_disjuncts)
+    silent || println("post unique", filtered_disjuncts)
     new_formula = typeof(formula)(filtered_disjuncts)
-    
+
     return new_formula
 end

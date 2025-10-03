@@ -15,11 +15,9 @@ function antecedent_to_string(antecedent)
         op = cond.metacond.test_operator
         thr = cond.threshold
 
-        op_str = op === (<) ? "<" :
-                 op === (<=) ? "≤" :
-                 op === (>) ? ">" :
-                 op === (>=) ? "≥" :
-                 string(op)
+        op_str =
+            op === (<) ? "<" :
+            op === (<=) ? "≤" : op === (>) ? ">" : op === (>=) ? "≥" : string(op)
 
         push!(parts, "(V$feat $op_str $thr)")
     end
@@ -39,16 +37,24 @@ function element_to_string(x)
             lower_op = cond.minincluded ? "≥" : ">"
             upper_op = cond.maxincluded ? "≤" : "<"
             # Returns a string representing the range as two conditions
-            return "(" * join(["V$(i_var) $(lower_op) $(cond.minval)", "V$(i_var) $(upper_op) $(cond.maxval)"], " ∧ ") * ")"
+            return "(" *
+                   join(
+                       [
+                           "V$(i_var) $(lower_op) $(cond.minval)",
+                           "V$(i_var) $(upper_op) $(cond.maxval)",
+                       ],
+                       " ∧ ",
+                   ) *
+                   ")"
         elseif hasproperty(cond, :metacond)
             # Standard scalar condition
             i_var = cond.metacond.feature.i_variable
             op_fun = cond.metacond.test_operator
             thr = cond.threshold
-            op_str = op_fun === (<)  ? "<" :
-                     op_fun === (<=) ? "≤" :
-                     op_fun === (>)  ? ">" :
-                     op_fun === (>=) ? "≥" : string(op_fun)
+            op_str =
+                op_fun === (<) ? "<" :
+                op_fun === (<=) ? "≤" :
+                op_fun === (>) ? ">" : op_fun === (>=) ? "≥" : string(op_fun)
             return "V$(i_var) $(op_str) $(thr)"
         else
             return string(cond)
@@ -80,7 +86,7 @@ end
 
 function build_dnf_rules(rules)
     # 1) Group antecedent strings (conjunctions) by class
-    class_to_antecedents = Dict{String, Vector{String}}()
+    class_to_antecedents = Dict{String,Vector{String}}()
     for r in rules
         c = r.consequent.outcome   # now is string =to "Iris-setosa"
         ant_str = antecedent_to_string(r.antecedent)
@@ -101,14 +107,14 @@ function build_dnf_rules(rules)
         # Parse the string into a SoleLogics formula
         φ = SoleLogics.parseformula(
             big_dnf_str;
-            atom_parser=a -> Atom(
+            atom_parser = a -> Atom(
                 parsecondition(
                     ScalarCondition,
                     a;
-                    featuretype=VariableValue,
-                    featvaltype=Real
-                )
-            )
+                    featuretype = VariableValue,
+                    featvaltype = Real,
+                ),
+            ),
         )
         # Create the rule (formula + outcome as string)
         push!(minimized_rules, Rule(φ, c))
@@ -118,7 +124,7 @@ function build_dnf_rules(rules)
 end
 
 function convertApi(f)
-    ll = listrules(f, use_shortforms=true)
+    ll = listrules(f, use_shortforms = true)
     minimized_rules = build_dnf_rules(ll)
     ds = DecisionSet(minimized_rules)
 end
@@ -129,14 +135,17 @@ end
 # groups the antecedents by outcome and creates a new Rule for each outcome.
 # The antecedent of the new Rule is obtained by concatenating (with " ∨ ")
 # the strings corresponding to each rule (obtained with leftmost_conjunctive_form_to_string).
-function convert_classification_rules(::SoleModels.DecisionList, ll::AbstractVector{<:SoleModels.ClassificationRule})
+function convert_classification_rules(
+    ::SoleModels.DecisionList,
+    ll::AbstractVector{<:SoleModels.ClassificationRule},
+)
     # Group antecedent strings by outcome
     grouped = Dict{String,Vector{String}}()
     for rule in ll
         outcome = rule.consequent.outcome
-        antecedent_str = hasproperty(rule.antecedent, :grandchildren) ?
-                         leftmost_conjunctive_form_to_string(rule.antecedent) :
-                         string(rule.antecedent)
+        antecedent_str =
+            hasproperty(rule.antecedent, :grandchildren) ?
+            leftmost_conjunctive_form_to_string(rule.antecedent) : string(rule.antecedent)
         push!(get!(grouped, outcome, String[]), antecedent_str)
     end
 
@@ -148,11 +157,8 @@ function convert_classification_rules(::SoleModels.DecisionList, ll::AbstractVec
         #println("DNF per outcome ", outcome, ": ", dnf_string)
 
         # Parsing DNF string into a formula
-        φ = SoleLogics.parseformula(
-            dnf_string;
-            atom_parser=atom_parser
-        )
-        
+        φ = SoleLogics.parseformula(dnf_string; atom_parser = atom_parser)
+
         #println("pre : ", φ)
         #dump(φ)
 
@@ -171,14 +177,17 @@ function convert_classification_rules(::SoleModels.DecisionList, ll::AbstractVec
     return rules
 end
 
-function convert_classification_rules(::SoleModels.DecisionEnsemble, ll::AbstractVector{<:SoleModels.ClassificationRule})
+function convert_classification_rules(
+    ::SoleModels.DecisionEnsemble,
+    ll::AbstractVector{<:SoleModels.ClassificationRule},
+)
     # Group antecedent strings by outcome
-    grouped = Dict{String, Vector{String}}()
+    grouped = Dict{String,Vector{String}}()
     for rule in ll
         outcome = rule.consequent.outcome
-        antecedent_str = hasproperty(rule.antecedent, :grandchildren) ?
-                         leftmost_conjunctive_form_to_string(rule.antecedent) :
-                         string(rule.antecedent)
+        antecedent_str =
+            hasproperty(rule.antecedent, :grandchildren) ?
+            leftmost_conjunctive_form_to_string(rule.antecedent) : string(rule.antecedent)
         push!(get!(grouped, outcome, String[]), antecedent_str)
     end
 
@@ -189,12 +198,9 @@ function convert_classification_rules(::SoleModels.DecisionEnsemble, ll::Abstrac
         dnf_string = join(antecedent_list, " ∨ ")
         println("DNF per outcome ", outcome, ": ", dnf_string)
         # Parsing DNF string into a formula
-        φ = SoleLogics.parseformula(
-            dnf_string;
-            atom_parser=atom_parser
-        )
+        φ = SoleLogics.parseformula(dnf_string; atom_parser = atom_parser)
         println("pre : ", φ)
-        φ = dnf(φ,reduce_negations=false, allow_atom_flipping=true)
+        φ = dnf(φ, reduce_negations = false, allow_atom_flipping = true)
         new_rule = Rule(φ, outcome)
         println("post :", φ)
         push!(rules, new_rule)

@@ -67,7 +67,21 @@ See also
 [`listrules`](@ref),
 [`rulemetrics`](@ref).
 """
-function refne(f, Xmin, Xmax; L=100, perc=1.0, max_depth=-1, n_subfeatures=-1, partial_sampling=0.7, min_samples_leaf=5, min_samples_split=2, min_purity_increase=0.0, seed=3, ott_mode = false)
+function refne(
+    f,
+    Xmin,
+    Xmax;
+    L = 100,
+    perc = 1.0,
+    max_depth = -1,
+    n_subfeatures = -1,
+    partial_sampling = 0.7,
+    min_samples_leaf = 5,
+    min_samples_split = 2,
+    min_purity_increase = 0.0,
+    seed = 3,
+    ott_mode = false,
+)
 
     if ott_mode == true
         ddf = generate_univers_of_combinations_ott(Xmin, Xmax, L)
@@ -75,13 +89,8 @@ function refne(f, Xmin, Xmax; L=100, perc=1.0, max_depth=-1, n_subfeatures=-1, p
         ddf = generate_univers_of_combinations(Xmin, Xmax, L)
     end
 
-    y_pred = apply(
-        f,
-        SoleData.scalarlogiset(
-            DataFrame(ddf, :auto);
-            allow_propositional=true,
-        ),
-    )
+    y_pred =
+        apply(f, SoleData.scalarlogiset(DataFrame(ddf, :auto); allow_propositional = true))
 
     n_trees = 1
 
@@ -95,7 +104,7 @@ function refne(f, Xmin, Xmax; L=100, perc=1.0, max_depth=-1, n_subfeatures=-1, p
         min_samples_leaf,
         min_samples_split,
         min_purity_increase;
-        rng=seed,
+        rng = seed,
     )
 
 

@@ -31,7 +31,7 @@ using SoleModels
 # Type Definitions
 # ============================================================================
 
-const TreeType = Union{String, CategoricalArrays.CategoricalValue{String, UInt32}}
+const TreeType = Union{String,CategoricalArrays.CategoricalValue{String,UInt32}}
 
 """
     BANode
@@ -87,15 +87,15 @@ mode(["a", "b", "a", "c"]) # Returns "a"
 """
 function mode(x::AbstractArray)
     isempty(x) && throw(ArgumentError("array must be non-empty"))
-    
-    counts = Dict{eltype(x), Int}()
+
+    counts = Dict{eltype(x),Int}()
     for val in x
         counts[val] = get(counts, val, 0) + 1
     end
-    
+
     max_count = maximum(values(counts))
     modes = [k for (k, v) in counts if v == max_count]
-    
+
     return first(modes)
 end
 
@@ -127,7 +127,7 @@ get_majority_class(["cat", "dog", "cat", "cat"]) # Returns "cat"
 ```
 """
 function get_majority_class(labels::Vector{String})
-    counts = Dict{String, Int}()
+    counts = Dict{String,Int}()
     for label in labels
         counts[label] = get(counts, label, 0) + 1
     end
@@ -150,7 +150,7 @@ Recursively compute the maximum depth of a SoleModels tree.
 # Returns
 - Maximum depth of the tree
 """
-function compute_tree_depth(node, depth::Int=0)::Int
+function compute_tree_depth(node, depth::Int = 0)::Int
     if isa(node, ConstantModel{<:TreeType})
         return depth
     elseif isa(node, Branch{<:TreeType})
@@ -177,19 +177,19 @@ feature index referenced, accounting for the feature offset.
 - Maximum feature index found in the ensemble
 """
 function get_number_of_features(models::Vector{<:Branch{<:Label}})
-    function get_feature_from_model(model::ConstantModel; maxvalue=0)
+    function get_feature_from_model(model::ConstantModel; maxvalue = 0)
         return maxvalue
     end
-    
-    function get_feature_from_model(model::Branch{<:Label}; maxvalue=0)
+
+    function get_feature_from_model(model::Branch{<:Label}; maxvalue = 0)
         return maximum([
-            get_feature_from_model(model.posconsequent, maxvalue=maxvalue), 
-            get_feature_from_model(model.negconsequent, maxvalue=maxvalue), 
-            get_feature_from_model(model.antecedent, maxvalue=maxvalue)
+            get_feature_from_model(model.posconsequent, maxvalue = maxvalue),
+            get_feature_from_model(model.negconsequent, maxvalue = maxvalue),
+            get_feature_from_model(model.antecedent, maxvalue = maxvalue),
         ])
     end
-    
-    function get_feature_from_model(model::Atom; maxvalue=0)
+
+    function get_feature_from_model(model::Atom; maxvalue = 0)
         return max(maxvalue, model.value.metacond.feature.i_variable)
     end
 
@@ -226,11 +226,11 @@ nodes (Branch) are marked as "IN".
 - Vector of strings representing nodes in BA-Trees format
 """
 function create_tree_node_from_branch(
-    node::Union{Branch, ConstantModel{<:TreeType}},
+    node::Union{Branch,ConstantModel{<:TreeType}},
     node_id::Ref{Int},
     depth::Int,
     class_map::Dict{String,Int},
-    feature_offset::Int=1
+    feature_offset::Int = 1,
 )::Vector{String}
     lines = String[]
     current_node = node_id[]
@@ -250,7 +250,7 @@ function create_tree_node_from_branch(
 
         # Convert from 1-based to 0-based indexing
         feature_0 = feature_raw - feature_offset
-        threshold_str = round(threshold, digits=3)
+        threshold_str = round(threshold, digits = 3)
 
         # Process left subtree (positive consequence)
         left_child_id = node_id[]
@@ -259,7 +259,7 @@ function create_tree_node_from_branch(
             node_id,
             depth + 1,
             class_map,
-            feature_offset
+            feature_offset,
         )
 
         # Process right subtree (negative consequence)
@@ -269,13 +269,13 @@ function create_tree_node_from_branch(
             node_id,
             depth + 1,
             class_map,
-            feature_offset
+            feature_offset,
         )
 
         # Add current internal node
         push!(
             lines,
-            "$current_node IN $left_child_id $right_child_id $feature_0 $threshold_str $depth -1"
+            "$current_node IN $left_child_id $right_child_id $feature_0 $threshold_str $depth -1",
         )
 
         # Append child nodes
@@ -311,23 +311,22 @@ including metadata about the ensemble and detailed tree structures.
 - Leaf classes use 0-based indexing
 """
 function create_random_forest_input_from_model(
-    f::Union{DecisionEnsemble, SoleModels.DecisionXGBoost};
-    output_file::String="forest.txt",
-    feature_offset::Int=1
+    f::Union{DecisionEnsemble,SoleModels.DecisionXGBoost};
+    output_file::String = "forest.txt",
+    feature_offset::Int = 1,
 )
     # Extract ensemble metadata
     num_trees = length(f.models)
     max_feat_used = get_number_of_features(f.models)
     nb_features = max_feat_used - feature_offset + 1
-    
+
     # Determine unique classes
     all_labels = f.info.supporting_labels
     unique_labels = unique(all_labels)
     nb_classes = length(unique_labels)
 
     # Calculate maximum tree depth
-    max_depth = num_trees == 0 ? 0 :
-        maximum(tree -> compute_tree_depth(tree), f.models)
+    max_depth = num_trees == 0 ? 0 : maximum(tree -> compute_tree_depth(tree), f.models)
 
     # Create 0-based class mapping
     class_map = Dict{String,Int}()
@@ -339,7 +338,7 @@ function create_random_forest_input_from_model(
     println("\n" * "="^60)
     println("Class Mapping (0-based indexing):")
     println("="^60)
-    for (lbl, idx) in sort(collect(class_map), by=x->x[2])
+    for (lbl, idx) in sort(collect(class_map), by = x->x[2])
         println("  $idx => $lbl")
     end
     println("="^60 * "\n")
@@ -352,7 +351,10 @@ function create_random_forest_input_from_model(
     push!(lines, "NB_FEATURES: $nb_features")
     push!(lines, "NB_CLASSES: $nb_classes")
     push!(lines, "MAX_TREE_DEPTH: $max_depth")
-    push!(lines, "Format: node / node type (LN - leaf node, IN - internal node) left child / right child / feature / threshold / node_depth / majority class (starts with index 0)")
+    push!(
+        lines,
+        "Format: node / node type (LN - leaf node, IN - internal node) left child / right child / feature / threshold / node_depth / majority class (starts with index 0)",
+    )
     push!(lines, "")
 
     # Convert each tree in the ensemble
@@ -360,13 +362,8 @@ function create_random_forest_input_from_model(
         push!(lines, "[TREE $(i)]")
 
         node_id = Ref(0)
-        tree_lines = create_tree_node_from_branch(
-            tree,
-            node_id,
-            0,
-            class_map,
-            feature_offset
-        )
+        tree_lines =
+            create_tree_node_from_branch(tree, node_id, 0, class_map, feature_offset)
 
         push!(lines, "NB_NODES: $(length(tree_lines))")
         append!(lines, tree_lines)
@@ -422,7 +419,7 @@ clean:
 
 .PHONY: all clean
 """
-    
+
     makefile_path = joinpath(born_again_dp_path, "Makefile.simple")
     write(makefile_path, makefile_content)
     println("Created simplified Makefile at: $makefile_path")
@@ -454,7 +451,7 @@ This function handles the complete setup process:
 function setup_ba_trees(base_dir::String)
     born_again_dp_path = joinpath(base_dir, "born_again_dp")
     executable_path = joinpath(base_dir, "bornAgain")
-    
+
     # ========================================================================
     # Step 1: Clone repository if needed
     # ========================================================================
@@ -463,12 +460,12 @@ function setup_ba_trees(base_dir::String)
         try
             repo_url = "https://github.com/vidalt/BA-Trees.git"
             temp_clone_dir = joinpath(base_dir, "BA-Trees_temp")
-            
+
             run(`git clone $repo_url $temp_clone_dir`)
-            
+
             # Extract born_again_dp from cloned repository
             cloned_dp_path = joinpath(temp_clone_dir, "src", "born_again_dp")
-            
+
             if isdir(cloned_dp_path)
                 mv(cloned_dp_path, born_again_dp_path)
                 println("BA-Trees repository cloned successfully")
@@ -477,13 +474,13 @@ function setup_ba_trees(base_dir::String)
                 println("ERROR: born_again_dp directory not found in cloned repository")
                 println("Expected location: $cloned_dp_path")
                 _print_directory_structure(temp_clone_dir)
-                rm(temp_clone_dir, recursive=true, force=true)
+                rm(temp_clone_dir, recursive = true, force = true)
                 return false
             end
-            
+
             # Clean up temporary directory
-            rm(temp_clone_dir, recursive=true, force=true)
-            
+            rm(temp_clone_dir, recursive = true, force = true)
+
         catch e
             println("ERROR: Failed to clone BA-Trees repository")
             println("Error details: ", e)
@@ -493,7 +490,7 @@ function setup_ba_trees(base_dir::String)
     else
         println(" born_again_dp directory already exists")
     end
-    
+
     # ========================================================================
     # Step 2: Compile executable if needed
     # ========================================================================
@@ -502,11 +499,11 @@ function setup_ba_trees(base_dir::String)
         try
             os_type = Sys.iswindows() ? "windows" : (Sys.isapple() ? "macos" : "linux")
             println("Detected OS: $os_type")
-            
+
             cd(born_again_dp_path) do
                 # Create simplified Makefile
                 simple_makefile = create_simple_makefile(born_again_dp_path)
-                
+
                 # Check for original makefile (keep as backup)
                 original_makefile = nothing
                 if isfile("makefile")
@@ -514,40 +511,42 @@ function setup_ba_trees(base_dir::String)
                 elseif isfile("Makefile")
                     original_makefile = "Makefile"
                 end
-                
+
                 if original_makefile !== nothing
-                    println("Original Makefile found: $original_makefile (keeping as backup)")
+                    println(
+                        "Original Makefile found: $original_makefile (keeping as backup)",
+                    )
                     println("Using simplified Makefile for compilation")
                 end
-                
+
                 # Attempt compilation
                 compilation_success = _compile_ba_trees(simple_makefile, original_makefile)
-                
+
                 if !compilation_success
                     println("ERROR: All compilation attempts failed")
                     _print_compilation_help()
                     return false
                 end
-                
+
                 # Locate and move executable
                 compiled_exec = _find_compiled_executable()
                 if compiled_exec === nothing
                     _print_compilation_error()
                     return false
                 end
-                
+
                 # Move to base directory and set permissions
                 target_name = Sys.iswindows() ? "bornAgain.exe" : "bornAgain"
                 target_path = joinpath(base_dir, target_name)
-                cp(compiled_exec, target_path, force=true)
-                
+                cp(compiled_exec, target_path, force = true)
+
                 if !Sys.iswindows()
                     run(`chmod +x $target_path`)
                 end
-                
+
                 println("bornAgain compiled successfully and moved to: $target_path")
             end
-            
+
         catch e
             println("ERROR: Failed to compile bornAgain")
             println("Error details: ", e)
@@ -557,15 +556,18 @@ function setup_ba_trees(base_dir::String)
     else
         println(" bornAgain executable already exists")
     end
-    
+
     println(" BA-Trees setup complete")
     return true
 end
 
 # Helper function to attempt compilation with different strategies
-function _compile_ba_trees(simple_makefile::String, original_makefile::Union{String,Nothing})
+function _compile_ba_trees(
+    simple_makefile::String,
+    original_makefile::Union{String,Nothing},
+)
     println("Running make with simplified Makefile...")
-    
+
     try
         if Sys.iswindows()
             # Try different make commands on Windows
@@ -584,7 +586,7 @@ function _compile_ba_trees(simple_makefile::String, original_makefile::Union{Str
         end
     catch e
         println(" Simplified Makefile compilation failed: ", e)
-        
+
         # Fallback to original Makefile
         if original_makefile !== nothing
             println("Attempting compilation with original Makefile (without CPLEX)...")
@@ -606,21 +608,21 @@ function _compile_ba_trees(simple_makefile::String, original_makefile::Union{Str
             end
         end
     end
-    
+
     return false
 end
 
 # Helper function to find compiled executable
 function _find_compiled_executable()
     possible_names = ["bornAgain", "bornAgain.exe", "main", "main.exe"]
-    
+
     for name in possible_names
         if isfile(name)
             println("Found compiled executable: $name")
             return name
         end
     end
-    
+
     return nothing
 end
 
@@ -641,7 +643,7 @@ end
 
 function _print_compilation_help()
     println("""
-    
+
     Please check:
     1. C++ compiler is installed (g++ or clang)
     2. Make is installed
@@ -706,12 +708,12 @@ class_map = prepare_and_run_ba_trees(
 )
 ```
 """
-function prepare_and_run_ba_trees(; 
-    dataset_name::String = "", 
-    num_trees::Int = nothing, 
-    max_depth::Int = -1, 
+function prepare_and_run_ba_trees(;
+    dataset_name::String = "",
+    num_trees::Int = nothing,
+    max_depth::Int = -1,
     forest = nothing,
-    mode_obj = 0
+    mode_obj = 0,
 )
     # Validate mode_obj parameter
     valid_modes = [0, 1, 2, 4]
@@ -728,42 +730,42 @@ function prepare_and_run_ba_trees(;
     end
 
     base_dir = @__DIR__
-    
+
     # ========================================================================
     # Step 1: Setup BA-Trees (automatic clone and compile)
     # ========================================================================
     println("\n" * "="^60)
     println("Checking BA-Trees setup...")
     println("="^60)
-    
+
     if !setup_ba_trees(base_dir)
         println("ERROR: Failed to setup BA-Trees. Please check the error messages above.")
         return nothing
     end
-    
+
     # Verify paths after setup
     db_path = joinpath(base_dir, "born_again_dp")
     executable_name = Sys.iswindows() ? "bornAgain.exe" : "bornAgain"
     executable_path = joinpath(base_dir, executable_name)
-    
+
     if !isdir(db_path) || !isfile(executable_path)
         println("ERROR: Setup verification failed")
         println("born_again_dp exists: ", isdir(db_path))
         println("bornAgain exists: ", isfile(executable_path))
         return nothing
     end
- 
+
     # ========================================================================
     # Step 2: Prepare temporary directory and file paths
     # ========================================================================
     temp_dir = joinpath(base_dir, "temp_ba_trees")
     isdir(temp_dir) || mkdir(temp_dir)
- 
+
     input_file = joinpath(temp_dir, "forest.txt")
     output_base = joinpath(temp_dir, "result.txt")
     output_stats = output_base * ".out"
     output_tree = output_base * ".tree"
- 
+
     try
         # ====================================================================
         # Step 3: Generate or convert forest to BA-Trees format
@@ -771,10 +773,10 @@ function prepare_and_run_ba_trees(;
         println("\n" * "="^60)
         println("Preparing random forest data...")
         println("="^60)
- 
+
         forest_content = ""
         class_map = nothing
-        
+
         if forest === nothing
             # Validate parameters for new forest generation
             if num_trees <= 0 || dataset_name == ""
@@ -782,34 +784,36 @@ function prepare_and_run_ba_trees(;
                 println("Required: num_trees > 0 and non-empty dataset_name")
                 return nothing
             end
-            
+
             # Generate new forest
-            forest, model, start_time = learn_and_convert(num_trees, dataset_name, max_depth)
+            forest, model, start_time =
+                learn_and_convert(num_trees, dataset_name, max_depth)
             forest_content, class_map = create_random_forest_input_from_model(forest)
         else
             # Use existing forest
             forest_content, class_map = create_random_forest_input_from_model(forest)
         end
- 
+
         # Write forest data to file
         write(input_file, forest_content)
         println(" Forest data written to: $input_file")
- 
+
         # ====================================================================
         # Step 4: Execute BA-Trees algorithm
         # ====================================================================
         num_trees_actual = length(forest.models)
-        
+
         println("\n" * "="^60)
         println("Executing BA-Trees algorithm...")
         println("="^60)
         println("Trees: $num_trees_actual")
         println("Objective mode: $mode_obj")
-        
-        cmd = `$executable_path $input_file $output_base -trees $num_trees_actual -obj $mode_obj`
+
+        cmd =
+            `$executable_path $input_file $output_base -trees $num_trees_actual -obj $mode_obj`
         println("Command: $cmd")
         run(cmd)
- 
+
         # ====================================================================
         # Step 5: Display results
         # ====================================================================
@@ -818,7 +822,7 @@ function prepare_and_run_ba_trees(;
             println("Born-Again Tree Analysis Results:")
             println("="^60)
             println(read(output_stats, String))
-            
+
             if isfile(output_tree)
                 println("\n" * "="^60)
                 println("Born-Again Tree Structure:")
@@ -830,9 +834,9 @@ function prepare_and_run_ba_trees(;
         else
             println("Statistics file not found: $output_stats")
         end
-        
+
         return class_map
- 
+
     catch e
         println("\n" * "="^60)
         println("ERROR during execution:")
@@ -842,7 +846,7 @@ function prepare_and_run_ba_trees(;
         println("Current directory: ", pwd())
         println("Executable exists: ", isfile(executable_path))
         println("Executable path: ", executable_path)
-        
+
         if isdir(temp_dir)
             println("\nTemporary directory contents:")
             for (root, dirs, files) in walkdir(temp_dir)
@@ -850,12 +854,12 @@ function prepare_and_run_ba_trees(;
                 println("Files: ", join(files, ", "))
             end
         end
-        
+
         if isfile(input_file)
             println("\nFirst 10 lines of input file:")
             println(join(collect(Iterators.take(eachline(input_file), 10)), "\n"))
         end
-        
+
         rethrow(e)
     end
 end
@@ -905,13 +909,7 @@ class_map = WRAP_batrees(
 )
 ```
 """
-function WRAP_batrees(
-    f,
-    max_depth=10;
-    dataset_name="",
-    num_trees=nothing,
-    mod=0
-)
+function WRAP_batrees(f, max_depth = 10; dataset_name = "", num_trees = nothing, mod = 0)
     println("\n" * "="^60)
     println("Born-Again Tree Analysis")
     println("="^60)
@@ -927,14 +925,14 @@ function WRAP_batrees(
             num_trees = num_trees,
             max_depth = max_depth,
             forest = nothing,
-            mode_obj = mod
+            mode_obj = mod,
         )
     else
         # Analyze existing forest
         return prepare_and_run_ba_trees(
             num_trees = length(f.models),
             forest = f,
-            mode_obj = mod
+            mode_obj = mod,
         )
     end
 end
@@ -1054,17 +1052,18 @@ function create_tree_node(
     # Random feature and threshold selection
     feature = rand(0:(n_features-1))
     feature_values = data[:, feature+1]
-    
+
     if length(unique(feature_values)) > 1
-        threshold = rand() * (maximum(feature_values) - minimum(feature_values)) +
-                   minimum(feature_values)
+        threshold =
+            rand() * (maximum(feature_values) - minimum(feature_values)) +
+            minimum(feature_values)
     else
         threshold = feature_values[1]
     end
 
     # Split data based on threshold
     left_mask = feature_values .<= threshold
-    
+
     if !any(left_mask) || all(left_mask)
         majority_class = get_majority_class(targets)
         push!(nodes, "$node_id LN -1 -1 -1 -1 $depth $majority_class")
@@ -1081,7 +1080,7 @@ function create_tree_node(
         min_samples,
         left_child,
     )
-    
+
     right_child = left_child + length(left_subtree)
     right_subtree = create_tree_node(
         data[.!left_mask, :],
@@ -1193,7 +1192,7 @@ function parse_ba_node(line::String)
         parse(Int, parts[5]),     # feature
         parse(Float64, parts[6]), # threshold
         parse(Int, parts[7]),     # depth
-        parse(Int, parts[8])      # class
+        parse(Int, parts[8]),      # class
     )
 end
 
@@ -1220,54 +1219,46 @@ This is an alternative formatting function that uses '/' as separators.
 """
 function convert_tree_structure(
     node,
-    depth=0,
-    node_counter=Ref(0),
-    node_map=Dict()
+    depth = 0,
+    node_counter = Ref(0),
+    node_map = Dict(),
 )::Vector{String}
     lines = String[]
     current_node = node_counter[] += 1
-    
+
     if isa(node, ConstantModel)
         # Leaf node
         push!(lines, "$current_node / LN / -1 / -1 / -1 / -1.0 / $depth / $(node.outcome)")
         node_map[node] = current_node
         return lines
     end
-    
+
     # Internal node
     feature_idx = node.antecedent.value.metacond.feature.i_variable
     threshold = node.antecedent.value.threshold
-    
+
     # Process children recursively
-    left_subtree = convert_tree_structure(
-        node.posconsequent,
-        depth + 1,
-        node_counter,
-        node_map
-    )
-    right_subtree = convert_tree_structure(
-        node.negconsequent,
-        depth + 1,
-        node_counter,
-        node_map
-    )
-    
+    left_subtree =
+        convert_tree_structure(node.posconsequent, depth + 1, node_counter, node_map)
+    right_subtree =
+        convert_tree_structure(node.negconsequent, depth + 1, node_counter, node_map)
+
     # Get children node IDs
     left_child = node_map[node.posconsequent]
     right_child = node_map[node.negconsequent]
-    
+
     # Add current node
     majority_class = get_majority_class(node.info.supporting_labels)
     push!(
         lines,
-        "$current_node / IN / $left_child / $right_child / $feature_idx / $threshold / $depth / $majority_class"
+        "$current_node / IN / $left_child / $right_child / $feature_idx / $threshold / $depth / $majority_class",
     )
     node_map[node] = current_node
-    
+
     # Combine all nodes
     append!(lines, left_subtree)
     append!(lines, right_subtree)
-    
+
     return lines
 end
 
@@ -1297,16 +1288,16 @@ This enables using BA-Trees results with the DecisionTree.jl package.
 function convert_to_dt_node(
     nodes::Dict{Int,BANode},
     current_id::Int,
-    features::Vector{String}
+    features::Vector{String},
 )
     node = nodes[current_id]
-    
+
     if node.node_type == "LN"
         # Leaf node
         return Leaf(node.class)
     else
         # Internal node
-        feature_name = features[node.feature + 1]  # Convert from 0-based
+        feature_name = features[node.feature+1]  # Convert from 0-based
         left = convert_to_dt_node(nodes, node.left_child, features)
         right = convert_to_dt_node(nodes, node.right_child, features)
         return Node(feature_name, node.threshold, left, right)
@@ -1341,11 +1332,7 @@ dt = convert_ba_to_dt("result.txt.tree", features, classes)
 predictions = DecisionTree.predict(dt, test_data)
 ```
 """
-function convert_ba_to_dt(
-    ba_tree_file::String,
-    features::Vector{String},
-    classes::Vector
-)
+function convert_ba_to_dt(ba_tree_file::String, features::Vector{String}, classes::Vector)
     # Parse BA-Trees file
     nodes = Dict{Int,BANode}()
     open(ba_tree_file) do f
@@ -1361,16 +1348,11 @@ function convert_ba_to_dt(
 
     # Build tree starting from root (ID 0)
     root = convert_to_dt_node(nodes, 0, features)
-    
+
     # Create DecisionTreeClassifier
     n_classes = length(classes)
-    dt = DecisionTreeClassifier(
-        root,
-        features,
-        classes,
-        n_classes
-    )
-    
+    dt = DecisionTreeClassifier(root, features, classes, n_classes)
+
     return dt
 end
 
@@ -1399,12 +1381,12 @@ dt = demonstrate_conversion("result.txt.tree", iris_dataset)
 """
 function demonstrate_conversion(ba_tree_file::String, dataset::DataFrame)
     # Extract metadata from dataset
-    features = names(dataset)[1:end-1] |> Vector{String}
+    features = names(dataset)[1:(end-1)] |> Vector{String}
     classes = unique(dataset[!, end]) |> Vector
-    
+
     # Convert the tree
     dt = convert_ba_to_dt(ba_tree_file, features, classes)
-    
+
     # Display information
     println("\n" * "="^60)
     println("Converted Decision Tree Information:")
@@ -1412,16 +1394,16 @@ function demonstrate_conversion(ba_tree_file::String, dataset::DataFrame)
     println("Features: ", dt.features)
     println("Classes: ", dt.classes)
     println("="^60)
-    
+
     # Example prediction on first row
-    x = Array(dataset[1, 1:end-1])
+    x = Array(dataset[1, 1:(end-1)])
     prediction = DecisionTree.predict(dt, x)
     println("\nExample Prediction:")
     println("Input: ", x)
     println("Predicted class: ", prediction)
     println("Actual class: ", dataset[1, end])
     println("="^60 * "\n")
-    
+
     return dt
 end
 
@@ -1443,16 +1425,16 @@ display_results("result.txt")
 """
 function display_results(output_file::String)
     output_file = endswith(output_file, ".out") ? output_file : output_file * ".out"
-    
+
     if !isfile(output_file)
         println("Output file not found: $output_file")
         return
     end
-    
+
     println("\n" * "="^60)
     println("Born-Again Tree Analysis Results:")
     println("="^60)
-    
+
     for line in eachline(output_file)
         if startswith(line, "TIME") ||
            startswith(line, "DEPTH") ||
@@ -1466,7 +1448,7 @@ function display_results(output_file::String)
             end
         end
     end
-    
+
     println("="^60 * "\n")
 end
 
@@ -1494,11 +1476,11 @@ For production use, prefer the more flexible `prepare_and_run_ba_trees`.
 function prepare_and_run_ba_trees_hardcoded(;
     dataset_name = "iris",
     num_trees = 3,
-    max_depth = 3
+    max_depth = 3,
 )
     base_dir = @__DIR__
     dataset_path = joinpath(base_dir, dataset_name * ".csv")
-    
+
     if !isfile(dataset_path)
         println("ERROR: Dataset file not found: $dataset_path")
         println("Current directory: ", pwd())
@@ -1536,7 +1518,7 @@ function prepare_and_run_ba_trees_hardcoded(;
         run(cmd)
 
         display_results(output_stats)
-        
+
         if isfile(output_tree)
             println("\n" * "="^60)
             println("Born-Again Tree Structure:")
@@ -1552,14 +1534,14 @@ function prepare_and_run_ba_trees_hardcoded(;
         println("\nDebug information:")
         println("Current directory: ", pwd())
         println("Executable exists: ", isfile(executable_path))
-        
+
         if isdir(temp_dir)
             println("\nTemporary directory contents:")
             for (root, dirs, files) in walkdir(temp_dir)
                 println("Files: ", join(files, ", "))
             end
         end
-        
+
         if isfile(input_file)
             println("\nFirst 10 lines of input file:")
             println(join(collect(Iterators.take(eachline(input_file), 10)), "\n"))
@@ -1601,12 +1583,12 @@ end
 # ============================================================================
 
 export WRAP_batrees,
-       WRAP_batrees_hardcoded,
-       prepare_and_run_ba_trees,
-       create_random_forest_input_from_model,
-       convert_ba_to_dt,
-       display_results,
-       BANode,
-       parse_ba_node
+    WRAP_batrees_hardcoded,
+    prepare_and_run_ba_trees,
+    create_random_forest_input_from_model,
+    convert_ba_to_dt,
+    display_results,
+    BANode,
+    parse_ba_node
 
 end # module RunModule

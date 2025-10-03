@@ -20,7 +20,7 @@ const results_lock = ReentrantLock()
 A type alias representing either a variable value or a univariate named feature.
 This union type enables unified handling of both `VariableValue` and `UnivariateNamedFeature` types.
 """
-const VariableNamedValue = Union{VariableValue, UnivariateNamedFeature}
+const VariableNamedValue = Union{VariableValue,UnivariateNamedFeature}
 
 
 """
@@ -249,7 +249,10 @@ end
 
 ############################ Constructor #######################################
 
-function TwoLevelDNFFormula(combinations::AbstractVector, atoms::AbstractVector{<:Atom} = [])
+function TwoLevelDNFFormula(
+    combinations::AbstractVector,
+    atoms::AbstractVector{<:Atom} = [],
+)
     if isempty(combinations)
         # TODO @Marco
         num_atoms = length(atoms)
@@ -273,7 +276,9 @@ end
 #TODO talk about that for now we use this in BYPASS
 function TwoLevelDNFFormula(atoms::Vector, combinations::Vector{TritVector})
     # Validate inputs
-    !isempty(combinations) && isempty(atoms) && throw(ArgumentError("Atoms vector cannot be empty"))
+    !isempty(combinations) &&
+        isempty(atoms) &&
+        throw(ArgumentError("Atoms vector cannot be empty"))
 
     # Process atoms
     my_atoms = unique(atoms)
@@ -297,18 +302,20 @@ function TwoLevelDNFFormula(atoms::Vector, combinations::Vector{TritVector})
     for atom in my_atoms
         feat = atom.value.metacond.feature.i_variable
         threshold = atom.value.threshold
-        push!(
-            get!(Vector{Tuple{Float64,Bool}}, atoms_by_feature, feat),
-            (threshold, true)
-        )
+        push!(get!(Vector{Tuple{Float64,Bool}}, atoms_by_feature, feat), (threshold, true))
     end
 
     # Sort atoms within each feature
     for (_, atom_list) in atoms_by_feature
-        sort!(atom_list, by=first)
+        sort!(atom_list, by = first)
     end
 
-    return TwoLevelDNFFormula(combinations, num_atoms, thresholds_by_feature, atoms_by_feature)
+    return TwoLevelDNFFormula(
+        combinations,
+        num_atoms,
+        thresholds_by_feature,
+        atoms_by_feature,
+    )
 end
 
 # Costruttore che accetta atoms e combinations come BigInt
@@ -408,14 +415,18 @@ new_formula = set_combinations(formula, eachcombination(formula)[2:end])
 """
 function set_combinations(formula::TwoLevelDNFFormula, new_combinations::Vector{TritVector})
     if any(length(c) != nuberofatoms(formula) for c in new_combinations)
-        throw(ArgumentError("New combinations must have the same number of atoms as the original formula"))
+        throw(
+            ArgumentError(
+                "New combinations must have the same number of atoms as the original formula",
+            ),
+        )
     end
 
     return TwoLevelDNFFormula(
         new_combinations,
         nuberofatoms(formula),
         eachthresholdsbyfeature(formula),
-        eachatomsbyfeature(formula)
+        eachatomsbyfeature(formula),
     )
 end
 
@@ -435,7 +446,11 @@ new_formula = set_feature_thresholds(formula, 1, [1.0, 2.0, 3.0])
 - KeyError if feature doesn't exist in the formula
 - ArgumentError if new thresholds are incompatible with existing atoms
 """
-function set_feature_thresholds(formula::TwoLevelDNFFormula, feature::Int, new_thresholds::Vector{Float64})
+function set_feature_thresholds(
+    formula::TwoLevelDNFFormula,
+    feature::Int,
+    new_thresholds::Vector{Float64},
+)
     if !haskey(eachatomsbyfeature(formula), feature)
         throw(KeyError("Feature $feature not found in formula"))
     end
@@ -445,14 +460,18 @@ function set_feature_thresholds(formula::TwoLevelDNFFormula, feature::Int, new_t
 
     atoms = eachatomsbyfeature(formula)[feature]
     if !all(t -> t[1] ∈ new_thresholds, atoms)
-        throw(ArgumentError("New thresholds must include all threshold values used in atomic propositions"))
+        throw(
+            ArgumentError(
+                "New thresholds must include all threshold values used in atomic propositions",
+            ),
+        )
     end
 
     return TwoLevelDNFFormula(
         eachcombination(formula),
         nuberofatoms(formula),
         new_thresholds_by_feature,
-        eachatomsbyfeature(formula)
+        eachatomsbyfeature(formula),
     )
 end
 
@@ -472,13 +491,17 @@ new_formula = set_feature_atoms(formula, 1, new_atoms)
 # Throws
 - KeyError if feature doesn't exist in the formula
 """
-function set_feature_atoms(formula::TwoLevelDNFFormula, feature::Int, new_atoms::Vector{Tuple{Float64,Bool}})
+function set_feature_atoms(
+    formula::TwoLevelDNFFormula,
+    feature::Int,
+    new_atoms::Vector{Tuple{Float64,Bool}},
+)
     if !haskey(eachatomsbyfeature(formula), feature)
         throw(KeyError("Feature $feature not found in formula"))
     end
 
     new_atoms_by_feature = Dict(eachatomsbyfeature(formula))
-    new_atoms_by_feature[feature] = sort(new_atoms, by=first)
+    new_atoms_by_feature[feature] = sort(new_atoms, by = first)
 
     new_thresholds_by_feature = Dict(eachthresholdsbyfeature(formula))
     new_thresholds_by_feature[feature] = sort(unique([t for (t, _) in new_atoms]))
@@ -497,7 +520,7 @@ function set_feature_atoms(formula::TwoLevelDNFFormula, feature::Int, new_atoms:
         new_combinations,
         new_atom_count,
         new_thresholds_by_feature,
-        new_atoms_by_feature
+        new_atoms_by_feature,
     )
 end
 
@@ -517,29 +540,32 @@ new_formula = add_feature(formula, 3, new_atoms)
 # Throws
 - ArgumentError if feature already exists
 """
-function add_feature(formula::TwoLevelDNFFormula, feature::Int,
-    atoms::Vector{Tuple{Float64,Bool}})
+function add_feature(
+    formula::TwoLevelDNFFormula,
+    feature::Int,
+    atoms::Vector{Tuple{Float64,Bool}},
+)
     if haskey(eachatomsbyfeature(formula), feature)
         throw(ArgumentError("Feature $feature already exists in formula"))
     end
 
     new_atoms_by_feature = Dict(eachatomsbyfeature(formula))
-    new_atoms_by_feature[feature] = sort(atoms, by=first)
+    new_atoms_by_feature[feature] = sort(atoms, by = first)
 
     new_thresholds_by_feature = Dict(eachthresholdsbyfeature(formula))
     new_thresholds_by_feature[feature] = sort(unique([t for (t, _) in atoms]))
 
     new_num_atoms = nuberofatoms(formula) + length(atoms)
     new_combinations = [
-        TritVector(vcat(Vector{Int8}(c), zeros(Int8, length(atoms))))
-        for c in eachcombination(formula)
+        TritVector(vcat(Vector{Int8}(c), zeros(Int8, length(atoms)))) for
+        c in eachcombination(formula)
     ]
 
     return TwoLevelDNFFormula(
         new_combinations,
         new_num_atoms,
         new_thresholds_by_feature,
-        new_atoms_by_feature
+        new_atoms_by_feature,
     )
 end
 
@@ -563,15 +589,11 @@ function remove_feature(formula::TwoLevelDNFFormula, feature::Int)
         throw(KeyError("Feature $feature not found in formula"))
     end
 
-    new_atoms_by_feature = Dict(
-        k => v for (k, v) in eachatomsbyfeature(formula)
-        if k != feature
-    )
+    new_atoms_by_feature =
+        Dict(k => v for (k, v) in eachatomsbyfeature(formula) if k != feature)
 
-    new_thresholds_by_feature = Dict(
-        k => v for (k, v) in eachthresholdsbyfeature(formula)
-        if k != feature
-    )
+    new_thresholds_by_feature =
+        Dict(k => v for (k, v) in eachthresholdsbyfeature(formula) if k != feature)
 
     feature_atoms = eachatomsbyfeature(formula)[feature]
     remove_count = length(feature_atoms)
@@ -588,7 +610,7 @@ function remove_feature(formula::TwoLevelDNFFormula, feature::Int)
         new_combinations,
         new_num_atoms,
         new_thresholds_by_feature,
-        new_atoms_by_feature
+        new_atoms_by_feature,
     )
 end
 #################################################################################
@@ -652,9 +674,9 @@ Returns tuples of (feature_index, count).
 top_features = find_most_used_features(formula, 2)  # Returns [(1, 5), (3, 3)]
 ```
 """
-function find_most_used_features(formula::TwoLevelDNFFormula, top_n::Int=3)
+function find_most_used_features(formula::TwoLevelDNFFormula, top_n::Int = 3)
     feature_counts = count_active_atoms(formula)
-    sorted_features = sort(collect(feature_counts), by=x -> x[2], rev=true)
+    sorted_features = sort(collect(feature_counts), by = x -> x[2], rev = true)
     return sorted_features[1:min(top_n, length(sorted_features))]
 end
 
@@ -738,14 +760,14 @@ function get_formula_statistics(formula::TwoLevelDNFFormula)
     # Calculate various statistics
     term_complexities = get_term_complexity(formula)
     return (
-        num_terms=length(combinations),
-        num_features=length(atoms_by_feat),
-        total_atoms=nuberofatoms(formula),
-        avg_term_complexity=mean(term_complexities),
-        max_term_complexity=maximum(term_complexities),
-        min_term_complexity=minimum(term_complexities),
-        feature_usage=count_active_atoms(formula),
-        complexity_distribution=countmap(term_complexities)
+        num_terms = length(combinations),
+        num_features = length(atoms_by_feat),
+        total_atoms = nuberofatoms(formula),
+        avg_term_complexity = mean(term_complexities),
+        max_term_complexity = maximum(term_complexities),
+        min_term_complexity = minimum(term_complexities),
+        feature_usage = count_active_atoms(formula),
+        complexity_distribution = countmap(term_complexities),
     )
 end
 
@@ -865,7 +887,7 @@ function get_feature_importance(formula::TwoLevelDNFFormula)
     max_score = maximum(values(scores))
     scores = Dict(k => v / max_score for (k, v) in scores)
 
-    return sort(collect(scores), by=x -> x[2], rev=true)
+    return sort(collect(scores), by = x -> x[2], rev = true)
 end
 
 """
@@ -987,7 +1009,7 @@ function visualize_feature_coverage(formula::TwoLevelDNFFormula)
         atom_idx = 1
         for feature in features
             atoms = atoms_by_feat[feature]
-            has_active = any(!iszero, combination[atom_idx:atom_idx+length(atoms)-1])
+            has_active = any(!iszero, combination[atom_idx:(atom_idx+length(atoms)-1)])
             result *= " $(has_active ? "■" : "□") "
             atom_idx += length(atoms)
         end
@@ -1025,7 +1047,7 @@ function visualize_threshold_density(formula::TwoLevelDNFFormula)
 
         # Create bins
         n_bins = 10
-        bin_edges = range(global_min, global_max, length=n_bins + 1)
+        bin_edges = range(global_min, global_max, length = n_bins + 1)
         bin_counts = zeros(Int, n_bins)
 
         # Count thresholds in each bin
@@ -1077,14 +1099,15 @@ function visualize_term_network(formula::TwoLevelDNFFormula)
     n_terms = length(combinations)
     adjacency = zeros(Int, n_terms, n_terms)
 
-    for i in 1:n_terms
-        for j in i+1:n_terms
+    for i = 1:n_terms
+        for j = (i+1):n_terms
             shared_features = 0
             atom_idx = 1
 
             for (feature, atoms) in atoms_by_feat
-                range = atom_idx:atom_idx+length(atoms)-1
-                if any(!iszero, combinations[i][range]) && any(!iszero, combinations[j][range])
+                range = atom_idx:(atom_idx+length(atoms)-1)
+                if any(!iszero, combinations[i][range]) &&
+                   any(!iszero, combinations[j][range])
                     shared_features += 1
                 end
                 atom_idx += length(atoms)
@@ -1095,16 +1118,16 @@ function visualize_term_network(formula::TwoLevelDNFFormula)
     end
 
     # Create simple ASCII visualization
-    for i in 1:n_terms
+    for i = 1:n_terms
         result *= "T$i "
-        for j in 1:n_terms
+        for j = 1:n_terms
             if i == j
                 result *= "●"
             else
                 strength = adjacency[i, j]
-                result *= strength == 0 ? "  " :
-                          strength == 1 ? "─ " :
-                          strength == 2 ? "═ " : "▓ "
+                result *=
+                    strength == 0 ? "  " :
+                    strength == 1 ? "─ " : strength == 2 ? "═ " : "▓ "
             end
         end
         result *= "\n"
@@ -1210,7 +1233,7 @@ function manTwoLevelDNFFormula(use_ascii_art::Bool = false)
     println(MAGENTA, "│   └── atoms_by_feature: Dict{Int,Vector}         │")
     println(MAGENTA, "│                                                  │")
     println(MAGENTA, "└──────────────────────────────────────────────────┘", RESET)
-    
+
     println()
     # Analysis Functions - each line printed separately
     println(BLUE, "┌────────── ANALYSIS FUNCTIONS ───────────────┐")
@@ -1287,7 +1310,7 @@ nterms(f::TwoLevelDNFFormula) = length(eachcombination(f))
 function natomsperterm(f::TwoLevelDNFFormula)
     sum = 0
     for combination in eachcombination(f)
-        for i in 1:length(combination)
+        for i = 1:length(combination)
             if combination[i] != -1  # Count non-don't-care trits
                 sum += 1
             end
@@ -1353,8 +1376,14 @@ function generate_disjunct(
                     # For "<" (is_greater_equal = false) we want the smallest threshold
                     # For "≥" (is_greater_equal = true) we want the largest threshold
                     if !haskey(feature_conditions[feature], is_greater_equal) ||
-                       (!is_greater_equal && threshold < feature_conditions[feature][is_greater_equal]) ||
-                       (is_greater_equal && threshold > feature_conditions[feature][is_greater_equal])
+                       (
+                           !is_greater_equal &&
+                           threshold < feature_conditions[feature][is_greater_equal]
+                       ) ||
+                       (
+                           is_greater_equal &&
+                           threshold > feature_conditions[feature][is_greater_equal]
+                       )
                         feature_conditions[feature][is_greater_equal] = threshold
                     end
                 end
@@ -1383,8 +1412,12 @@ using SoleLogics
 
 function Base.convert(::Type{SoleLogics.DNF}, f::TwoLevelDNFFormula)
     conjuncts = [
-        generate_disjunct(comb, nuberofatoms(f), eachthresholdsbyfeature(f), eachatomsbyfeature(f))
-        for comb in eachcombination(f)
+        generate_disjunct(
+            comb,
+            nuberofatoms(f),
+            eachthresholdsbyfeature(f),
+            eachatomsbyfeature(f),
+        ) for comb in eachcombination(f)
     ]
     filter!(!istop, conjuncts)
     return LeftmostDisjunctiveForm{LeftmostConjunctiveForm{Atom}}(conjuncts, true)
@@ -1395,13 +1428,15 @@ function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula) # TODO 
         TwoLevelDNFFormula(TritVector[])
     else
         f = SoleLogics.dnf(f)
-    atoms = unique(SoleLogics.atoms(f))
-    conds = SoleLogics.value.(atoms)
+        atoms = unique(SoleLogics.atoms(f))
+        conds = SoleLogics.value.(atoms)
         # Remove duals.
         conds = SoleData.removeduals(conds)
         atoms = Atom.(conds)
         combinations = begin
-            if f isa SoleLogics.LeftmostDisjunctiveForm{<:Union{Atom,Literal,LeftmostConjunctiveForm{<:Union{Atom,Literal}}}}
+            if f isa SoleLogics.LeftmostDisjunctiveForm{
+                <:Union{Atom,Literal,LeftmostConjunctiveForm{<:Union{Atom,Literal}}},
+            }
                 disjs = SoleLogics.disjuncts(f)
                 # 
                 function disjunct_to_combination!(combination, disj::Atom, conds)
@@ -1439,7 +1474,7 @@ function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula) # TODO 
                 error("Could not convert formula of type $(typeof(f)) to TwoLevelDNFFormula.")
             end
         end
-        return TwoLevelDNFFormula(combinations, atoms, ) # TODO talk about that
+        return TwoLevelDNFFormula(combinations, atoms) # TODO talk about that
     end
 end
 
@@ -1554,10 +1589,11 @@ The representation includes the number of combinations in the formula, and then 
 function stampa_dnf(
     io::IO,
     formula::TwoLevelDNFFormula,
-    max_combinations::Int=nterms(formula),
+    max_combinations::Int = nterms(formula),
 )
     println(io, "TwoLevelDNFFormula with $(nterms(formula)) combinations:")
-    for (i, combination) in enumerate(eachcombination(formula)[1:min(max_combinations, end)])
+    for (i, combination) in
+        enumerate(eachcombination(formula)[1:min(max_combinations, end)])
         disjunct = generate_disjunct(
             combination,
             nuberofatoms(formula),

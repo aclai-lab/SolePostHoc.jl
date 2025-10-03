@@ -17,18 +17,25 @@ function condition_to_string(cond)
         i_var = replace(string(i_var), r"^V+" => "")
         lower_op = cond.minincluded ? "≥" : ">"
         upper_op = cond.maxincluded ? "≤" : "<"
-        return "(" * join(["V$(i_var) $(lower_op) $(cond.minval)",
-                       "V$(i_var) $(upper_op) $(cond.maxval)"], " ∧ ") * ")"
+        return "(" *
+               join(
+                   [
+                       "V$(i_var) $(lower_op) $(cond.minval)",
+                       "V$(i_var) $(upper_op) $(cond.maxval)",
+                   ],
+                   " ∧ ",
+               ) *
+               ")"
     elseif hasproperty(cond, :metacond)
         i_var = cond.metacond.feature.i_variable
         # Remove any existing 'V' prefix to avoid duplication
         i_var = replace(string(i_var), r"^V+" => "")
         op_fun = cond.metacond.test_operator
         thr = cond.threshold
-        op_str = op_fun === (<) ? "<" :
-                 op_fun === (<=) ? "≤" :
-                 op_fun === (>) ? ">" :
-                 op_fun === (>=) ? "≥" : string(op_fun)
+        op_str =
+            op_fun === (<) ? "<" :
+            op_fun === (<=) ? "≤" :
+            op_fun === (>) ? ">" : op_fun === (>=) ? "≥" : string(op_fun)
         return "(V$(i_var) $(op_str) $(thr))"
     else
         return string(cond)
@@ -102,14 +109,14 @@ function parse_rule_string(rule_str)
 
     φ = SoleLogics.parseformula(
         antecedent_str;
-        atom_parser=a -> Atom(
+        atom_parser = a -> Atom(
             parsecondition(
                 ScalarCondition,
                 a;
-                featuretype=VariableValue,
-                featvaltype=Real
-            )
-        )
+                featuretype = VariableValue,
+                featvaltype = Real,
+            ),
+        ),
     )
 
     return φ, outcome
@@ -123,7 +130,7 @@ Returns a new DecisionSet with one rule per class in DNF form.
 """
 function convertApi(ds::DecisionList)
     # Get list of rules
-    rules_list = listrules(ds, use_shortforms=true)
+    rules_list = listrules(ds, use_shortforms = true)
 
     # Group antecedents by outcome
     class_to_antecedents = Dict{String,Vector{String}}()
@@ -145,14 +152,14 @@ function convertApi(ds::DecisionList)
 
         φ = SoleLogics.parseformula(
             big_dnf_str;
-            atom_parser=a -> Atom(
+            atom_parser = a -> Atom(
                 parsecondition(
                     ScalarCondition,
                     a;
-                    featuretype=VariableValue,
-                    featvaltype=Real
-                )
-            )
+                    featuretype = VariableValue,
+                    featvaltype = Real,
+                ),
+            ),
         )
         println("pre : ", φ)
         φ = dnf(φ)

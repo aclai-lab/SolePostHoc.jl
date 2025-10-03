@@ -30,9 +30,9 @@ using SoleModels: RuleExtractor
 import SoleModels: isexact, modalextractrules
 
 function _get_rule_extractor_docstring(ruleextractorname::String, method)
-  return """Extract rules from a symbolic model using [`$(string(method))`](ref).""" *
-         "\n\n" *
-         """See also [`modalextractrules`](@ref), [`RuleExtractor`](@ref)."""
+    return """Extract rules from a symbolic model using [`$(string(method))`](ref).""" *
+           "\n\n" *
+           """See also [`modalextractrules`](@ref), [`RuleExtractor`](@ref)."""
 end
 
 export convert_classification_rules, refne_classification_rules
@@ -50,21 +50,21 @@ include("intrees/apiIntrees.jl")
 
 """$(_get_rule_extractor_docstring("InTreesRuleExtractor", intrees))"""
 @kwdef struct InTreesRuleExtractor <: RuleExtractor
-  prune_rules::Bool = true
-  pruning_s::Union{Float64,Nothing} = nothing
-  pruning_decay_threshold::Union{Float64,Nothing} = nothing
-  rule_selection_method::Symbol = :CBC
-  rule_complexity_metric::Symbol = :natoms
-  # accuracy_rule_selection = nothing
-  min_coverage::Union{Float64,Nothing} = nothing
+    prune_rules::Bool = true
+    pruning_s::Union{Float64,Nothing} = nothing
+    pruning_decay_threshold::Union{Float64,Nothing} = nothing
+    rule_selection_method::Symbol = :CBC
+    rule_complexity_metric::Symbol = :natoms
+    # accuracy_rule_selection = nothing
+    min_coverage::Union{Float64,Nothing} = nothing
 end
 
 function modalextractrules(::InTreesRuleExtractor, m, args...; kwargs...)
-  dl = intrees(m, args...; kwargs...)
-  ll = listrules(dl, use_shortforms=false) # decision list to list of rules
-  rules_obj = convert_classification_rules(dl, ll)
-  dsintrees = DecisionSet(rules_obj)
-  return dsintrees
+    dl = intrees(m, args...; kwargs...)
+    ll = listrules(dl, use_shortforms = false) # decision list to list of rules
+    rules_obj = convert_classification_rules(dl, ll)
+    dsintrees = DecisionSet(rules_obj)
+    return dsintrees
 end
 
 #======================================================================================================================================
@@ -84,8 +84,8 @@ include("lumen/main.jl")
 struct LumenRuleExtractor <: RuleExtractor end
 
 function modalextractrules(::LumenRuleExtractor, m, args...; kwargs...)
-  ds = lumen(m, args...; kwargs...)
-  return ds
+    ds = lumen(m, args...; kwargs...)
+    return ds
 end
 
 #======================================================================================================================================
@@ -103,8 +103,8 @@ include("BA-Trees/src/main.jl")
 struct BATreesRuleExtractor <: RuleExtractor end
 
 function modalextractrules(::BATreesRuleExtractor, m, args...; kwargs...)
-  dsbatrees = batrees(m, dsOutput=true, args...; kwargs...)
-  return dsbatrees
+    dsbatrees = batrees(m, dsOutput = true, args...; kwargs...)
+    return dsbatrees
 end
 
 #======================================================================================================================================
@@ -121,9 +121,9 @@ include("Refne/src/apiREFNESole.jl")
 struct REFNERuleExtractor <: RuleExtractor end
 
 function modalextractrules(::REFNERuleExtractor, m, args...; kwargs...)
-  dl = refne(m, args...; kwargs...)
-  ds = convertApi(dl)
-  return ds
+    dl = refne(m, args...; kwargs...)
+    ds = convertApi(dl)
+    return ds
 end
 
 #======================================================================================================================================
@@ -140,9 +140,9 @@ include("Trepan/src/main.jl")
 struct TREPANRuleExtractor <: RuleExtractor end
 
 function modalextractrules(::TREPANRuleExtractor, m, args...; kwargs...)
-  dl = trepan(m, args...; kwargs...)
-  ds = convertApi(dl)
-  return ds
+    dl = trepan(m, args...; kwargs...)
+    ds = convertApi(dl)
+    return ds
 end
 
 #======================================================================================================================================
@@ -159,11 +159,11 @@ include("RuleCosiplus/src/apiRuleCosi.jl")
 struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
 
 function modalextractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
-  dl = rulecosiplus(m, args...; kwargs...) # decision list   
-  ll = listrules(dl, use_shortforms=false) # decision list to list of rules
-  rules_obj = convert_classification_rules(dl, ll)
-  dsrulecosiplus = DecisionSet(rules_obj)
-  return dsrulecosiplus
+    dl = rulecosiplus(m, args...; kwargs...) # decision list   
+    ll = listrules(dl, use_shortforms = false) # decision list to list of rules
+    rules_obj = convert_classification_rules(dl, ll)
+    dsrulecosiplus = DecisionSet(rules_obj)
+    return dsrulecosiplus
 end
 
 

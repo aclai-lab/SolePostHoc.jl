@@ -12,9 +12,13 @@ function print_estimated_time(total_estimated_time::BigFloat)
     if total_estimated_time < 60
         println("Estimated time: approx $(round(total_estimated_time, digits=2)) seconda")
     elseif total_estimated_time < 3600
-        println("Estimated time: approx $(round(total_estimated_time / 60, digits=2)) minut")
+        println(
+            "Estimated time: approx $(round(total_estimated_time / 60, digits=2)) minut",
+        )
     else
-        println("Estimated time: approx $(round(total_estimated_time / 3600, digits=2)) hours")
+        println(
+            "Estimated time: approx $(round(total_estimated_time / 3600, digits=2)) hours",
+        )
     end
 end
 
@@ -86,13 +90,10 @@ Given a `TwoLevelDNFFormula` which uses TritVectors (`1` for <, `0` for ≥, `-1
 this function returns an array of conjunction-strings. Each entry in the returned array is one
 term of the DNF (the conjunction of conditions for that combination).
 """
-function my_syntaxstring(
-    formula::TwoLevelDNFFormula,
-    orizontal::Float64 = 1.0
-    )
+function my_syntaxstring(formula::TwoLevelDNFFormula, orizontal::Float64 = 1.0)
     # Number of features (horizontally) we want to consider
     num_orizontal = floor(Int, eachthresholdsbyfeature(formula).count * orizontal)
-    
+
     # We'll accumulate each distinct conjunction-string in a Set to avoid duplicates
     result = Set{String}()
 
@@ -100,7 +101,7 @@ function my_syntaxstring(
     for combination in eachcombination(formula)
         feature_conditions = Dict{Int,Dict{String,Float64}}()
         current_atom_index = 1
-        
+
         # For each feature and its sorted list of (threshold, bool), in ascending threshold order
         for (feature, atoms) in eachatomsbyfeature(formula)
             if feature <= num_orizontal
@@ -108,18 +109,18 @@ function my_syntaxstring(
                     # Make sure we do not exceed the length of the TritVector
                     if current_atom_index <= length(combination)
                         trit_value = combination[current_atom_index]
-                        
+
                         # Only proceed if not -1 (i.e. not a don't-care)
                         if trit_value != -1
                             # Initialize nested dict if needed
                             if !haskey(feature_conditions, feature)
                                 feature_conditions[feature] = Dict{String,Float64}()
                             end
-                            
+
                             # 1 => "< threshold"
                             # 0 => "≥ threshold"
                             op = (trit_value == 1) ? "<" : "≥"
-                            
+
                             # We keep only the "most restrictive" threshold for each op:
                             #   for "<"  we want the *smallest* threshold
                             #   for "≥" we want the *largest* threshold
@@ -160,28 +161,24 @@ end
 Constructs a `Rule` from the DNF formula, parsing the resulting string into a `SoleLogics.Formula`.
 The `outcome` is any label you want to attach to the rule (e.g., a class label).
 """
-function convert_DNF_formula(
-    formula::TwoLevelDNFFormula,
-    outcome,
-    orizontal::Float64 = 1.0,
-)
+function convert_DNF_formula(formula::TwoLevelDNFFormula, outcome, orizontal::Float64 = 1.0)
     # Build the array of conjunction-strings
     formulas = my_syntaxstring(formula, orizontal)
-    
+
     # Join the conjunctions with " ∨ " to get the full DNF
     result = join(formulas, " ∨ ")
-    
+
     # Parse the DNF string into a SoleLogics formula
     φ = SoleLogics.parseformula(
         result;
         atom_parser = a -> Atom(
             parsecondition(
-                SoleData.ScalarCondition, 
-                a; 
+                SoleData.ScalarCondition,
+                a;
                 featuretype = SoleData.VariableValue,
-                featvaltype = Real
-            )
-        )
+                featvaltype = Real,
+            ),
+        ),
     )
 
     #= 
@@ -202,7 +199,7 @@ end
 
 Given a `LeftmostDisjunctiveForm{LeftmostConjunctiveForm}`, returns a string in DNF form.
 """
-function leftmost_disjunctive_form_to_string(ldf, c=1.0, vetImportance=[])
+function leftmost_disjunctive_form_to_string(ldf, c = 1.0, vetImportance = [])
     # Helper: extract the list of atoms from either a ConjunctiveForm or a single Atom
     function get_atoms(cf)
         if cf isa LeftmostConjunctiveForm
@@ -218,16 +215,17 @@ function leftmost_disjunctive_form_to_string(ldf, c=1.0, vetImportance=[])
 
     # If c is 1.0 (100%) or vetImportance is empty, use all variables
     include_all_vars = (c == 1.0 || isempty(vetImportance))
-    
+
     # Calculate which variables to include based on importance
     included_vars = Set{Int}()
     if !include_all_vars
         # Determine how many variables to include based on c
         num_vars_to_include = max(1, ceil(Int, length(vetImportance) * c))
-        
+
         # Get the most important variables
-        sorted_indices = sortperm(1:length(vetImportance), by=i -> findfirst(==(i), vetImportance))
-        for i in 1:num_vars_to_include
+        sorted_indices =
+            sortperm(1:length(vetImportance), by = i -> findfirst(==(i), vetImportance))
+        for i = 1:num_vars_to_include
             push!(included_vars, sorted_indices[i])
         end
     end
@@ -242,21 +240,20 @@ function leftmost_disjunctive_form_to_string(ldf, c=1.0, vetImportance=[])
         for atom in these_atoms
             cond = atom.value
             i_var = cond.metacond.feature.i_variable
-            
+
             # Skip this atom if the variable is not in the included set
             if !include_all_vars && !(i_var in included_vars)
                 continue
             end
-            
+
             op_fun = cond.metacond.test_operator
             thr = cond.threshold
 
             # Turn the operator function into a standard symbol
-            op_str = op_fun === (<)  ? "<"  :
-                     op_fun === (<=) ? "≤"  :
-                     op_fun === (>)  ? ">"  :
-                     op_fun === (>=) ? "≥"  :
-                     string(op_fun)
+            op_str =
+                op_fun === (<) ? "<" :
+                op_fun === (<=) ? "≤" :
+                op_fun === (>) ? ">" : op_fun === (>=) ? "≥" : string(op_fun)
 
             push!(atom_strings, "V$(i_var) $(op_str) $(thr)")
         end
@@ -265,12 +262,12 @@ function leftmost_disjunctive_form_to_string(ldf, c=1.0, vetImportance=[])
         if isempty(atom_strings)
             continue
         end
-        
+
         # Join all atoms in this conjunction
         conj_str = "(" * join(atom_strings, " ∧ ") * ")"
         push!(conjunctive_strings, conj_str)
     end
-    
+
     # Skip if all conjunctions were filtered out
     if isempty(conjunctive_strings)
         return "∅"  # Empty set symbol to indicate no conditions remain

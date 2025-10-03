@@ -30,7 +30,8 @@ alphabet(i::DLIndividual) = i._alphabet
 classes(i::DLIndividual) = i._classes
 alldls(i::DLIndividual) = i._alldls
 
-Base.show(io::IO, indiv::DLIndividual) = println(io, "DLIndividual\n$(displaymodel(dl(indiv); header = false))")
+Base.show(io::IO, indiv::DLIndividual) =
+    println(io, "DLIndividual\n$(displaymodel(dl(indiv); header = false))")
 
 meandelay(i::DLIndividual; kwargs...) = meandelay(dl(i); kwargs...)
 symbolnumber(i::DLIndividual) = symbolnumber(dl(i))
@@ -59,12 +60,12 @@ function finalmetrics(
     memostruct,
 )
     return [
-        kappa(i; X=X, Y=Y, memostruct=memostruct),
-        _error(i; X=X, Y=Y, memostruct = memostruct),
+        kappa(i; X = X, Y = Y, memostruct = memostruct),
+        _error(i; X = X, Y = Y, memostruct = memostruct),
         nrules(i),
         symbolnumber(i),
-        meandelay(i; X=X, memostruct = memostruct),
-        absnrulescomplexity(i; Y=Y),
+        meandelay(i; X = X, memostruct = memostruct),
+        absnrulescomplexity(i; Y = Y),
     ]
 end
 
@@ -77,7 +78,7 @@ Evolutionary.default_values(x::DLIndividual) = x
 function Evolutionary.EvolutionaryObjective(
     f::TC,
     x::DLIndividual,
-    F::Union{Real, AbstractArray{<:Real}} = zero(f(x));
+    F::Union{Real,AbstractArray{<:Real}} = zero(f(x));
     eval::Symbol = :serial,
 ) where {TC}
     defval = default_values(x)

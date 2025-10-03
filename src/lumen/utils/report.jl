@@ -86,19 +86,10 @@ function genera_report_statistiche(
         println(file, "\n4. FORMULA SIMPLIFICATION")
         for (result, formula) in combined_results
             simplified_formula = minimize_dnf(formula)
-            reduction =
-                (
-                    1 -
-                    nterms(simplified_formula) /
-                    nterms(formula)
-                ) * 100
+            reduction = (1 - nterms(simplified_formula) / nterms(formula)) * 100
             println(file, "  Label $result:")
             println(file, "    Original terms: ", nterms(formula))
-            println(
-                file,
-                "    Terms after simplification: ",
-                nterms(simplified_formula),
-            )
+            println(file, "    Terms after simplification: ", nterms(simplified_formula))
             println(file, "    Reduction: ", round(reduction, digits = 2), "%")
         end
 
@@ -133,14 +124,7 @@ function genera_report_statistiche(
             println(
                 file,
                 "    Reduction: ",
-                round(
-                    (
-                        1 -
-                        nterms(simplified_formula) /
-                        nterms(formula)
-                    ) * 100,
-                    digits = 2,
-                ),
+                round((1 - nterms(simplified_formula) / nterms(formula)) * 100, digits = 2),
                 "%",
             )
             println(file)
