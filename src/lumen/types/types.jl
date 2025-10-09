@@ -250,9 +250,9 @@ end
 ############################ Constructor #######################################
 
 function TwoLevelDNFFormula(
-    combinations:: V,
+    combinations::V,
     atoms::AbstractVector{<:Atom} = [],
-) where V <: AbstractVector
+) where {V<:AbstractVector}
     if isempty(combinations)
         # TODO @Marco
         num_atoms = length(atoms)

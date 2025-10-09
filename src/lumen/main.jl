@@ -39,13 +39,14 @@ to enable keyword-based construction with default values.
 ## Core Algorithm Parameters
 - `minimization_scheme::Symbol = :AlgorithmName`: The DNF minimization algorithm to use
   - `:mitespresso`: Advanced minimization with good balance of speed/quality
-  - `:boom`: Boom minimizator 
-  - `:abc`: Minimization whit Berkeley framework 
-  
-## Coverage Parameters  
+  - `:boom`: Boom minimizator
+  - `:abc`: Minimization whit Berkeley framework
+
+## Coverage Parameters
 - `vertical::Float64 = 1.0`: Vertical coverage parameter (α) ∈ (0.0, 1.0]
   Controls how many instances must be covered by extracted rules
-- `horizontal::Float64 = 1.0`: Horizontal coverage parameter (β) ∈ (0.0, 1.0]  
+- `depth::Float64 = 1.0`: Depth coverage parameter (δ) ∈ (0.0, 1.0]
+- `horizontal::Float64 = 1.0`: Horizontal coverage parameter (β) ∈ (0.0, 1.0]
   Controls the breadth of rule coverage across feature space (% of different thresholds)
 
 ## Processing Modes
@@ -59,7 +60,7 @@ to enable keyword-based construction with default values.
 - `filteralphabetcallback = identity`: Custom function to filter/modify the logical alphabet
 - `apply_function = nothing`: Custom function for model application
   If `nothing`, automatically determined based on model type (with SoleModels)
-  
+
 ## Output Control
 - `silent::Bool = false`: Suppress progress and diagnostic output
 - `return_info::Bool = true`: Include additional metadata in results
@@ -86,6 +87,7 @@ config = LumenConfig()
 config = LumenConfig(
     minimization_scheme = :abc,
     vertical = 0.8,
+    depth = 0.7,
     horizontal = 0.9,
     silent = true
 )
@@ -103,6 +105,7 @@ See also: [`lumen`](@ref), [`LumenResult`](@ref), [`validate_config`](@ref)
 Base.@kwdef struct LumenConfig
     minimization_scheme::Symbol = :abc
     vertical::Float64 = 1.0
+    depth::Float64 = 1.0
     horizontal::Float64 = 1.0
     ott_mode::Bool = true # TODO VALUATE THIS (if df. true?)
     controllo::Bool = false
@@ -131,21 +134,21 @@ end
 Comprehensive result structure containing extracted logical rules and associated metadata.
 
 This immutable struct encapsulates all outputs from the LUMEN algorithm, providing a clean
-and extensible interface for accessing results. The design follows the principle of 
+and extensible interface for accessing results. The design follows the principle of
 returning rich, self-documenting results rather than simple tuples.
 
 # Fields
 
 - `decision_set::DecisionSet`: The primary output - a collection of minimized logical rules
   Each rule consists of a logical formula (antecedent) and a decision outcome (consequent)
-  
+
 - `info::NamedTuple`: Extensible metadata container with algorithm-specific information
   Common fields include:
   - `vectPrePostNumber`: Vector of (pre, post) minimization term counts
   - `unminimized_ds`: Original decision set before minimization (if requested)
   - `processing_time`: Total algorithm execution time
   - `feature_importance`: Feature ranking information (if available)
-  
+
 - `processing_time::Float64`: Total processing time in seconds
   Measured from algorithm start to completion, useful for performance analysis
 
@@ -157,7 +160,7 @@ Two constructors are provided for different use cases:
 # Full constructor - for complete results with metadata
 LumenResult(decision_set, info_tuple, processing_time)
 
-# Minimal constructor - when only rules are available  
+# Minimal constructor - when only rules are available
 LumenResult(decision_set)  # info=empty, processing_time=0.0
 ```
 
@@ -165,7 +168,7 @@ LumenResult(decision_set)  # info=empty, processing_time=0.0
 
 This structured approach provides several advantages over returning raw tuples:
 1. **Self-documentation**: Field names clearly indicate content
-2. **Type safety**: Julia's type system validates structure at compile time  
+2. **Type safety**: Julia's type system validates structure at compile time
 3. **Extensibility**: Easy to add new fields without breaking existing code
 4. **IDE support**: Autocompletion and inline documentation
 5. **Backward compatibility**: Old code can still access fields by name
@@ -225,10 +228,10 @@ individual parameter validity and logical consistency between parameters.
 # Validation Rules
 
 ## Coverage Parameters
-- Both `vertical` and `horizontal` must be in range (0.0, 1.0]
+- Both `vertical`, `depth` and `horizontal` must be in range (0.0, 1.0]
 - These control rule extraction coverage and must be positive and ≤ 1.0
 
-## Algorithm Parameters  
+## Algorithm Parameters
 - `minimization_scheme` must be one of the supported algorithms
 - Each scheme has different performance characteristics and use cases
 
@@ -254,14 +257,14 @@ catch ArgumentError as e
 end
 
 # This will succeed
-config = LumenConfig(vertical = 0.8, horizontal = 0.9)  # Valid ranges
+config = LumenConfig(vertical = 0.8, depth = 0.4, horizontal = 0.9)  # Valid ranges
 ```
 
 # Implementation Notes
 
 The validation approach separates concerns:
 1. Parameter range validation (mathematical constraints)
-2. Enum validation (supported algorithm schemes)  
+2. Enum validation (supported algorithm schemes)
 3. Logical consistency validation (parameter interactions)
 
 This structure makes it easy to add new validation rules as the algorithm evolves.
@@ -272,11 +275,13 @@ function validate_config(config::LumenConfig)
     if config.vertical <= 0.0 ||
        config.vertical > 1.0 ||
        config.horizontal <= 0.0 ||
-       config.horizontal > 1.0
+       config.horizontal > 1.0 ||
+       config.depth <= 0.0 ||
+       config.depth > 1.0
         throw(
             ArgumentError(
-                "vertical and horizontal parameters must be in range (0.0, 1.0]. " *
-                "Got vertical=$(config.vertical), horizontal=$(config.horizontal). " *
+                "vertical, depth and horizontal parameters must be in range (0.0, 1.0]. " *
+                "Got vertical=$(config.vertical), depth=$(config.depth), horizontal=$(config.horizontal). " *
                 "These parameters control rule coverage and must be meaningful proportions.",
             ),
         )
@@ -318,7 +323,7 @@ This design uses the Strategy pattern to handle different types of models
 (single trees vs. ensembles) with appropriate algorithms. The pattern provides:
 
 1. **Extensibility**: Easy to add new extraction methods
-2. **Type safety**: Compile-time method dispatch  
+2. **Type safety**: Compile-time method dispatch
 3. **Clarity**: Each strategy has a clear, focused responsibility
 4. **Testability**: Individual strategies can be tested in isolation
 
@@ -359,7 +364,7 @@ See also: [`RuleExtractionStrategy`](@ref), [`EnsembleExtraction`](@ref)
 struct StandardExtraction <: RuleExtractionStrategy end
 
 """
-    EnsembleExtraction <: RuleExtractionStrategy  
+    EnsembleExtraction <: RuleExtractionStrategy
 
 Strategy for extracting rules from ensemble models (Random Forests, AdaBoost, etc.).
 
@@ -468,7 +473,7 @@ This is the main entry point for rule extraction that automatically chooses
 the appropriate strategy based on the input model type. It provides a clean
 interface while leveraging the Strategy pattern internally for optimal performance.
 
-# Arguments  
+# Arguments
 - `model`: Decision tree model (single tree or ensemble)
 - `use_shortforms::Bool=true`: Whether to use shortened rule representations
 
@@ -493,7 +498,7 @@ This automatic dispatch approach provides:
 tree_model = build_tree(X, y)
 rules = extract_rules(tree_model)
 
-# Works with ensembles  
+# Works with ensembles
 forest_model = build_forest(X, y)
 rules = extract_rules(forest_model)
 
@@ -531,7 +536,7 @@ logical formulas.
 # Returns
 A tuple containing:
 1. `Int`: Total number of atoms before deduplication
-2. `Vector`: Unique atoms extracted from the model  
+2. `Vector`: Unique atoms extracted from the model
 3. `Alphabet`: Processed logical alphabet for formula construction
 
 # Processing Pipeline
@@ -543,7 +548,7 @@ all_atoms = collect(atoms(SoleModels.alphabet(model, false)))
 Extracts all atomic conditions from the model's internal representation.
 
 ## Step 2: Deduplication
-```julia  
+```julia
 my_atoms = unique(all_atoms)
 ```
 Removes duplicate atoms that may appear in different parts of the model.
@@ -572,7 +577,7 @@ Ensures only supported comparison operators are present.
 Throws `ArgumentError` if symbolic (non-integer) feature names are detected.
 The current implementation requires integer feature indices for efficient processing.
 
-## Unsupported Operators  
+## Unsupported Operators
 Throws `ArgumentError` if operators other than `<` are found.
 This limitation can be extended in future versions.
 
@@ -580,7 +585,7 @@ This limitation can be extended in future versions.
 
 ## Why Extract Atoms First?
 1. **Modularity**: Separates atom extraction from alphabet processing
-2. **Reusability**: Atoms can be reused across different alphabet configurations  
+2. **Reusability**: Atoms can be reused across different alphabet configurations
 3. **Validation**: Early detection of unsupported model features
 4. **Optimization**: Deduplication reduces downstream processing overhead
 
@@ -597,7 +602,7 @@ The `filteralphabetcallback` parameter enables:
 # Basic usage with no filtering
 num_atoms, atoms, alphabet = extract_atoms(model, identity)
 
-# Custom filtering to remove low-importance features  
+# Custom filtering to remove low-importance features
 function remove_weak_features(alphabet)
     # Custom logic to filter alphabet
     return filtered_alphabet
@@ -611,15 +616,38 @@ num_atoms, atoms, alphabet = extract_atoms(model, importance_filter)
 
 See also: [`process_alphabet`](@ref), [`LumenConfig`](@ref), [`validate_config`](@ref)
 """
-function extract_atoms(model, filteralphabetcallback)
+function extract_atoms(model, filteralphabetcallback, depth = 1.0)
     # Step 1: Extract all atomic conditions from the model
     # The 'false' parameter requests the raw alphabet without preprocessing
-    all_atoms = collect(atoms(SoleModels.alphabet(model, false)))
+    if depth < 1.0
+        all_atoms = Atom[]
+        trees = SoleModels.models(model)
+        for t in trees
+            println("==========================")
+            println(t)
+            all_atoms_bfs = extract_atoms_bfs_order(t)
+            @show all_atoms_bfs
+
+            # Prendi solo i primi depth% degli atoms #NOTICE IN FUTURE WE CAN CHOSE DIFFERENT STRATEGY TO TAKE ATOMS
+            selected_atoms = take_first_percentage(all_atoms_bfs, depth)
+            @show selected_atoms
+
+            # Aggiungi agli all_atoms
+            append!(all_atoms, selected_atoms)
+            println("==========================")
+        end
+        @show all_atoms
+    else
+        all_atoms = collect(atoms(SoleModels.alphabet(model, false)))
+        #@show all_atoms
+    end
+
     num_all_atoms = length(all_atoms)
 
     # Step 2: Remove duplicate atoms for efficiency
     # Decision trees often reuse the same conditions across different branches
     my_atoms = unique(all_atoms)
+    #@show my_atoms
 
     # Step 3: Validate feature indexing scheme
     # Extract the maximum feature index to determine the feature space size
@@ -673,9 +701,10 @@ determine which logical formulas correspond to each decision outcome.
 # Arguments
 - `model`: Decision tree model to evaluate
 - `alphabet`: Logical alphabet defining the available conditions
-- `atoms`: Vector of atomic logical conditions  
+- `atoms`: Vector of atomic logical conditions
 - `vertical::Float64`: Coverage parameter controlling instance sampling
-- `horizontal::Float64`: Coverage parameter controlling feature sampling TODO:WORKINPROGRESS
+- `depth::Float64`: Coverage parameter controlling tree depth sampling
+- `horizontal::Float64`: Coverage parameter controlling feature sampling
 - `config::LumenConfig`: Configuration object containing processing options
 
 # Returns
@@ -692,7 +721,7 @@ The function automatically selects between two implementation strategies:
 - **Characteristics**: Straightforward implementation with good memory usage
 - **Performance**: Optimal for small to medium-sized problems
 
-## Optimized Mode (`ott_mode = true`)  
+## Optimized Mode (`ott_mode = true`)
 - **Algorithm**: `truth_combinations_ott()`
 - **Use case**: Large-scale problems requiring memory optimization
 - **Characteristics**: Reduced memory footprint with specialized data structures
@@ -702,7 +731,7 @@ The function automatically selects between two implementation strategies:
 
 ## Phase 1: Input Validation
 - Validates alphabet consistency with atoms
-- Checks vertical parameter bounds  
+- Checks vertical parameter bounds
 - Ensures model compatibility with chosen processing mode
 
 ## Phase 2: Sample Generation
@@ -729,7 +758,7 @@ The function automatically selects between two implementation strategies:
 
 ## Computational Complexity
 - Sample generation: O(2^k) where k is the effective feature count
-- Model evaluation: O(n×d) where d is average tree depth  
+- Model evaluation: O(n×d) where d is average tree depth
 - Result processing: O(n×log(n)) for sorting and grouping
 
 ## Scalability Recommendations
@@ -764,13 +793,13 @@ results, counts = generate_combinations(model, alphabet, atoms, 1.0, config_cust
 
 The function validates inputs and provides descriptive errors for:
 - Inconsistent alphabet/atoms combinations
-- Invalid vertical parameter values  
+- Invalid vertical parameter values
 - Model/apply_function mismatches
 - Memory allocation failures in large-scale processing
 
 See also: [`truth_combinations`](@ref), [`truth_combinations_ott`](@ref), [`LumenConfig`](@ref)
 """
-function generate_combinations(model, alphabet, atoms, vertical, config::LumenConfig) #TODO vertical is not required, in config.vertical we have vertical value 
+function generate_combinations(model, alphabet, atoms, vertical, config::LumenConfig) #TODO vertical is not required, in config.vertical we have vertical value
     # Algorithm selection based on processing requirements
     # The choice between standard and optimized mode significantly impacts
     # both memory usage and computational characteristics
@@ -828,7 +857,7 @@ A tuple containing:
 
 # Processing Pipeline
 
-## Phase 1: Initialization  
+## Phase 1: Initialization
 ```julia
 unminimized_rules = config.return_info ? Rule[] : nothing
 minimized_rules = Rule[]
@@ -857,7 +886,7 @@ Applies the configured minimization algorithm to simplify the formula.
 ```julia
 if should_track_statistics(config.minimization_scheme)
     pre_terms = nterms(formula)
-    post_terms = nterms(minimized_formula) 
+    post_terms = nterms(minimized_formula)
     push!(vect_pre_post_number, (pre_terms, post_terms))
 end
 ```
@@ -877,7 +906,7 @@ Converts the minimized formula back to a Rule object.
 - **Best for**: General use cases with moderate complexity
 - **Trade-offs**: Good compression ratio with reasonable computation time
 
-## :boom  
+## :boom
 - **Characteristics**: Aggressive minimization for maximum compression
 - **Best for**: Complex formulas where maximum simplification is critical
 - **Trade-offs**: Higher computation time for better minimization results
@@ -1080,7 +1109,7 @@ Uses the optimized ensemble application function from DecisionTree.jl.
 ### SoleModels Framework
 ```julia
 else
-    return SoleModels.apply  
+    return SoleModels.apply
 end
 ```
 Uses the generic application function for single trees and other model types.
@@ -1124,7 +1153,7 @@ tree_model = DecisionTree.build_tree(X, y)
 apply_fn = determine_apply_function(tree_model, nothing)
 # Returns: SoleModels.apply
 
-forest_model = DecisionTree.build_forest(X, y)  
+forest_model = DecisionTree.build_forest(X, y)
 apply_fn = determine_apply_function(forest_model, nothing)
 # Returns: DecisionTree.apply_forest
 
@@ -1207,7 +1236,7 @@ config = LumenConfig(
 Each algorithm makes different trade-offs between computational cost and minimization quality:
 
 - **:abc**: Fast execution, moderate minimization
-- **:mitespresso**: Balanced approach, good for most cases  
+- **:mitespresso**: Balanced approach, good for most cases
 - **:boom**: Thorough minimization, higher computational cost
 
 ## Memory Requirements
@@ -1258,6 +1287,7 @@ function minimize_formula(formula, config::LumenConfig)
         Val(config.minimization_scheme),  # Compile-time algorithm selection
         formula;                          # The formula to minimize
         vertical = config.vertical,
+        depth = config.depth,
         horizontal = config.horizontal,
         vetImportance = config.vetImportance,
         config.minimization_kwargs...,     # Forward algorithm-specific parameters
@@ -1283,10 +1313,10 @@ the logic for determining when statistics collection is meaningful and available
 
 ## Statistics-Enabled Algorithms
 - **:mitespresso**: Provides detailed term count reduction metrics
-- **:boom**: Reports aggressive minimization statistics  
+- **:boom**: Reports aggressive minimization statistics
 - **:abc**: Basic statistics about formula simplification
 
-## Black-Box Algorithms  
+## Black-Box Algorithms
 - **:espresso**: External tool with limited introspection capabilities
 - Future algorithms may have varying statistics availability
 
@@ -1347,7 +1377,7 @@ make informed decisions about algorithm selection and parameter tuning.
 
 # Arguments
 - `pre_terms::Int`: Number of terms in the original formula
-- `post_terms::Int`: Number of terms after minimization  
+- `post_terms::Int`: Number of terms after minimization
 - `silent::Bool`: Whether to suppress output (when `true`)
 
 # Output Format
@@ -1370,7 +1400,7 @@ reduction = pre_terms - post_terms
 ```
 Shows the raw number of terms eliminated.
 
-## Percentage Reduction  
+## Percentage Reduction
 ```julia
 percentage = (reduction / pre_terms) * 100
 ```
@@ -1406,7 +1436,7 @@ Future versions could include:
 ```julia
 # Typical usage in processing loop
 for (original, minimized) in formula_pairs
-    pre = nterms(original) 
+    pre = nterms(original)
     post = nterms(minimized)
     log_minimization_stats(pre, post, config.silent)
 end
@@ -1414,7 +1444,7 @@ end
 # Output example:
 # ==========================
 # Terms before: 42
-# Terms after: 12  
+# Terms after: 12
 # Reduction: 30 terms (71% decrease)
 # Compression ratio: 3.5x
 # ==========================
@@ -1464,7 +1494,7 @@ the gap between minimization algorithms and the final rule representation.
 - `result`: The decision outcome associated with this formula
 - `config::LumenConfig`: Configuration affecting rule creation
 
-# Returns  
+# Returns
 - `Rule`: A properly formatted rule object ready for use in DecisionSets
 
 # Processing Modes
@@ -1480,7 +1510,7 @@ return Rule(φ, result)
 ```
 
 ### Advantages:
-- Leverages sophisticated string-based parsing  
+- Leverages sophisticated string-based parsing
 - Handles complex formula structures
 - Supports advanced logical constructs
 - Integration with SoleLogics ecosystem
@@ -1539,7 +1569,7 @@ config = LumenConfig(
 )
 rule = create_rule(minimized_formula, "Class_A", config)
 
-# Basic rule creation  
+# Basic rule creation
 config_basic = LumenConfig(minimization_scheme = :basic)
 rule = create_rule(simple_formula, "Class_B", config_basic)
 ```
@@ -1592,7 +1622,7 @@ end
     lumen(model; config_args...) -> LumenResult
     lumen(model, config::LumenConfig) -> LumenResult
 
-Logic-driven Unified Minimal Extractor of Notions (LUMEN): Extract and minimize 
+Logic-driven Unified Minimal Extractor of Notions (LUMEN): Extract and minimize
 logical rules from decision tree models into interpretable DNF formulas.
 
 LUMEN implements a comprehensive pipeline for converting decision tree models into
@@ -1608,7 +1638,7 @@ lumen(model; minimization_scheme=:mitespresso, vertical=1.0, horizontal=1.0, ...
 ```
 Convenient interface using keyword arguments with automatic config construction.
 
-## Configuration Object Interface  
+## Configuration Object Interface
 ```julia
 lumen(model, config::LumenConfig)
 ```
@@ -1625,6 +1655,7 @@ Advanced interface using pre-constructed configuration for complex scenarios.
 ## Configuration (via keywords or LumenConfig)
 - `minimization_scheme::Symbol = :mitespresso`: DNF minimization algorithm
 - `vertical::Float64 = 1.0`: Instance coverage parameter α ∈ (0,1]
+- `depth::Float64 = 1.0`: Depth coverage parameter δ ∈ (0,1]
 - `horizontal::Float64 = 1.0`: Feature coverage parameter β ∈ (0,1]
 - `ott_mode::Bool = false`: Enable memory-optimized processing
 - `silent::Bool = false`: Suppress progress output
@@ -1647,7 +1678,7 @@ Input Model → Rule Extraction → Logical Rule Set
 - Extracts decision paths as logical rules
 - Handles different model types with appropriate strategies
 
-## Phase 2: Alphabet Construction and Atom Processing  
+## Phase 2: Alphabet Construction and Atom Processing
 ```
 Logical Rules → Atom Extraction → Logical Alphabet
 ```
@@ -1685,7 +1716,7 @@ Truth Table → DNF Formulas → Minimized Rules
 
 # Advanced Features
 
-## Custom Processing  
+## Custom Processing
 ```julia
 # Custom alphabet filtering for domain expertise
 custom_filter = alphabet -> remove_irrelevant_features(alphabet)
@@ -1708,7 +1739,7 @@ config = LumenConfig(minimization_scheme = :abc, silent = true)
 config = LumenConfig(return_info = true, controllo = true)
 result = lumen(model, config)
 
-# Access detailed statistics  
+# Access detailed statistics
 println("Rules before minimization: _(length(result.info.unminimized_ds.rules))")
 println("Rules after minimization: _(length(result.decision_set.rules))")
 ```
@@ -1719,7 +1750,7 @@ The algorithm implements comprehensive error handling:
 
 ## Configuration Validation
 - Parameter range checking (coverage parameters must be ∈ (0,1])
-- Algorithm availability verification  
+- Algorithm availability verification
 - Consistency validation across parameters
 
 ## Processing Errors
@@ -1747,7 +1778,8 @@ println("Extracted _(length(result.decision_set.rules)) rules")
 # Customized processing for complex scenarios
 config = LumenConfig(
     minimization_scheme = :boom,        # Aggressive minimization
-    vertical = 0.9,                     # High instance coverage  
+    vertical = 0.9,                     # High instance coverage
+    depth = 0.7,                        # Moderate depth coverage
     horizontal = 0.8,                   # Moderate feature coverage
     ott_mode = true,                    # Memory optimization
     return_info = true                  # Full information retention
@@ -1775,13 +1807,13 @@ println("Processing time: _(result.processing_time) seconds")
 ## Design Principles
 1. **Modularity**: Each phase is independently testable and extensible
 2. **Configurability**: Extensive customization without code modification
-3. **Performance**: Multiple optimization strategies for different scenarios  
+3. **Performance**: Multiple optimization strategies for different scenarios
 4. **Robustness**: Comprehensive error handling and validation
 5. **Usability**: Clean interfaces with sensible defaults
 
 ## Extensibility Points
 - **New minimization algorithms**: Add via Val() dispatch system
-- **Custom model types**: Extend rule extraction strategies  
+- **Custom model types**: Extend rule extraction strategies
 - **Domain-specific processing**: Custom alphabet filters and apply functions
 - **Output formats**: Additional result formatters and exporters
 
@@ -1821,7 +1853,7 @@ function lumen(model, config::LumenConfig)
         config.silent ||
             println("\n$COLORED_TITLE$TITLE\n PART 2.b: ATOM EXTRACTION  \n$TITLE$RESET")
         num_atoms, atoms, alphabet =
-            extract_atoms(sole_model, config.filteralphabetcallback)
+            extract_atoms(sole_model, config.filteralphabetcallback, config.depth)
         config.silent ||
             println("Extracted $(length(atoms)) unique atoms from $num_atoms total")
 

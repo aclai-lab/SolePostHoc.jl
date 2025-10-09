@@ -158,6 +158,83 @@ function process_alphabet(
 end
 
 
+"""
+    extract_atoms_bfs_order(tree)
+
+Estrae gli atoms (condizioni decisionali) da un albero decisionale attraversandolo 
+in ordine Breadth-First Search (BFS).
+
+# Funzionamento
+La funzione implementa l'algoritmo BFS usando una coda FIFO:
+1. Inizializza una coda con la radice dell'albero
+2. Per ogni nodo estratto dalla coda:
+   - Se è un nodo Branch (decisionale), estrae l'atom dalla condizione (`antecedent`)
+   - Aggiunge i figli (posconsequent, negconsequent) alla coda
+   - Se è una foglia ConstantModel, viene ignorata (non ha atom)
+3. Continua fino a che la coda è vuota
+
+# Argomenti
+- `tree`: La radice dell'albero decisionale (tipo Branch{String})
+
+# Ritorna
+- Vector di atoms nell'ordine BFS (livello per livello, da sinistra a destra)
+
+# Esempio
+```julia
+atoms_bfs = extract_atoms_bfs_order(tree)
+# Restituisce: [V2<1.5, V1<1.5, V3<3.5, V1<2.5, V4<1.5]
+```
+
+# Note
+- Usa tipi generici (Any[]) per gestire sia nodi Branch che foglie ConstantModel
+- L'ordine BFS garantisce che i nodi dello stesso livello appaiano consecutivamente
+- Solo i nodi Branch contribuiscono al risultato (contengono atoms)
+"""
+function extract_atoms_bfs_order(tree)
+    bfs_atoms = []  # Usa [] generico, non tipizzato
+    queue = Any[tree]  # Usa Any[] per contenere sia Branch che ConstantModel
+
+    while !isempty(queue)
+        current = popfirst!(queue)
+
+        if typeof(current).name.name == :Branch
+            push!(bfs_atoms, current.antecedent)
+            push!(queue, current.posconsequent)
+            push!(queue, current.negconsequent)
+        end
+        # Se è ConstantModel, non ha antecedent e non aggiungiamo nulla a bfs_atoms
+    end
+
+    return bfs_atoms
+end
+
+"""
+    take_first_percentage(atoms, c)
+
+Prende solo i primi c% degli atoms da un vettore, dove c è un valore tra 0 e 1.
+
+# Argomenti
+- `atoms`: Vettore di atoms
+- `c`: Percentuale come valore decimale (0.0 = 0%, 1.0 = 100%)
+
+# Ritorna
+- Sottovettore contenente solo i primi c% degli atoms
+
+# Esempi
+```julia
+atoms = [V2<1.5, V1<1.5, V3<3.5, V1<2.5]
+take_first_percentage(atoms, 0.5)  # Restituisce [V2<1.5, V1<1.5]
+take_first_percentage(atoms, 0.25) # Restituisce [V2<1.5]
+take_first_percentage(atoms, 1.0)  # Restituisce tutto il vettore
+```
+"""
+function take_first_percentage(atoms, c)
+    n_total = length(atoms)
+    n_to_take = Int(ceil(n_total * c))  # Arrotonda per eccesso
+
+    return atoms[1:min(n_to_take, n_total)]
+end
+
 # """
 # Extracts the rules from a `DecisionForest` and organizes them by label.
 
