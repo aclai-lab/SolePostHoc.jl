@@ -46,7 +46,7 @@ function truth_combinations_ott(
         thresholds_by_feature[feat] = sort(subalpha.featcondition[2])
     end
 
-    # For each atom we get it's feature index and threashold
+    # For each atom we get it's feature index and threshold
     for atom in atoms
         feat = atom.value.metacond.feature.i_variable
         threshold = atom.value.threshold
@@ -140,7 +140,7 @@ function truth_combinations_ott(
                     bit_pos = atom_to_bit_position[(feat, threshold)]
                     truth_val = truth_values[atom_idx]
 
-                    if truth_val == 1
+                    if isone(truth_val)
                         binary_id += BigInt(2)^bit_pos
                     end
                 end
@@ -165,7 +165,7 @@ function truth_combinations_ott(
     combination_sets = [valid_combinations_by_feature[feat] for feat in feature_keys]
     all_combinations_iter = Iterators.product(combination_sets...)
 
-    # Apply vertical sampling 
+    # Apply vertical sampling
     combinations_to_process = if isone(vertical)
         all_combinations_iter
     else
@@ -225,7 +225,7 @@ function truth_combinations_ott(
 end
 
 function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_function, testott)
-    # open output file 
+    # open output file
     open("test_ott_$testott.txt", "w") do file
 
         println(file, "🚀 Benchmark Truth Combinations vs Truth Combinations OTT")
@@ -257,7 +257,7 @@ function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_functio
         )
         println(file, "$(round(time2*1000, digits=3)) ms")
 
-        # Check if the results are the same 
+        # Check if the results are the same
         println(file, "\n🔍 Consistency check:")
         println(file, "-" ^ 30)
         if result1 == result2
@@ -331,7 +331,7 @@ function testOttt(modelJ, my_alphabet, my_atoms, vertical; silent, apply_functio
             push!(times1, t)
         end
 
-        # Test truth_combinations_ott  
+        # Test truth_combinations_ott
         println(file, "Testing truth_combinations_ott...")
         times2 = Float64[]
         for i = 1:n_tests

@@ -30,7 +30,7 @@ function process_combination(
         valid_values = copy(thresholds)
 
         for (_, (threshold, _)) in enumerate(atom_list)
-            if truth_row[j] == 1
+            if isone(truth_row[j])
                 filter!(x -> x < threshold, valid_values)
             else
                 filter!(x -> x >= threshold, valid_values)
@@ -98,7 +98,7 @@ end
 function concat_results(results::Any, my_atoms::Vector)
     num_atoms = length(my_atoms)
 
-    # Handle tuple case 
+    # Handle tuple case
     if results isa Tuple
         results_dict, _ = results  # Extract just the dictionary part
         results = results_dict     # Use only the dictionary for conversion

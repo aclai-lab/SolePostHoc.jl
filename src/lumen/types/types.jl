@@ -243,16 +243,16 @@ Combinations → Minimization → Essential Bits → Optimization
 struct TwoLevelDNFFormula <: Formula
     combinations::Vector{TritVector}
     num_atoms::Int
-    thresholds_by_feature::Dict{Int,Vector{Float64}}
-    atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}}
+    thresholds_by_feature::Dict{Int,Vector{Float64}}         # NOTICE:
+    atoms_by_feature::Dict{Int,Vector{Tuple{Float64,Bool}}}  #.       CAN BE VECTOR
 end
 
 ############################ Constructor #######################################
 
 function TwoLevelDNFFormula(
-    combinations::AbstractVector,
+    combinations:: V,
     atoms::AbstractVector{<:Atom} = [],
-)
+) where V <: AbstractVector
     if isempty(combinations)
         # TODO @Marco
         num_atoms = length(atoms)
@@ -396,8 +396,8 @@ println("Formula contains \$n atomic propositions")
 nuberofatoms(f::TwoLevelDNFFormula) = f.num_atoms
 #################################################################################
 
-############################# SETTER ############################################ 
-# TODO SOME TO RE - WATCH 
+############################# SETTER ############################################
+# TODO SOME TO RE - WATCH
 """
     set_combinations(formula::TwoLevelDNFFormula, new_combinations::Vector{TritVector}) -> TwoLevelDNFFormula
 
@@ -525,7 +525,7 @@ function set_feature_atoms(
 end
 
 """
-    add_feature(formula::TwoLevelDNFFormula, feature::Int, 
+    add_feature(formula::TwoLevelDNFFormula, feature::Int,
                atoms::Vector{Tuple{Float64,Bool}}) -> TwoLevelDNFFormula
 
 Creates a new formula with an additional feature and its associated atomic propositions.
@@ -1438,7 +1438,7 @@ function Base.convert(::Type{TwoLevelDNFFormula}, f::SoleLogics.Formula) # TODO 
                 <:Union{Atom,Literal,LeftmostConjunctiveForm{<:Union{Atom,Literal}}},
             }
                 disjs = SoleLogics.disjuncts(f)
-                # 
+                #
                 function disjunct_to_combination!(combination, disj::Atom, conds)
                     combination[findall(==(disj), conds)] .= 1
                     if SoleLogics.hasdual(disj)
