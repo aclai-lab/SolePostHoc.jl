@@ -161,38 +161,38 @@ end
 """
     extract_atoms_bfs_order(tree)
 
-Estrae gli atoms (condizioni decisionali) da un albero decisionale attraversandolo 
-in ordine Breadth-First Search (BFS).
+Extracts atoms (decisional conditions) from a decisuion tree, using
+a Breadth-First Search (BFS) approach.
 
-# Funzionamento
-La funzione implementa l'algoritmo BFS usando una coda FIFO:
-1. Inizializza una coda con la radice dell'albero
-2. Per ogni nodo estratto dalla coda:
-   - Se è un nodo Branch (decisionale), estrae l'atom dalla condizione (`antecedent`)
-   - Aggiunge i figli (posconsequent, negconsequent) alla coda
-   - Se è una foglia ConstantModel, viene ignorata (non ha atom)
-3. Continua fino a che la coda è vuota
+# Functioning
+The function implements the BFS algorithm using a FIFO queue:
+1. Initialize a queue with the root of the tree
+2. For each extracted node from the queue:
+   - If the node is a Branch (decision node), extract the atom from the condition (`antecedent`)
+   - Add the node's children to the queue (posconsequent, negconsequent)
+   - If it's a CostantModel leaf, ignore it (it has no atoms)
+3. Continue until the queue is empty
 
-# Argomenti
-- `tree`: La radice dell'albero decisionale (tipo Branch{String})
+# Args
+- `tree`: The root of the decision tree (Branch{String})
 
-# Ritorna
-- Vector di atoms nell'ordine BFS (livello per livello, da sinistra a destra)
+# Returns
+- A vector iof atoms in BFS order (level by level, left to right)
 
-# Esempio
+# Example
 ```julia
 atoms_bfs = extract_atoms_bfs_order(tree)
-# Restituisce: [V2<1.5, V1<1.5, V3<3.5, V1<2.5, V4<1.5]
+# Returns: [V2<1.5, V1<1.5, V3<3.5, V1<2.5, V4<1.5]
 ```
 
-# Note
-- Usa tipi generici (Any[]) per gestire sia nodi Branch che foglie ConstantModel
-- L'ordine BFS garantisce che i nodi dello stesso livello appaiano consecutivamente
-- Solo i nodi Branch contribuiscono al risultato (contengono atoms)
+# Notes
+- Uses generic types (Any[]) to handle both Branch nodes and ConstantModel leaves
+- The BFS orders ensures that the nodes from the same level appear consequtively
+- Only Branch nodes contribute to the result (contain atoms)
 """
 function extract_atoms_bfs_order(tree)
-    bfs_atoms = []  # Usa [] generico, non tipizzato
-    queue = Any[tree]  # Usa Any[] per contenere sia Branch che ConstantModel
+    bfs_atoms = []  # Use generic [], not typified
+    queue = Any[tree]  # Uses Any[] to contain both Branch and ConstantModel
 
     while !isempty(queue)
         current = popfirst!(queue)
@@ -202,35 +202,36 @@ function extract_atoms_bfs_order(tree)
             push!(queue, current.posconsequent)
             push!(queue, current.negconsequent)
         end
-        # Se è ConstantModel, non ha antecedent e non aggiungiamo nulla a bfs_atoms
+        # If it's a ConstantModel, it doesn't contain antecedent so we do not add bfs_atoms
     end
 
     return bfs_atoms
 end
 
+
 """
     take_first_percentage(atoms, c)
 
-Prende solo i primi c% degli atoms da un vettore, dove c è un valore tra 0 e 1.
+Takes only the first c% atoms from a vectore, where c is a value between 0 and 1.
 
-# Argomenti
-- `atoms`: Vettore di atoms
-- `c`: Percentuale come valore decimale (0.0 = 0%, 1.0 = 100%)
+# Args
+- `atoms`: An atoms vector
+- `c`: Percentage as a decimal value (0.0 = 0%, 1.0 = 100%)
 
-# Ritorna
-- Sottovettore contenente solo i primi c% degli atoms
+# Returns
+- Subvector containing only the first c% atoms
 
-# Esempi
+# Example
 ```julia
 atoms = [V2<1.5, V1<1.5, V3<3.5, V1<2.5]
-take_first_percentage(atoms, 0.5)  # Restituisce [V2<1.5, V1<1.5]
-take_first_percentage(atoms, 0.25) # Restituisce [V2<1.5]
-take_first_percentage(atoms, 1.0)  # Restituisce tutto il vettore
+take_first_percentage(atoms, 0.5)  # Returns [V2<1.5, V1<1.5]
+take_first_percentage(atoms, 0.25) # Returns [V2<1.5]
+take_first_percentage(atoms, 1.0)  # Returns the whole vector
 ```
 """
 function take_first_percentage(atoms, c)
     n_total = length(atoms)
-    n_to_take = Int(ceil(n_total * c))  # Arrotonda per eccesso
+    n_to_take = Int(ceil(n_total * c))  # Rounds up
 
     return atoms[1:min(n_to_take, n_total)]
 end
