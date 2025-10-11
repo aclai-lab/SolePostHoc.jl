@@ -1,8 +1,8 @@
 module TimeOut
 
-# check and, if needed, convert a directory path to an absolute path
-_abspath(dirname::String)::String = isabspath(dirname) ? dirname : joinpath(pwd(), dirname)
-
+# ---------------------------------------------------------------------------- #
+#                               script builder                                 #
+# ---------------------------------------------------------------------------- #
 """
     get_using_sph(algo::Symbol)::String
 
@@ -35,6 +35,12 @@ environment with all the necessary dependencies.
 function sph_script_builder()
     base_script = "using JLD2\n"
 end
+
+# ---------------------------------------------------------------------------- #
+#                          working tmp directories                             #
+# ---------------------------------------------------------------------------- #
+# check and, if needed, convert a directory path to an absolute path
+_abspath(dirname::String)::String = isabspath(dirname) ? dirname : joinpath(pwd(), dirname)
 
 """
     mk_tmp_dir(dirname::String="tmp")::String
@@ -92,6 +98,9 @@ function rm_tmp_dir(dirname::String)::Bool
 end
 rm_tmp_dir(dirname::Symbol)::Bool = rm_tmp_dir(string(dirname))
 
+# ---------------------------------------------------------------------------- #
+#                                     macro                                    #
+# ---------------------------------------------------------------------------- #
 macro run_with_timeout(expr, model, timeout_sec, kwargs)
     return quote
         local sph_expr  = $(string(expr))
