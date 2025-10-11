@@ -39,21 +39,20 @@ end
 
 Create a temporary directory in the current working directory.
 
-If the directory already exists, it returns a message indicating so without 
-throwing an error.
+If the directory already exists, it returns the path to the existing directory without 
+throwing an error. If it doesn't exist, creates the directory and returns its path.
 
 # Arguments
 - `dirname::String`: Name of the directory to create (default: "tmp")
 - `dirname::Symbol`: Symbol version that gets converted to string
 
 # Returns
-- `String`: Either the message "directory 'dirname' already exists." if the directory 
-  exists, or the result of `mkdir(tmp_dir)` if successfully created
+- `String`: The path to the directory (either existing or newly created)
 """
 function create_tmp_dir(dirname::String="tmp")::String
     current_dir = pwd()
     tmp_dir     = joinpath(current_dir, dirname)
-    isdir(tmp_dir) ? "directory '$tmp_dir' already exists." : mkdir(tmp_dir)
+    isdir(tmp_dir) ? tmp_dir : mkdir(tmp_dir)
 end
 create_tmp_dir(dirname::Symbol)::String = create_tmp_dir(string(dirname))
 
