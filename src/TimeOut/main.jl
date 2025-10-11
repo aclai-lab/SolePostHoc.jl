@@ -1,5 +1,6 @@
 module TimeOut
 
+# check and, if needed, convert a directory path to an absolute path
 _abspath(dirname::String)::String = isabspath(dirname) ? dirname : joinpath(pwd(), dirname)
 
 """
@@ -39,7 +40,7 @@ end
     mk_tmp_dir(dirname::String="tmp")::String
     mk_tmp_dir(dirname::Symbol)::String
 
-Create a temporary directory in the current working directory.
+Create a temporary directory.
 
 If the directory already exists, it returns the path to the existing directory without 
 throwing an error. If it doesn't exist, creates the directory and returns its path.
@@ -50,6 +51,11 @@ throwing an error. If it doesn't exist, creates the directory and returns its pa
 
 # Returns
 - `String`: The path to the directory (either existing or newly created)
+
+# Path Resolution
+- If `dirname` is an absolute path, the directory will be created at that exact location
+- If `dirname` is a relative path, the directory will be created in the current working directory
+- Uses `pwd()` to determine the current working directory for relative paths
 """
 function mk_tmp_dir(dirname::String="tmp")::String
     tmp_dir = _abspath(dirname)
@@ -57,12 +63,34 @@ function mk_tmp_dir(dirname::String="tmp")::String
 end
 mk_tmp_dir(dirname::Symbol)::String = mk_tmp_dir(string(dirname))
 
-function rm_tmp_dir(dirname::String)
-    tmp_dir = _abspath(dirname)
-end
-rm_tmp_dir(dirname::Symbol)::String = rm_tmp_dir(string(dirname))
+"""
+    rm_tmp_dir(dirname::String)::Bool
+    rm_tmp_dir(dirname::Symbol)::Bool
 
-abspath
+Remove a temporary directory if it exists.
+
+# Arguments
+- `dirname::String`: Name of the directory to remove
+- `dirname::Symbol`: Symbol version that gets converted to string
+
+# Returns
+- `Bool`: `true` if directory was removed, `false` if directory didn't exist
+
+# Path Resolution
+- If `dirname` is an absolute path, the directory will be removed from that exact location
+- If `dirname` is a relative path, the directory will be removed from the current working directory
+- Uses `pwd()` to determine the current working directory for relative paths
+"""
+function rm_tmp_dir(dirname::String)::Bool
+    tmp_dir = _abspath(dirname)
+    return if isdir(tmp_dir)
+        rm(tmp_dir, recursive=true)
+        true
+    else
+        false
+    end
+end
+rm_tmp_dir(dirname::Symbol)::Bool = rm_tmp_dir(string(dirname))
 
 macro run_with_timeout(expr, model, timeout_sec, kwargs)
     return quote

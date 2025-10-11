@@ -12,3 +12,8 @@ tmp_dir = mk_tmp_dir()
 tmp_dir = mk_tmp_dir(:symbol_tmp)
 @test tmp_dir == current_dir * "/symbol_tmp"
 
+# rm_tmp_dir
+@test rm_tmp_dir("/invalid/invalid") == false
+@test rm_tmp_dir(:invalid) == false
+@test rm_tmp_dir("tmp") == true
+@test rm_tmp_dir(:symbol_tmp) == true
