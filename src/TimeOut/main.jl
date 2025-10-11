@@ -1,5 +1,21 @@
 module TimeOut
 
+"""
+    get_using_sph(algo::Symbol)::String
+
+Generate a Julia `using` statement for importing a specific algorithm from SolePostHoc.
+
+This function creates a properly formatted import statement that will be injected into 
+the `script_file` string when spawning a new Julia subprocess.
+
+# Arguments
+- `algo::Symbol`: The name of the algorithm/function to import from SolePostHoc
+
+# Returns
+- `String`: A formatted using statement in the form "using SolePostHoc: algo\\n"
+"""
+get_using_sph(algo::Symbol)::String = "using SolePostHoc: $algo\n"
+
 macro run_with_timeout(expr, model, timeout_sec, kwargs)
     return quote
         local sph_expr  = $(string(expr))
