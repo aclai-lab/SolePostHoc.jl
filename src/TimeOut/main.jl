@@ -50,15 +50,15 @@ throwing an error. If it doesn't exist, creates the directory and returns its pa
 - `String`: The path to the directory (either existing or newly created)
 """
 function mk_tmp_dir(dirname::String="tmp")::String
-    current_dir = pwd()
-    tmp_dir     = joinpath(current_dir, dirname)
+    tmp_dir = isabspath(dirname) ? dirname : joinpath(pwd(), dirname)
     isdir(tmp_dir) ? tmp_dir : mkdir(tmp_dir)
 end
 mk_tmp_dir(dirname::Symbol)::String = mk_tmp_dir(string(dirname))
 
-function rm_tmp_dir()
+function rm_tmp_dir(dirname::String)
 
 end
+rm_tmp_dir(dirname::Symbol)::String = rm_tmp_dir(string(dirname))
 
 macro run_with_timeout(expr, model, timeout_sec, kwargs)
     return quote
