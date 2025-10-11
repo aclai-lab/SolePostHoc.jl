@@ -16,6 +16,23 @@ the `script_file` string when spawning a new Julia subprocess.
 """
 get_using_sph(algo::Symbol)::String = "using SolePostHoc: $algo\n"
 
+"""
+This constructor is specific for the [`SolePostHoc.jl`](https://github.com/aclai-lab/SolePostHoc.jl) package.
+
+The Julia environment in which the process will be launched must have
+the dependent packages pre-installed.
+It is assumed that whoever uses this module will already have a properly configured
+environment with all the necessary dependencies.
+
+# Necessary dependencies:
+- [`JLD2.jl`](https://github.com/JuliaIO/JLD2.jl)
+- [`SolePostHoc.jl`](https://github.com/aclai-lab/SolePostHoc.jl)
+- [`DecisionTree.jl`](https://github.com/JuliaAI/DecisionTree.jl)
+"""
+function sph_script_builder()
+    base_script = "using JLD2\n"
+end
+
 macro run_with_timeout(expr, model, timeout_sec, kwargs)
     return quote
         local sph_expr  = $(string(expr))
