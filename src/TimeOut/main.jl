@@ -1,5 +1,7 @@
 module TimeOut
 
+_abspath(dirname::String)::String = isabspath(dirname) ? dirname : joinpath(pwd(), dirname)
+
 """
     get_using_sph(algo::Symbol)::String
 
@@ -50,15 +52,17 @@ throwing an error. If it doesn't exist, creates the directory and returns its pa
 - `String`: The path to the directory (either existing or newly created)
 """
 function mk_tmp_dir(dirname::String="tmp")::String
-    tmp_dir = isabspath(dirname) ? dirname : joinpath(pwd(), dirname)
+    tmp_dir = _abspath(dirname)
     isdir(tmp_dir) ? tmp_dir : mkdir(tmp_dir)
 end
 mk_tmp_dir(dirname::Symbol)::String = mk_tmp_dir(string(dirname))
 
 function rm_tmp_dir(dirname::String)
-
+    tmp_dir = _abspath(dirname)
 end
 rm_tmp_dir(dirname::Symbol)::String = rm_tmp_dir(string(dirname))
+
+abspath
 
 macro run_with_timeout(expr, model, timeout_sec, kwargs)
     return quote
