@@ -34,8 +34,8 @@ function sph_script_builder()
 end
 
 """
-    create_tmp_dir(dirname::String="tmp")::String
-    create_tmp_dir(dirname::Symbol)::String
+    mk_tmp_dir(dirname::String="tmp")::String
+    mk_tmp_dir(dirname::Symbol)::String
 
 Create a temporary directory in the current working directory.
 
@@ -49,12 +49,16 @@ throwing an error. If it doesn't exist, creates the directory and returns its pa
 # Returns
 - `String`: The path to the directory (either existing or newly created)
 """
-function create_tmp_dir(dirname::String="tmp")::String
+function mk_tmp_dir(dirname::String="tmp")::String
     current_dir = pwd()
     tmp_dir     = joinpath(current_dir, dirname)
     isdir(tmp_dir) ? tmp_dir : mkdir(tmp_dir)
 end
-create_tmp_dir(dirname::Symbol)::String = create_tmp_dir(string(dirname))
+mk_tmp_dir(dirname::Symbol)::String = mk_tmp_dir(string(dirname))
+
+function rm_tmp_dir()
+
+end
 
 macro run_with_timeout(expr, model, timeout_sec, kwargs)
     return quote
