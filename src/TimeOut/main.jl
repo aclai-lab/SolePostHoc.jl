@@ -33,6 +33,30 @@ function sph_script_builder()
     base_script = "using JLD2\n"
 end
 
+"""
+    create_tmp_dir(dirname::String="tmp")::String
+    create_tmp_dir(dirname::Symbol)::String
+
+Create a temporary directory in the current working directory.
+
+If the directory already exists, it returns a message indicating so without 
+throwing an error.
+
+# Arguments
+- `dirname::String`: Name of the directory to create (default: "tmp")
+- `dirname::Symbol`: Symbol version that gets converted to string
+
+# Returns
+- `String`: Either the message "directory 'dirname' already exists." if the directory 
+  exists, or the result of `mkdir(tmp_dir)` if successfully created
+"""
+function create_tmp_dir(dirname::String="tmp")::String
+    current_dir = pwd()
+    tmp_dir     = joinpath(current_dir, dirname)
+    isdir(tmp_dir) ? "directory '$tmp_dir' already exists." : mkdir(tmp_dir)
+end
+create_tmp_dir(dirname::Symbol)::String = create_tmp_dir(string(dirname))
+
 macro run_with_timeout(expr, model, timeout_sec, kwargs)
     return quote
         local sph_expr  = $(string(expr))
