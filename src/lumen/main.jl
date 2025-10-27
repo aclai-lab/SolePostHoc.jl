@@ -289,7 +289,7 @@ function validate_config(config::LumenConfig)
 
     # Validate minimization scheme - only certain algorithms are implemented
     # Each algorithm has different trade-offs in speed vs. minimization quality
-    valid_schemes = (:mitespresso, :boom, :abc)
+    valid_schemes = (:mitespresso, :boom, :abc, :quine, :quine_naive)
     if config.minimization_scheme ∉ valid_schemes
         throw(
             ArgumentError(
@@ -1006,7 +1006,12 @@ function process_rules(combined_results, config::LumenConfig)
         try
 
             config.silent || println("pre dnf-domain minimized_formula:", minimized_formula)      # this code is usable only if use SoleData `origin/ADD_new_function_refine_dnf` in this moment [20 August 2025]
-            minimized_formula = SoleData.refine_dnf(minimized_formula)            # TODO EVALUATE IF THIS IS NEEDED IN THIS POSITION OR BEFORE
+
+            if config.minimization_scheme in [:mitespresso, :boom, :abc]
+                # TODO EVALUATE IF THIS IS NEEDED IN THIS POSITION OR BEFORE
+                minimized_formula = SoleData.refine_dnf(minimized_formula) # TODO EVALUATE IF THIS IS NEEDED IN THIS POSITION OR BEFORE
+            end
+
             config.silent || println("post dnf-domain minimization:", minimized_formula)              # this code is usable only if use SoleData `origin/ADD_new_function_refine_dnf` in this moment [20 August 2025]
 
             rule = create_rule(minimized_formula, result, config)
