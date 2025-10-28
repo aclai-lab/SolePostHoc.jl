@@ -9,6 +9,7 @@ function minimizza_dnf(
     silent = true,
     horizontal = 1.0,
     vertical = 1.0,
+    depth = 1.0,
     vetImportance = [],
     mitespresso_kwargs...,
 )
@@ -49,27 +50,59 @@ function minimizza_dnf(
     vetImportance = [],
     boom_kwargs...,
 )
+    return _abc_minimize_dnf_logic(formula, 1; silent, horizontal, vertical, vetImportance, boom_kwargs...)
+end
+
+function minimizza_dnf(
+    ::Val{:abc_balanced},
+    formula::TwoLevelDNFFormula;
+    silent = true,
+    horizontal = 1.0,
+    vertical = 1.0,
+    vetImportance = [],
+    boom_kwargs...,
+)
+    return _abc_minimize_dnf_logic(formula, 0; silent, horizontal, vertical, vetImportance, boom_kwargs...)
+end
+
+function minimizza_dnf(
+    ::Val{:abc_thorough},
+    formula::TwoLevelDNFFormula;
+    silent = true,
+    horizontal = 1.0,
+    vertical = 1.0,
+    vetImportance = [],
+    boom_kwargs...,
+)
+    return _abc_minimize_dnf_logic(formula, -1; silent, horizontal, vertical, vetImportance, boom_kwargs...)
+end
+
+function _abc_minimize_dnf_logic(
+    formula::TwoLevelDNFFormula,
+    fast_level::Int;
+    silent = true,
+    horizontal = 1.0,
+    vertical = 1.0,
+    vetImportance = [],
+    boom_kwargs...,
+)
     formula = convert(SoleLogics.DNF, formula)
     silent || (println(); @show formula)
 
     silent || println("||====================||")
     silent || println(dnf(formula))
-    #@show vetImportance
-    #@show horizontal
-    #@show vertical
     silent || println("||====================||")
-
     silent || println("pre rc comparison: ", dnf(formula))
 
     if ((vertical != 1.0) && !isempty(vetImportance)) || (horizontal != 1.0)
         formula = dnf_rc_compression(formula, horizontal, vertical, vetImportance; silent)
     end
+
     silent || println("||====================||")
     silent || println("post rc comparison: ", dnf(formula))
     silent || println("||====================||")
 
-    formula = SoleData.abc_minimize(formula, silent; boom_kwargs...)
-
+    formula = SoleData.abc_minimize(formula, silent; fast = fast_level, boom_kwargs...)
 
     silent || (println(); @show formula)
 

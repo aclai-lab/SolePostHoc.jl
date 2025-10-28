@@ -289,7 +289,7 @@ function validate_config(config::LumenConfig)
 
     # Validate minimization scheme - only certain algorithms are implemented
     # Each algorithm has different trade-offs in speed vs. minimization quality
-    valid_schemes = (:mitespresso, :boom, :abc, :quine, :quine_naive)
+    valid_schemes = (:mitespresso, :boom, :abc, :abc_balanced, :abc_thorough, :quine, :quine_naive)
     if config.minimization_scheme ∉ valid_schemes
         throw(
             ArgumentError(
@@ -298,7 +298,9 @@ function validate_config(config::LumenConfig)
                 "Each scheme offers different performance characteristics:\n" *
                 "  :mitespresso - balanced speed/quality for most cases\n" *
                 "  :boom - aggressive minimization for complex formulas\n" *
-                "  :abc - basic minimization by Berkeley framework, fastest but less thorough",
+                "  :abc - basic minimization by Berkeley framework, fastest but less thorough \n" *
+                "  :abc_balanced - balanced minimization using ABC framework\n" *
+                "  :abc_thorough - thorough minimization using ABC framework\n",
             ),
         )
     end
@@ -916,6 +918,16 @@ Converts the minimized formula back to a Rule object.
 - **Best for**: Large-scale processing where speed is more important than optimal compression
 - **Trade-offs**: Fastest processing with moderate compression
 
+## :abc_balanced
+- **Characteristics**: Balanced minimization using ABC framework
+- **Best for**: Scenarios requiring a compromise between speed and quality
+- **Trade-offs**: Improved compression over :abc with moderate time increase
+
+## :abc_thorough
+- **Characteristics**: Thorough minimization using ABC framework
+- **Best for**: Cases where maximum minimization quality is required
+- **Trade-offs**: Longest computation time for best compression results
+
 # Error Handling and Recovery
 
 The function implements robust error handling:
@@ -1007,7 +1019,7 @@ function process_rules(combined_results, config::LumenConfig)
 
             config.silent || println("pre dnf-domain minimized_formula:", minimized_formula)      # this code is usable only if use SoleData `origin/ADD_new_function_refine_dnf` in this moment [20 August 2025]
 
-            if config.minimization_scheme in [:mitespresso, :boom, :abc]
+            if config.minimization_scheme in [:mitespresso, :boom, :abc, :abc_balanced, :abc_thorough]
                 # TODO EVALUATE IF THIS IS NEEDED IN THIS POSITION OR BEFORE
                 minimized_formula = SoleData.refine_dnf(minimized_formula) # TODO EVALUATE IF THIS IS NEEDED IN THIS POSITION OR BEFORE
             end
@@ -1584,7 +1596,7 @@ See also: [`process_rules`](@ref), [`LumenConfig`](@ref), [`leftmost_disjunctive
 function create_rule(formula, result, config::LumenConfig)
     # Choose processing path based on minimization algorithm capabilities
     # Advanced algorithms support sophisticated string-based processing
-    if config.minimization_scheme in (:mitespresso, :boom, :abc)
+    if config.minimization_scheme in (:mitespresso, :boom, :abc, :abc_balanced, :abc_thorough)
         # String-based processing path for advanced algorithms
         # This path provides maximum flexibility and feature support
 
