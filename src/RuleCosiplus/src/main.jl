@@ -49,7 +49,7 @@ function __init__()
         copy!(rulecosi, pyimport("rulecosi"))
     end
 
-    # Try to import sklearn, if it fails, install it via pip  
+    # Try to import sklearn, if it fails, install it via pip
     try
         copy!(sklearn, pyimport("sklearn.ensemble"))
     catch
@@ -376,27 +376,27 @@ end
 
 Extract interpretable rules from decision tree ensembles using the RuleCOSI+ algorithm.
 
-This function implements the RuleCOSI+ methodology for rule extraction from trained ensemble 
-classifiers, producing a simplified and interpretable rule-based model. The method combines 
-and simplifies rules extracted from individual trees in the ensemble to create a more 
+This function implements the RuleCOSI+ methodology for rule extraction from trained ensemble
+classifiers, producing a simplified and interpretable rule-based model. The method combines
+and simplifies rules extracted from individual trees in the ensemble to create a more
 compact and understandable decision list.
 
 # Reference
-Obregon, J. (2022). RuleCOSI+: Rule extraction for interpreting classification tree ensembles. 
-*Information Fusion*, 89, 355-381. 
+Obregon, J. (2022). RuleCOSI+: Rule extraction for interpreting classification tree ensembles.
+*Information Fusion*, 89, 355-381.
 Available at: https://www.sciencedirect.com/science/article/pii/S1566253522001129
 
 # Arguments
-- `ensemble::Any`: A trained ensemble classifier (e.g., Random Forest, Gradient Boosting) 
+- `ensemble::Any`: A trained ensemble classifier (e.g., Random Forest, Gradient Boosting)
   that will be serialized and converted to a compatible format for rule extraction.
-- `X_train::Any`: Training feature data. Can be a DataFrame or Matrix. If DataFrame, 
-  column names will be preserved in the extracted rules; otherwise, generic names (V1, V2, ...) 
+- `X_train::Any`: Training feature data. Can be a DataFrame or Matrix. If DataFrame,
+  column names will be preserved in the extracted rules; otherwise, generic names (V1, V2, ...)
   will be generated.
-- `y_train::Any`: Training target labels corresponding to `X_train`. Will be converted to 
+- `y_train::Any`: Training target labels corresponding to `X_train`. Will be converted to
   string format for processing.
 
 # Returns
-- `DecisionList`: A simplified decision list containing the extracted and combined rules 
+- `DecisionList`: A simplified decision list containing the extracted and combined rules
   from the ensemble, suitable for interpretable classification.
 
 # Details
@@ -437,7 +437,7 @@ decision_list = rulecosiplus(ensemble, X_train, y_train)
 - Requires Python interoperability and the RuleCOSI implementation
 - The resulting decision list provides an interpretable alternative to the original ensemble
 """
-function rulecosiplus(ensemble::Any, X_train::Any, y_train::Any)
+function rulecosiplus(ensemble::Any, X_train::Any, y_train::Any; silent::Bool = true)
 
     # Convert training data to matrix format if needed
     if !isa(X_train, Matrix)
@@ -462,17 +462,17 @@ function rulecosiplus(ensemble::Any, X_train::Any, y_train::Any)
     builder = py"build_sklearn_model_from_julia"
     base_ensemble = builder(dict_model)
 
-    println("======================")
-    println("Ensemble serialize:", dict_model)
-    println("======================")
+    silent || println("======================")
+    silent || println("Ensemble serialize:", dict_model)
+    silent || println("======================")
 
     num_estimators = pycall(pybuiltin("len"), Int, base_ensemble["estimators_"])
-    println("number of trees in base_ensemble:", num_estimators)
+    silent || println("number of trees in base_ensemble:", num_estimators)
 
     n_samples = size(X_train_matrix, 1)
     n_classes = length(unique(y_train))
 
-    println("Dataset: $n_samples campioni, $n_classes classi")
+    silent || println("Dataset: $n_samples campioni, $n_classes classi")
 
     #=
             RuleCOSIExtractor
@@ -590,7 +590,7 @@ function rulecosiplus(ensemble::Any, X_train::Any, y_train::Any)
 
         References
         ----------
-        .. [1] Obregon, J., Kim, A., & Jung, J. Y., 
+        .. [1] Obregon, J., Kim, A., & Jung, J. Y.,
             "RuleCOSI: Combination and simplification of production rules from boosted
             decision trees for imbalanced classification", 2019.
 
@@ -623,9 +623,12 @@ function rulecosiplus(ensemble::Any, X_train::Any, y_train::Any)
     max_rules = max(20, n_classes * 5)
 
     raw_rules = py"get_simplified_rules"(rc, 4, 1)
-    println("Raw rules:")
-    for r in raw_rules
-        println(r)
+    silent || println("Raw rules:")
+
+    if silent == false
+        for r in raw_rules
+            println(r)
+        end
     end
 
     dl = convertToDecisionList(raw_rules)

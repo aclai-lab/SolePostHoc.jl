@@ -28,7 +28,7 @@ function truth_combinations(
     vertical::Float64;
     apply_function = SoleModels.apply,
     print_progress = true,
-    silent = false,
+    silent = true,
 )
     # Initialization of data structures to manage thresholds and atoms for each feature
     thresholds_by_feature = Dict{Int,Vector{Float64}}()

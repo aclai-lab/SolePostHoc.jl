@@ -198,8 +198,8 @@ function BAinSoleTree()
 end
 
 
-function BAinDS(class_map)
-    println(
+function BAinDS(class_map; silent = true)
+    silent || println(
         "Converting the tree in : ",
         joinpath(@__DIR__, "temp_ba_trees", "result.txt.tree"),
     )
@@ -207,10 +207,10 @@ function BAinDS(class_map)
     t = solemodel(tree)
 
     ll = listrules(t)
-    println("Rules: ", ll)
-    println("Class map: ", class_map)
+    silent || println("Rules: ", ll)
+    silent || println("Class map: ", class_map)
     inverted_map = Dict(value => key for (key, value) in class_map)
-    println("Inverted map: ", inverted_map)
+    silent || println("Inverted map: ", inverted_map)
     minimized_rules = build_dnf_rules(ll, inverted_map)
     ds = DecisionSet(minimized_rules)
     return ds

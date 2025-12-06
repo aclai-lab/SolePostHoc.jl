@@ -50,7 +50,15 @@ function minimizza_dnf(
     vetImportance = [],
     boom_kwargs...,
 )
-    return _abc_minimize_dnf_logic(formula, 1; silent, horizontal, vertical, vetImportance, boom_kwargs...)
+    return _abc_minimize_dnf_logic(
+        formula,
+        1;
+        silent,
+        horizontal,
+        vertical,
+        vetImportance,
+        boom_kwargs...,
+    )
 end
 
 function minimizza_dnf(
@@ -62,7 +70,15 @@ function minimizza_dnf(
     vetImportance = [],
     boom_kwargs...,
 )
-    return _abc_minimize_dnf_logic(formula, 0; silent, horizontal, vertical, vetImportance, boom_kwargs...)
+    return _abc_minimize_dnf_logic(
+        formula,
+        0;
+        silent,
+        horizontal,
+        vertical,
+        vetImportance,
+        boom_kwargs...,
+    )
 end
 
 function minimizza_dnf(
@@ -74,7 +90,15 @@ function minimizza_dnf(
     vetImportance = [],
     boom_kwargs...,
 )
-    return _abc_minimize_dnf_logic(formula, -1; silent, horizontal, vertical, vetImportance, boom_kwargs...)
+    return _abc_minimize_dnf_logic(
+        formula,
+        -1;
+        silent,
+        horizontal,
+        vertical,
+        vetImportance,
+        boom_kwargs...,
+    )
 end
 
 function _abc_minimize_dnf_logic(
@@ -245,8 +269,8 @@ function minimizza_dnf(
     vertical = 1.0,
     depth = 1.0,
     vetImportance = [],
-    kwargs...  # Captures any other parameters
-    )
+    kwargs...,  # Captures any other parameters
+)
 
     silent || println("=" ^ 70)
     silent || println("CLASSIC Quine-McCluskey with GLOBAL Petrick's Method")
@@ -375,7 +399,10 @@ function minimizza_dnf(
     # PHASE 2: BUILD COMPLETE COVERAGE TABLE
     # =========================================================================
 
-    function build_coverage_table(primes::Vector{Vector{Int}}, minterms::Vector{Vector{Int}})
+    function build_coverage_table(
+        primes::Vector{Vector{Int}},
+        minterms::Vector{Vector{Int}},
+    )
         silent || println("\n[PHASE 2] Building coverage table...")
 
         coverage = falses(length(primes), length(minterms))
@@ -395,7 +422,11 @@ function minimizza_dnf(
     # PHASE 3: FIND ESSENTIAL PRIME IMPLICANTS
     # =========================================================================
 
-    function find_essential_primes(coverage::BitMatrix, primes::Vector{Vector{Int}}, minterms::Vector{Vector{Int}})
+    function find_essential_primes(
+        coverage::BitMatrix,
+        primes::Vector{Vector{Int}},
+        minterms::Vector{Vector{Int}},
+    )
         silent || println("\n[PHASE 3] Finding essential prime implicants...")
 
         essential = Set{Int}()
@@ -420,7 +451,9 @@ function minimizza_dnf(
 
         essential_list = collect(essential)
         silent || println("  ✓ Essential primes: $(length(essential_list))")
-        silent || println("  ✓ Covered minterms: $(length(covered_minterms)) / $(length(minterms))")
+        silent || println(
+            "  ✓ Covered minterms: $(length(covered_minterms)) / $(length(minterms))",
+        )
 
         return essential_list, covered_minterms
     end
@@ -436,7 +469,11 @@ function minimizza_dnf(
     by exploring ALL possible combinations to find the absolute
     optimal solution.
     """
-    function petricks_method_global(coverage::BitMatrix, primes::Vector{Vector{Int}}, covered_minterms::Set{Int})
+    function petricks_method_global(
+        coverage::BitMatrix,
+        primes::Vector{Vector{Int}},
+        covered_minterms::Set{Int},
+    )
         silent || println("\n[PHASE 4] Petrick's Method - GLOBAL SEARCH...")
 
         # Identify uncovered minterms
@@ -464,7 +501,9 @@ function minimizza_dnf(
             # Create the sum (OR) of all primes covering this minterm
             minterm_sum = [PetrickProduct(Set([p])) for p in covering_primes]
 
-            silent || println("  Minterm $idx/$(length(uncovered)): $(length(covering_primes)) covering primes")
+            silent || println(
+                "  Minterm $idx/$(length(uncovered)): $(length(covering_primes)) covering primes",
+            )
 
             # Multiply with current expression (complete distribution)
             current_sop = multiply_sop(current_sop, minterm_sum)
@@ -473,7 +512,9 @@ function minimizza_dnf(
 
             # Protection against combinatorial explosion
             if length(current_sop) > 50000
-                silent || println("    ⚠ Expression exploding, applying aggressive simplification")
+                silent || println(
+                    "    ⚠ Expression exploding, applying aggressive simplification",
+                )
 
                 # Keep only the most promising products
                 sort!(current_sop, by = p -> length(p.primes))
@@ -531,7 +572,8 @@ function minimizza_dnf(
         coverage = build_coverage_table(primes, original_terms)
 
         # PHASE 3: Find essential prime implicants
-        essential_indices, covered_minterms = find_essential_primes(coverage, primes, original_terms)
+        essential_indices, covered_minterms =
+            find_essential_primes(coverage, primes, original_terms)
 
         # PHASE 4: Petrick's method with GLOBAL search
         additional_indices = petricks_method_global(coverage, primes, covered_minterms)
@@ -582,7 +624,7 @@ end
 # =========================================================================
 
 """
-    minimizza_dnf(::Val{:quine_opp}, formula::TwoLevelDNFFormula; kwargs...) -> TwoLevelDNFFormula
+    minimizza_dnf(::Val{:quine}, formula::TwoLevelDNFFormula; kwargs...) -> TwoLevelDNFFormula
 
 OPTIMIZED Quine-McCluskey algorithm with intelligent semantic post-processing.
 
@@ -626,8 +668,8 @@ function minimizza_dnf(
     vertical = 1.0,
     depth = 1.0,
     vetImportance = [],
-    kwargs...
-    )
+    kwargs...,
+)
 
     silent || println("=" ^ 70)
     silent || println("QUINE-MCCLUSKEY with OPTIMIZED POST-PROCESSING (OPP)")
@@ -643,6 +685,7 @@ function minimizza_dnf(
         push!(terms, term)
     end
 
+    # CRITICAL: Handle empty input
     if isempty(terms)
         silent || println("Empty formula, nothing to minimize")
         return formula
@@ -698,6 +741,11 @@ function minimizza_dnf(
         return count(x -> x != -1, prime)
     end
 
+    # Check if a term is completely "don't care" (all -1)
+    function is_empty_term(term::Vector{Int})
+        return all(x == -1 for x in term)
+    end
+
     # =========================================================================
     # PHASE 1: STANDARD QUINE-MCCLUSKEY
     # =========================================================================
@@ -743,7 +791,10 @@ function minimizza_dnf(
         return result
     end
 
-    function build_coverage_table(primes::Vector{Vector{Int}}, minterms::Vector{Vector{Int}})
+    function build_coverage_table(
+        primes::Vector{Vector{Int}},
+        minterms::Vector{Vector{Int}},
+    )
         coverage = falses(length(primes), length(minterms))
         for i = 1:length(primes)
             for j = 1:length(minterms)
@@ -753,7 +804,11 @@ function minimizza_dnf(
         return coverage
     end
 
-    function find_essential_primes(coverage::BitMatrix, primes::Vector{Vector{Int}}, minterms::Vector{Vector{Int}})
+    function find_essential_primes(
+        coverage::BitMatrix,
+        primes::Vector{Vector{Int}},
+        minterms::Vector{Vector{Int}},
+    )
         essential = Set{Int}()
         covered_minterms = Set{Int}()
 
@@ -773,7 +828,11 @@ function minimizza_dnf(
         return collect(essential), covered_minterms
     end
 
-    function petricks_method_global(coverage::BitMatrix, primes::Vector{Vector{Int}}, covered_minterms::Set{Int})
+    function petricks_method_global(
+        coverage::BitMatrix,
+        primes::Vector{Vector{Int}},
+        covered_minterms::Set{Int},
+    )
         uncovered = [i for i = 1:size(coverage, 2) if i ∉ covered_minterms]
 
         if isempty(uncovered)
@@ -832,7 +891,7 @@ function minimizza_dnf(
     Builds a map from atom_index → (feature_id, threshold, operator)
     """
     function build_atom_map(formula::TwoLevelDNFFormula)
-        atom_map = Dict{Int, Tuple{Int, Float64, Bool}}()
+        atom_map = Dict{Int,Tuple{Int,Float64,Bool}}()
         atom_idx = 1
 
         for (feature_id, atoms) in sort(collect(formula.atoms_by_feature))
@@ -849,8 +908,12 @@ function minimizza_dnf(
     Analyzes the ranges covered by a term on a specific feature.
     Returns a vector of intervals (min, max, included_bounds).
     """
-    function analyze_feature_ranges(term::Vector{Int}, feature_id::Int, atom_map::Dict{Int, Tuple{Int, Float64, Bool}})
-        ranges = Tuple{Float64, Float64, Tuple{Bool, Bool}}[]  # (min, max, (include_min, include_max))
+    function analyze_feature_ranges(
+        term::Vector{Int},
+        feature_id::Int,
+        atom_map::Dict{Int,Tuple{Int,Float64,Bool}},
+    )
+        ranges = Tuple{Float64,Float64,Tuple{Bool,Bool}}[]
 
         constraints = []
         for (atom_idx, val) in enumerate(term)
@@ -900,7 +963,7 @@ function minimizza_dnf(
     """
     Checks if ranges cover the entire domain of the feature.
     """
-    function covers_full_domain(ranges::Vector{Tuple{Float64, Float64, Tuple{Bool, Bool}}})
+    function covers_full_domain(ranges)
         if isempty(ranges)
             return false
         end
@@ -932,8 +995,16 @@ function minimizza_dnf(
     """
     Semantic post-processing: eliminates threshold-aware redundancies.
     """
-    function semantic_postprocessing(primes::Vector{Vector{Int}}, formula::TwoLevelDNFFormula)
+    function semantic_postprocessing(
+        primes::Vector{Vector{Int}},
+        formula::TwoLevelDNFFormula,
+    )
         silent || println("\n[PHASE 2] Semantic Post-Processing...")
+
+        if isempty(primes)
+            silent || println("  ✓ No primes to process, skipping")
+            return primes
+        end
 
         atom_map = build_atom_map(formula)
         feature_ids = unique(feat_id for (_, (feat_id, _, _)) in atom_map)
@@ -943,22 +1014,51 @@ function minimizza_dnf(
         for prime in primes
             # Analyze each feature in this prime
             simplified_prime = copy(prime)
+            redundant_count = 0
 
             for feature_id in feature_ids
                 ranges = analyze_feature_ranges(prime, feature_id, atom_map)
 
-                # If this feature covers the entire domain, eliminate its atoms
+                # Only remove if truly redundant AND it won't make term empty
                 if covers_full_domain(ranges)
-                    silent || println("  ✓ Feature $feature_id is redundant in term, removing...")
-
-                    # Set to -1 (don't care) all atoms of this feature
-                    for (atom_idx, val) in enumerate(prime)
-                        if val != -1
-                            feat_id, _, _ = atom_map[atom_idx]
-                            if feat_id == feature_id
-                                simplified_prime[atom_idx] = -1
+                    # Count how many features would remain
+                    other_features_present = false
+                    for other_fid in feature_ids
+                        if other_fid != feature_id
+                            for (atom_idx, val) in enumerate(simplified_prime)
+                                if val != -1
+                                    feat_id, _, _ = atom_map[atom_idx]
+                                    if feat_id == other_fid
+                                        other_features_present = true
+                                        break
+                                    end
+                                end
+                            end
+                            if other_features_present
+                                break
                             end
                         end
+                    end
+
+                    # Only remove if other features remain
+                    if other_features_present
+                        silent || println(
+                            "  ✓ Feature $feature_id is redundant in term, removing...",
+                        )
+                        redundant_count += 1
+
+                        for (atom_idx, val) in enumerate(prime)
+                            if val != -1
+                                feat_id, _, _ = atom_map[atom_idx]
+                                if feat_id == feature_id
+                                    simplified_prime[atom_idx] = -1
+                                end
+                            end
+                        end
+                    else
+                        silent || println(
+                            "  ⚠ Feature $feature_id is redundant but keeping it to avoid empty term",
+                        )
                     end
                 end
             end
@@ -966,10 +1066,10 @@ function minimizza_dnf(
             push!(simplified_primes, simplified_prime)
         end
 
-        # Remove duplicates after simplification
         unique_primes = unique(simplified_primes)
 
-        silent || println("  ✓ Simplified: $(length(primes)) → $(length(unique_primes)) primes")
+        silent ||
+            println("  ✓ Simplified: $(length(primes)) → $(length(unique_primes)) primes")
 
         return unique_primes
     end
@@ -990,7 +1090,7 @@ function minimizza_dnf(
         # For each feature, calculate the union of ranges covered by ALL primes
         for feature_id in feature_ids
             # FIXED: Initialize with correct type to avoid type instability
-            all_ranges = Vector{Tuple{Float64, Float64, Tuple{Bool, Bool}}}()
+            all_ranges = Vector{Tuple{Float64,Float64,Tuple{Bool,Bool}}}()
 
             for prime in primes
                 ranges = analyze_feature_ranges(prime, feature_id, atom_map)
@@ -999,18 +1099,60 @@ function minimizza_dnf(
 
             # If the union covers everything, the feature is globally redundant
             if covers_full_domain(all_ranges)
-                silent || println("  ✓ Feature $feature_id globally redundant, removing from ALL terms...")
-
-                # Remove from all primes
+                # Check if removing this feature would leave at least one non-empty term
+                would_be_empty = 0
                 for prime in primes
-                    for (atom_idx, val) in enumerate(prime)
+                    temp_prime = copy(prime)
+                    for (atom_idx, val) in enumerate(temp_prime)
                         if val != -1
                             feat_id, _, _ = atom_map[atom_idx]
                             if feat_id == feature_id
-                                prime[atom_idx] = -1
+                                temp_prime[atom_idx] = -1
                             end
                         end
                     end
+                    if is_empty_term(temp_prime)
+                        would_be_empty += 1
+                    end
+                end
+
+                # Only remove if at least one term will remain non-empty
+                if would_be_empty < length(primes)
+                    silent || println(
+                        "  ✓ Feature $feature_id globally redundant, removing from $(length(primes) - would_be_empty) terms...",
+                    )
+
+                    for prime in primes
+                        # Skip if this would make the term empty
+                        temp_check = copy(prime)
+                        for (atom_idx, val) in enumerate(temp_check)
+                            if val != -1
+                                feat_id, _, _ = atom_map[atom_idx]
+                                if feat_id == feature_id
+                                    temp_check[atom_idx] = -1
+                                end
+                            end
+                        end
+
+                        if !is_empty_term(temp_check)
+                            for (atom_idx, val) in enumerate(prime)
+                                if val != -1
+                                    feat_id, _, _ = atom_map[atom_idx]
+                                    if feat_id == feature_id
+                                        prime[atom_idx] = -1
+                                    end
+                                end
+                            end
+                        else
+                            silent || println(
+                                "    ⚠ Keeping feature $feature_id in one term to avoid empty term",
+                            )
+                        end
+                    end
+                else
+                    silent || println(
+                        "  ⚠ Feature $feature_id is globally redundant but keeping it to avoid all-empty terms",
+                    )
                 end
             end
         end
@@ -1032,15 +1174,23 @@ function minimizza_dnf(
         primes = find_prime_implicants(original_terms)
 
         if isempty(primes)
-            @warn "No prime implicants found"
+            @warn "No prime implicants found, returning original formula"
             return formula
         end
 
         coverage = build_coverage_table(primes, original_terms)
-        essential_indices, covered_minterms = find_essential_primes(coverage, primes, original_terms)
+        essential_indices, covered_minterms =
+            find_essential_primes(coverage, primes, original_terms)
         additional_indices = petricks_method_global(coverage, primes, covered_minterms)
 
         selected_indices = unique(sort([essential_indices; additional_indices]))
+
+        # CRITICAL: Check if selection is empty
+        if isempty(selected_indices)
+            @warn "No primes selected after coverage analysis, returning original formula"
+            return formula
+        end
+
         selected_primes = primes[selected_indices]
 
         silent || println("  After Quine: $(length(selected_primes)) primes")
@@ -1048,11 +1198,58 @@ function minimizza_dnf(
         # PHASE 2: Semantic post-processing
         semantic_primes = semantic_postprocessing(selected_primes, formula)
 
+        # CRITICAL: Check after semantic processing
+        if isempty(semantic_primes)
+            @warn "All primes eliminated during semantic processing, returning original formula"
+            return formula
+        end
+
         # PHASE 3: Global factorization
         final_primes = global_factorization(semantic_primes, formula)
 
-        # Remove empty primes (all -1)
-        final_primes = filter(p -> any(x != -1 for x in p), final_primes)
+        # Remove empty primes (all -1) but keep at least one term
+        final_primes = filter(p -> !is_empty_term(p), final_primes)
+
+        # CRITICAL: Final safety check - if all terms were eliminated, return original
+        if isempty(final_primes)
+            println("\n" * "=" ^ 70)
+            println("ERROR: All terms eliminated during minimization!")
+            println("=" ^ 70)
+            println("DEBUG INFO:")
+            println("  Original terms: $(length(original_terms))")
+            println("  Selected primes after Quine: $(length(selected_primes))")
+            println("  Semantic primes: $(length(semantic_primes))")
+            println(
+                "  Final primes before filtering: $(length(filter(p -> !is_empty_term(p), global_factorization(semantic_postprocessing(selected_primes, formula), formula))))",
+            )
+            println("\nORIGINAL TERMS:")
+            for (i, term) in enumerate(original_terms)
+                println("  Term $i: $term")
+            end
+            println("\nSELECTED PRIMES AFTER QUINE:")
+            for (i, prime) in enumerate(selected_primes)
+                println("  Prime $i: $prime (literals: $(count_literals(prime)))")
+            end
+            println("\nSEMANTIC PRIMES:")
+            for (i, prime) in enumerate(semantic_primes)
+                println(
+                    "  Prime $i: $prime (literals: $(count_literals(prime)), empty: $(is_empty_term(prime)))",
+                )
+            end
+            println("\nFINAL PRIMES BEFORE FILTER:")
+            final_before_filter = global_factorization(semantic_primes, formula)
+            for (i, prime) in enumerate(final_before_filter)
+                println(
+                    "  Prime $i: $prime (literals: $(count_literals(prime)), empty: $(is_empty_term(prime)))",
+                )
+            end
+            println("\nFORMULA INFO:")
+            println("  num_atoms: $(formula.num_atoms)")
+            println("  atoms_by_feature: $(formula.atoms_by_feature)")
+            println("=" ^ 70)
+            @warn "Returning original formula with $(length(original_terms)) terms"
+            return formula
+        end
 
         silent || println("\n" * "=" ^ 70)
         silent || println("RESULTS:")
@@ -1084,7 +1281,10 @@ function minimizza_dnf(
         )
 
     catch e
-        @error "Error in Quine-OPP algorithm" exception=(e, catch_backtrace())
+        @error "Error in Quine algorithm, returning original formula" exception=(
+            e,
+            catch_backtrace(),
+        )
         return formula
     end
 end

@@ -288,7 +288,7 @@ function STEL(
     min_coverage,
     rule_complexity_metric = :natoms,
     rng::AbstractRNG = MersenneTwister(1),
-    silent = false,
+    silent = true,
 )
     D = deepcopy(X) # Copy of the original dataset
     L = deepcopy(y)
@@ -437,7 +437,7 @@ function STEL(
                     # Se l'antecedente è false, tutte le istanze rimangono
                     collect(1:length(L))
                 end
-            else                                                                                                # TODO ASK MICHI  }                                
+            else                                                                                                # TODO ASK MICHI  }
                 sat_unsat = evaluaterule(S[idx_best], D, L)[:checkmask,]
                 # Remain in D the rule that not satisfying the best rule's pruning_s condition
                 findall(sat_unsat .== false)

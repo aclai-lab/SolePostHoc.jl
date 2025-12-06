@@ -314,6 +314,7 @@ function create_random_forest_input_from_model(
     f::Union{DecisionEnsemble,SoleModels.DecisionXGBoost};
     output_file::String = "forest.txt",
     feature_offset::Int = 1,
+    silent::Bool = true,
 )
     # Extract ensemble metadata
     num_trees = length(f.models)
@@ -335,13 +336,15 @@ function create_random_forest_input_from_model(
     end
 
     # Display class mapping for user reference
-    println("\n" * "="^60)
-    println("Class Mapping (0-based indexing):")
-    println("="^60)
-    for (lbl, idx) in sort(collect(class_map), by = x->x[2])
-        println("  $idx => $lbl")
+    silent || println("\n" * "="^60)
+    silent || println("Class Mapping (0-based indexing):")
+    silent || println("="^60)
+    if silent == false
+        for (lbl, idx) in sort(collect(class_map), by = x->x[2])
+            println("  $idx => $lbl")
+        end
     end
-    println("="^60 * "\n")
+    silent || println("="^60 * "\n")
 
     # Build BA-Trees format output
     lines = String[]
@@ -397,7 +400,7 @@ require the CPLEX optimization library, making it more portable.
 # Returns
 - Path to the created Makefile
 """
-function create_simple_makefile(born_again_dp_path::String)
+function create_simple_makefile(born_again_dp_path::String; silent::Bool = true)
     makefile_content = """
 CXX = g++
 CXXFLAGS = -O2 -std=c++11
@@ -422,7 +425,7 @@ clean:
 
     makefile_path = joinpath(born_again_dp_path, "Makefile.simple")
     write(makefile_path, makefile_content)
-    println("Created simplified Makefile at: $makefile_path")
+    silent || println("Created simplified Makefile at: $makefile_path")
     return makefile_path
 end
 
@@ -448,7 +451,7 @@ This function handles the complete setup process:
 - Supports Linux, macOS, and Windows
 - Creates a simplified Makefile for reliable compilation
 """
-function setup_ba_trees(base_dir::String)
+function setup_ba_trees(base_dir::String; silent::Bool = true)
     born_again_dp_path = joinpath(base_dir, "born_again_dp")
     executable_path = joinpath(base_dir, "bornAgain")
 
@@ -488,7 +491,7 @@ function setup_ba_trees(base_dir::String)
             return false
         end
     else
-        println(" born_again_dp directory already exists")
+        silent || println(" born_again_dp directory already exists")
     end
 
     # ========================================================================
@@ -714,6 +717,7 @@ function prepare_and_run_ba_trees(;
     max_depth::Int = -1,
     forest = nothing,
     mode_obj = 0,
+    silent::Bool = true,
 )
     # Validate mode_obj parameter
     valid_modes = [0, 1, 2, 4]
@@ -734,9 +738,9 @@ function prepare_and_run_ba_trees(;
     # ========================================================================
     # Step 1: Setup BA-Trees (automatic clone and compile)
     # ========================================================================
-    println("\n" * "="^60)
-    println("Checking BA-Trees setup...")
-    println("="^60)
+    silent || println("\n" * "="^60)
+    silent || println("Checking BA-Trees setup...")
+    silent || println("="^60)
 
     if !setup_ba_trees(base_dir)
         println("ERROR: Failed to setup BA-Trees. Please check the error messages above.")
@@ -770,9 +774,9 @@ function prepare_and_run_ba_trees(;
         # ====================================================================
         # Step 3: Generate or convert forest to BA-Trees format
         # ====================================================================
-        println("\n" * "="^60)
-        println("Preparing random forest data...")
-        println("="^60)
+        silent || println("\n" * "="^60)
+        silent || println("Preparing random forest data...")
+        silent || println("="^60)
 
         forest_content = ""
         class_map = nothing
@@ -796,38 +800,38 @@ function prepare_and_run_ba_trees(;
 
         # Write forest data to file
         write(input_file, forest_content)
-        println(" Forest data written to: $input_file")
+        silent || println(" Forest data written to: $input_file")
 
         # ====================================================================
         # Step 4: Execute BA-Trees algorithm
         # ====================================================================
         num_trees_actual = length(forest.models)
 
-        println("\n" * "="^60)
-        println("Executing BA-Trees algorithm...")
-        println("="^60)
-        println("Trees: $num_trees_actual")
-        println("Objective mode: $mode_obj")
+        silent || println("\n" * "="^60)
+        silent || println("Executing BA-Trees algorithm...")
+        silent || println("="^60)
+        silent || println("Trees: $num_trees_actual")
+        silent || println("Objective mode: $mode_obj")
 
         cmd =
             `$executable_path $input_file $output_base -trees $num_trees_actual -obj $mode_obj`
-        println("Command: $cmd")
+        silent || println("Command: $cmd")
         run(cmd)
 
         # ====================================================================
         # Step 5: Display results
         # ====================================================================
         if isfile(output_stats)
-            println("\n" * "="^60)
-            println("Born-Again Tree Analysis Results:")
-            println("="^60)
-            println(read(output_stats, String))
+            silent || println("\n" * "="^60)
+            silent || println("Born-Again Tree Analysis Results:")
+            silent || println("="^60)
+            silent || println(read(output_stats, String))
 
             if isfile(output_tree)
-                println("\n" * "="^60)
-                println("Born-Again Tree Structure:")
-                println("="^60)
-                println(read(output_tree, String))
+                silent || println("\n" * "="^60)
+                silent || println("Born-Again Tree Structure:")
+                silent || println("="^60)
+                silent || println(read(output_tree, String))
             else
                 println("Tree structure file not found: $output_tree")
             end
@@ -909,14 +913,21 @@ class_map = WRAP_batrees(
 )
 ```
 """
-function WRAP_batrees(f, max_depth = 10; dataset_name = "", num_trees = nothing, mod = 0)
-    println("\n" * "="^60)
-    println("Born-Again Tree Analysis")
-    println("="^60)
-    println("Dataset: $dataset_name")
-    println("Number of trees: $(isnothing(f) ? num_trees : length(f.models))")
-    println("Maximum depth: $max_depth")
-    println("="^60 * "\n")
+function WRAP_batrees(
+    f,
+    max_depth = 10;
+    dataset_name = "",
+    num_trees = nothing,
+    mod = 0,
+    silent::Bool = true,
+)
+    silent || println("\n" * "="^60)
+    silent || println("Born-Again Tree Analysis")
+    silent || println("="^60)
+    silent || println("Dataset: $dataset_name")
+    silent || println("Number of trees: $(isnothing(f) ? num_trees : length(f.models))")
+    silent || println("Maximum depth: $max_depth")
+    silent || println("="^60 * "\n")
 
     if isnothing(f)
         # Generate new forest and analyze
@@ -1379,7 +1390,11 @@ for predictions.
 dt = demonstrate_conversion("result.txt.tree", iris_dataset)
 ```
 """
-function demonstrate_conversion(ba_tree_file::String, dataset::DataFrame)
+function demonstrate_conversion(
+    ba_tree_file::String,
+    dataset::DataFrame;
+    silent::Bool = true,
+)
     # Extract metadata from dataset
     features = names(dataset)[1:(end-1)] |> Vector{String}
     classes = unique(dataset[!, end]) |> Vector
@@ -1388,21 +1403,21 @@ function demonstrate_conversion(ba_tree_file::String, dataset::DataFrame)
     dt = convert_ba_to_dt(ba_tree_file, features, classes)
 
     # Display information
-    println("\n" * "="^60)
-    println("Converted Decision Tree Information:")
-    println("="^60)
-    println("Features: ", dt.features)
-    println("Classes: ", dt.classes)
-    println("="^60)
+    silent || println("\n" * "="^60)
+    silent || println("Converted Decision Tree Information:")
+    silent || println("="^60)
+    silent || println("Features: ", dt.features)
+    silent || println("Classes: ", dt.classes)
+    silent || println("="^60)
 
     # Example prediction on first row
     x = Array(dataset[1, 1:(end-1)])
     prediction = DecisionTree.predict(dt, x)
-    println("\nExample Prediction:")
-    println("Input: ", x)
-    println("Predicted class: ", prediction)
-    println("Actual class: ", dataset[1, end])
-    println("="^60 * "\n")
+    silent || println("\nExample Prediction:")
+    silent || println("Input: ", x)
+    silent || println("Predicted class: ", prediction)
+    silent || println("Actual class: ", dataset[1, end])
+    silent || println("="^60 * "\n")
 
     return dt
 end
@@ -1423,7 +1438,7 @@ output file.
 display_results("result.txt")
 ```
 """
-function display_results(output_file::String)
+function display_results(output_file::String; silent::Bool = true,)
     output_file = endswith(output_file, ".out") ? output_file : output_file * ".out"
 
     if !isfile(output_file)
@@ -1431,9 +1446,9 @@ function display_results(output_file::String)
         return
     end
 
-    println("\n" * "="^60)
-    println("Born-Again Tree Analysis Results:")
-    println("="^60)
+    silent || println("\n" * "="^60)
+    silent || println("Born-Again Tree Analysis Results:")
+    silent || println("="^60)
 
     for line in eachline(output_file)
         if startswith(line, "TIME") ||

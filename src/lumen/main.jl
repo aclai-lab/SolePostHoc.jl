@@ -112,7 +112,7 @@ Base.@kwdef struct LumenConfig
     minimization_kwargs::NamedTuple = (;)
     filteralphabetcallback = identity
     apply_function = nothing
-    silent::Bool = false
+    silent::Bool = true
     return_info::Bool = true
     vetImportance::Vector = []
     testott = nothing
@@ -289,7 +289,8 @@ function validate_config(config::LumenConfig)
 
     # Validate minimization scheme - only certain algorithms are implemented
     # Each algorithm has different trade-offs in speed vs. minimization quality
-    valid_schemes = (:mitespresso, :boom, :abc, :abc_balanced, :abc_thorough, :quine, :quine_naive)
+    valid_schemes =
+        (:mitespresso, :boom, :abc, :abc_balanced, :abc_thorough, :quine, :quine_naive)
     if config.minimization_scheme ∉ valid_schemes
         throw(
             ArgumentError(
@@ -1019,7 +1020,8 @@ function process_rules(combined_results, config::LumenConfig)
 
             config.silent || println("pre dnf-domain minimized_formula:", minimized_formula)      # this code is usable only if use SoleData `origin/ADD_new_function_refine_dnf` in this moment [20 August 2025]
 
-            if config.minimization_scheme in [:mitespresso, :boom, :abc, :abc_balanced, :abc_thorough]
+            if config.minimization_scheme in
+               [:mitespresso, :boom, :abc, :abc_balanced, :abc_thorough]
                 # TODO EVALUATE IF THIS IS NEEDED IN THIS POSITION OR BEFORE
                 minimized_formula = SoleData.refine_dnf(minimized_formula) # TODO EVALUATE IF THIS IS NEEDED IN THIS POSITION OR BEFORE
             end
@@ -1596,7 +1598,8 @@ See also: [`process_rules`](@ref), [`LumenConfig`](@ref), [`leftmost_disjunctive
 function create_rule(formula, result, config::LumenConfig)
     # Choose processing path based on minimization algorithm capabilities
     # Advanced algorithms support sophisticated string-based processing
-    if config.minimization_scheme in (:mitespresso, :boom, :abc, :abc_balanced, :abc_thorough)
+    if config.minimization_scheme in
+       (:mitespresso, :boom, :abc, :abc_balanced, :abc_thorough)
         # String-based processing path for advanced algorithms
         # This path provides maximum flexibility and feature support
 
