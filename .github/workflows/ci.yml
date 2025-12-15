@@ -40,6 +40,9 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
         env:
           PYTHON: ""
+      - name: Enable Conda pip_interop
+        run: |
+          julia -e "using Conda; Conda.pip_interop(true)"
       - uses: julia-actions/julia-runtest@v1
         env:
           PYTHON: ""
