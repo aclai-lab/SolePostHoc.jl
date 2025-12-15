@@ -2,7 +2,7 @@ name: CI
 on:
   push:
     branches:
-      - devXGB
+      - devFastVarFix
     tags: ['*']
   pull_request:
   workflow_dispatch:
@@ -24,9 +24,10 @@ jobs:
       matrix:
         version:
           - '1'
-          # - 'lts' broken: expects SolePostHoc to be registered
+          - 'lts'
         os:
-          - ubuntu-latest
+          # - ubuntu-latest Conda issue
+          - ubuntu-24.04
         arch:
           - x64
     steps:
