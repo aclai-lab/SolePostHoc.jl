@@ -52,7 +52,7 @@ function minimizza_dnf(
 )
     return _abc_minimize_dnf_logic(
         formula,
-        true;
+        1;
         silent,
         horizontal,
         vertical,
@@ -72,7 +72,7 @@ function minimizza_dnf(
 )
     return _abc_minimize_dnf_logic(
         formula,
-        true;
+        0;
         silent,
         horizontal,
         vertical,
@@ -92,7 +92,7 @@ function minimizza_dnf(
 )
     return _abc_minimize_dnf_logic(
         formula,
-        false;
+        -1;
         silent,
         horizontal,
         vertical,
@@ -103,7 +103,7 @@ end
 
 function _abc_minimize_dnf_logic(
     formula::TwoLevelDNFFormula,
-    fast_level::Bool;
+    fast_level::Int;
     silent = true,
     horizontal = 1.0,
     vertical = 1.0,

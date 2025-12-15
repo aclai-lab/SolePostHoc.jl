@@ -2,7 +2,7 @@ name: CI
 on:
   push:
     branches:
-      - devFastVarFix
+      - main
     tags: ['*']
   pull_request:
   workflow_dispatch:
@@ -24,7 +24,7 @@ jobs:
       matrix:
         version:
           - '1'
-          - 'lts'
+          # - 'lts'
         os:
           # - ubuntu-latest Conda issue
           - ubuntu-24.04
@@ -38,11 +38,6 @@ jobs:
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
-        env:
-          PYTHON: ""
-      - name: Enable Conda pip_interop
-        run: |
-          julia --project -e 'import Pkg; Pkg.instantiate(); Pkg.add("Conda"); using Conda; Conda.pip_interop(true)'
         env:
           PYTHON: ""
       - uses: julia-actions/julia-runtest@v1
