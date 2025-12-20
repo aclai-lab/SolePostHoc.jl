@@ -195,57 +195,45 @@ function intrees(
         return F[valid_idxs]
     end
 
-    function starterruleset(model; kwargs...)
-        unique(
+    @inline starterruleset(model::AbstractModel; kwargs...) =
+        unique!(
             reduce(vcat, [listrules(subm; kwargs...) for subm in SoleModels.models(model)]),
         )
-        # TODO maybe also sort?
-    end
-
-    if !haslistrules(model)
-        model = solemodel(model)
-    end
 
     info = (;)
 
-    ########################################################################################
-    # Extract rules from each tree, obtain full ruleset
-    ########################################################################################
     silent      = get_silent(extractor)
     return_info = get_return_info(extractor)
 
+    # Extract rules from each tree, obtain full ruleset
     silent || println("Extracting starting rules...")
-    listrules_kwargs = (;
-        use_shortforms = true,
-        # flip_atoms = true,
-        normalize = true,
-        # normalize_kwargs = (; forced_negation_removal = true, reduce_negations = true, allow_atom_flipping = true, rotate_commutatives = false)
-    )
-    ruleset =
-        isensemble(model) ? starterruleset(model; listrules_kwargs...) :
-        listrules(model; listrules_kwargs...)
 
-    ########################################################################################
+    listrules_kwargs = (use_shortforms=true, normalize=true)
+    ruleset =
+        isensemble(model) ?
+            starterruleset(model; listrules_kwargs...) :
+            listrules(model; listrules_kwargs...)
+    fnames = featurenames(model)
+
     # Prune rules with respect to a dataset
-    ########################################################################################
     if get_prune_rules(extractor)
         silent || println("Pruning $(length(ruleset)) rules...")
-        if return_info
-            info = merge(info, (; unpruned_ruleset = ruleset))
-        end
-        ruleset = @time begin
+
+        return_info && (info = merge(info, (; unpruned_ruleset = ruleset)))
+
+        ruleset = begin
             afterpruningruleset = Vector{Rule}(undef, length(ruleset))
-            Threads.@threads for (i, r) in collect(enumerate(ruleset))
-                if r.antecedent isa SoleLogics.BooleanTruth
+
+            Threads.@threads for i in axes(ruleset, 1)
+                if ruleset[i].antecedent isa SoleLogics.BooleanTruth
                     # this case happens with XgBoost: the rule is a simply BooleanTruth
-                    # TODO Marco, is this the correct way to handle this case?
-                    afterpruningruleset[i] = r
+                    afterpruningruleset[i] = ruleset[i]
                 else
                     afterpruningruleset[i] =
                         intrees_prunerule(
-                            r, X, y;
+                            ruleset[i], X, y;
                             pruning_s=get_pruning_s(extractor),
-                            pruning_decay_threshold=get_pruning_decay_threshold(extractor)
+                            pruning_decay_thr=get_pruning_decay_threshold(extractor)
                         )
                 end
             end
@@ -253,16 +241,14 @@ function intrees(
         end
     end
 
-    ########################################################################################
     # Rule selection to obtain the best rules
-    ########################################################################################
     silent || println(
         "Selecting via $(string(rule_selection_method)) from a pool of $(length(ruleset)) rules...",
     )
-    ruleset = @time begin
-        if return_info
-            info = merge(info, (; unselected_ruleset = ruleset))
-        end
+
+    ruleset = begin
+        return_info && (info = merge(info, (; unselected_ruleset = ruleset)))
+
         if get_rule_selection_method(extractor) == :CBC
             matrixrulemetrics = Matrix{Float64}(undef, length(ruleset), 3)
             afterselectionruleset = Vector{BitVector}(undef, length(ruleset))
@@ -316,6 +302,7 @@ function intrees(
             error("Unexpected rule selection method specified: $(rule_selection_method)")
         end
     end
+    
     silent || println("# rules selected: $(length(ruleset)).")
 
     ########################################################################################

@@ -39,16 +39,9 @@ export convert_classification_rules, refne_classification_rules
 include("shared_utils.jl")
 
 # ---------------------------------------------------------------------------- #
-#                                 maybe types                                  #
+#                                    utils                                     #
 # ---------------------------------------------------------------------------- #
-"""
-    Maybe{T}
-
-Type alias for `Union{T, Nothing}`.
-"""
-const Maybe{T} = Union{T, Nothing}
-
-const MaybeFloat64 = Maybe{Float64}
+featurenames(s::AbstractModel) = s.info.featurenames
 
 # ---------------------------------------------------------------------------- #
 #                                  InTrees                                     #
