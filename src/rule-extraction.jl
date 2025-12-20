@@ -38,29 +38,28 @@ end
 export convert_classification_rules, refne_classification_rules
 include("shared_utils.jl")
 
-#======================================================================================================================================
-                                                        InTrees
-======================================================================================================================================#
+# ---------------------------------------------------------------------------- #
+#                                 maybe types                                  #
+# ---------------------------------------------------------------------------- #
+"""
+    Maybe{T}
 
+Type alias for `Union{T, Nothing}`.
+"""
+const Maybe{T} = Union{T, Nothing}
+
+const MaybeFloat64 = Maybe{Float64}
+
+# ---------------------------------------------------------------------------- #
+#                                  InTrees                                     #
+# ---------------------------------------------------------------------------- #
 export InTreesRuleExtractor
 export intrees
 include("intrees/intrees.jl")
 include("intrees/apiIntrees.jl")
 
-
-"""$(_get_rule_extractor_docstring("InTreesRuleExtractor", intrees))"""
-@kwdef struct InTreesRuleExtractor <: RuleExtractor
-    prune_rules::Bool = true
-    pruning_s::Union{Float64,Nothing} = nothing
-    pruning_decay_threshold::Union{Float64,Nothing} = nothing
-    rule_selection_method::Symbol = :CBC
-    rule_complexity_metric::Symbol = :natoms
-    # accuracy_rule_selection = nothing
-    min_coverage::Union{Float64,Nothing} = nothing
-end
-
-function modalextractrules(::InTreesRuleExtractor, m, args...; kwargs...)
-    dl = intrees(m, args...; kwargs...)
+function modalextractrules(extractor::InTreesRuleExtractor; kwargs...)
+    dl = intrees(extractor; kwargs...)
     ll = listrules(dl, use_shortforms = false) # decision list to list of rules
     rules_obj = convert_classification_rules(dl, ll)
     dsintrees = DecisionSet(rules_obj)

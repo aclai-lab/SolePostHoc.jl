@@ -2,6 +2,81 @@ import DecisionTree as DT
 using ComplexityMeasures
 using SoleModels
 
+# ---------------------------------------------------------------------------- #
+#                                InTrees struct                                #
+# ---------------------------------------------------------------------------- #
+"""
+    InTreesRuleExtractor(; kwargs...)
+
+Create a rule extractor based on the InTrees method.
+
+# Keyword Arguments
+- `prune_rules::Bool=true`: access to prune or not
+- `pruning_s::Union{Float64,Nothing}=nothing`: parameter that limits the denominator in the pruning metric calculation
+- `pruning_decay_threshold::Union{Float64,Nothing}=nothing`: threshold used in pruning to remove or not a joint from the rule
+- `rule_selection_method::Symbol=:CBC`: rule selection method. Currently only supports `:CBC`
+- `rule_complexity_metric::Symbol=:natoms`: Metric to use for estimating a rule complexity measure
+- `min_coverage::Union{Float64,Nothing}=nothing`: minimum rule coverage for STEL
+- `silent::Bool=true`: suppress logging output
+- `return_info::Bool=false`: return extra info from extraction
+- `rng::AbstractRNG=Random.TaskLocalRNG()`: RNG used for any randomized steps (e.g., feature selection)
+
+See also [`intrees`](@ref).
+"""
+struct InTreesRuleExtractor <: RuleExtractor
+    prune_rules             :: Bool
+    pruning_s               :: Float64
+    pruning_decay_threshold :: Float64
+    min_coverage            :: Float64
+    max_rules               :: Int64
+    rule_selection_method   :: Symbol
+    rule_complexity_metric  :: Symbol
+    silent                  :: Bool
+    return_info             :: Bool
+    rng                     :: AbstractRNG
+
+    function InTreesRuleExtractor(;
+        prune_rules             :: Bool=true,
+        pruning_s               :: Float64=1.0e-6,
+        pruning_decay_threshold :: Float64=0.05,
+        min_coverage            :: Float64=0.01,
+        max_rules               :: Int64=-1,
+        rule_selection_method   :: Symbol=:CBC,
+        rule_complexity_metric  :: Symbol=:natoms,
+        # accuracy_rule_selection = nothing,
+        silent                  :: Bool=true,
+        return_info             :: Bool=false,
+        rng                     :: AbstractRNG=Random.TaskLocalRNG()
+    )
+        new(
+            prune_rules,
+            pruning_s,
+            pruning_decay_threshold,
+            min_coverage,
+            max_rules,
+            rule_selection_method,
+            rule_complexity_metric,
+            silent,
+            return_info,
+            rng
+        )
+    end
+end
+
+# ---------------------------------------------------------------------------- #
+#                                  methods                                     #
+# ---------------------------------------------------------------------------- #
+get_prune_rules(r::InTreesRuleExtractor)             = r.prune_rules
+get_pruning_s(r::InTreesRuleExtractor)               = r.pruning_s
+get_pruning_decay_threshold(r::InTreesRuleExtractor) = r.pruning_decay_threshold
+get_min_coverage(r::InTreesRuleExtractor)            = r.min_coverage
+get_max_rules(r::InTreesRuleExtractor)               = r.max_rules
+get_rule_selection_method(r::InTreesRuleExtractor)   = r.rule_selection_method
+get_rule_complexity_metric(r::InTreesRuleExtractor)  = r.rule_complexity_metric
+get_silent(r::InTreesRuleExtractor)                  = r.silent
+get_return_info(r::InTreesRuleExtractor)             = r.return_info
+get_rng(r::InTreesRuleExtractor)                     = r.rng
+
 
 ############################################################################################
 ############################################################################################
@@ -38,39 +113,11 @@ See also
 [`rulemetrics`](@ref).
 """
 function intrees(
-    model,
-    X,
-    y::AbstractVector{<:Label};
-    #
-    prune_rules::Bool = true,
-    pruning_s::Union{Float64,Nothing} = nothing,
-    pruning_decay_threshold::Union{Float64,Nothing} = nothing,
-    #
-    rule_selection_method::Symbol = :CBC,
-    rule_complexity_metric::Symbol = :natoms,
-    # - `accuracy_rule_selection::Union{Float64,Nothing}=nothing`: percentage of rules that rule selection must follow
-    # accuracy_rule_selection = nothing,
-    # New parameter to limit the number of rules
-    max_rules::Int = -1,
-    min_coverage::Union{Float64,Nothing} = nothing,
-    silent = true,
-    rng::AbstractRNG = MersenneTwister(1),
-    return_info::Bool = false,
-    # kwargs...,
+    extractor :: InTreesRuleExtractor;
+    model     :: AbstractModel,
+    X         :: AbstractInterpretationSet,
+    y         :: AbstractVector{<:SoleModels.Label}
 )
-    @show min_coverage
-    isnothing(pruning_s) && !isnothing(pruning_decay_threshold) && (prune_rules = false)
-    isnothing(pruning_decay_threshold) && !isnothing(pruning_s) && (prune_rules = false)
-    isnothing(pruning_s) && (pruning_s = 1.0e-6)
-    isnothing(pruning_decay_threshold) && (pruning_decay_threshold = 0.05)
-    # isnothing(accuracy_rule_selection) && (accuracy_rule_selection = 0.0)
-    isnothing(min_coverage) && (min_coverage = 0.01)
-
-    if !(X isa AbstractInterpretationSet)
-        # X = SoleData.scalarlogiset(X; silent, allow_propositional = true)
-        X = SoleData.scalarlogiset(X; allow_propositional = true)
-    end
-
     """
         cfs()
 
@@ -81,7 +128,9 @@ function intrees(
     [`Rule`](@ref),
     [`rulemetrics`](@ref).
     """
-    function cfs(X, y::AbstractVector{<:Label})
+    function cfs(X::AbstractInterpretationSet, y::AbstractVector{<:Label})
+        @show typeof(_x)
+        @show typeof(_y)
         entropyd(_x) = ComplexityMeasures.entropy(probabilities(_x))
         midd(_x, _y) = -entropyd(collect(zip(_x, _y)))+entropyd(_x)+entropyd(_y)
         information_gain(f1, f2) = entropyd(f1) - (entropyd(f1) - midd(f1, f2))
@@ -162,6 +211,9 @@ function intrees(
     ########################################################################################
     # Extract rules from each tree, obtain full ruleset
     ########################################################################################
+    silent      = get_silent(extractor)
+    return_info = get_return_info(extractor)
+
     silent || println("Extracting starting rules...")
     listrules_kwargs = (;
         use_shortforms = true,
@@ -176,7 +228,7 @@ function intrees(
     ########################################################################################
     # Prune rules with respect to a dataset
     ########################################################################################
-    if prune_rules
+    if get_prune_rules(extractor)
         silent || println("Pruning $(length(ruleset)) rules...")
         if return_info
             info = merge(info, (; unpruned_ruleset = ruleset))
@@ -190,7 +242,11 @@ function intrees(
                     afterpruningruleset[i] = r
                 else
                     afterpruningruleset[i] =
-                        intrees_prunerule(r, X, y; pruning_s, pruning_decay_threshold)
+                        intrees_prunerule(
+                            r, X, y;
+                            pruning_s=get_pruning_s(extractor),
+                            pruning_decay_threshold=get_pruning_decay_threshold(extractor)
+                        )
                 end
             end
             afterpruningruleset
@@ -207,7 +263,7 @@ function intrees(
         if return_info
             info = merge(info, (; unselected_ruleset = ruleset))
         end
-        if rule_selection_method == :CBC
+        if get_rule_selection_method(extractor) == :CBC
             matrixrulemetrics = Matrix{Float64}(undef, length(ruleset), 3)
             afterselectionruleset = Vector{BitVector}(undef, length(ruleset))
             Threads.@threads for (i, rule) in collect(enumerate(ruleset))
@@ -215,7 +271,7 @@ function intrees(
                 afterselectionruleset[i] = eval_result[:checkmask,]
                 matrixrulemetrics[i, 1] = eval_result[:coverage]
                 matrixrulemetrics[i, 2] = eval_result[:error]
-                matrixrulemetrics[i, 3] = eval_result[rule_complexity_metric]
+                matrixrulemetrics[i, 3] = eval_result[get_rule_complexity_metric(extractor)]
             end
             #M = hcat([evaluaterule(rule, X, y)[:checkmask,] for rule in ruleset]...)
             M = hcat(afterselectionruleset...)
@@ -225,7 +281,7 @@ function intrees(
 
             #coefReg = 0.95 .- (0.01*matrixrulemetrics[:,3]/max(matrixrulemetrics[:,3]...))
             #@show coefReg
-            rf = DT.build_forest(y, M, 2, 50, 0.7, -1; rng = rng)
+            rf = DT.build_forest(y, M, 2, 50, 0.7, -1; rng = get_rng(extractor))
             importances = begin
                 #importance = impurity_importance(rf, coefReg)
                 importance = DT.impurity_importance(rf)
@@ -248,7 +304,7 @@ function intrees(
                 )
 
                 # Get all selected rules indices or limit if max_rules is specified
-                if max_rules > 0
+                if get_max_rules(extractor) > 0
                     best_idxs = Int.(finalmatrix[1:min(max_rules, size(finalmatrix, 1)), 5])
                 else
                     best_idxs = Int.(finalmatrix[:, 5])
@@ -267,7 +323,14 @@ function intrees(
     ########################################################################################
     silent || println("Applying STEL...")
 
-    dl = STEL(ruleset, X, y; max_rules, min_coverage, rule_complexity_metric, rng, silent)
+    dl = STEL(
+        ruleset, X, y;
+        max_rules=get_max_rules(extractor),
+        min_coverage=get_min_coverage(extractor), 
+        rule_complexity_metric=get_rule_complexity_metric(extractor),
+        rng=get_rng(extractor),
+        silent
+    )
 
     if return_info
         return dl, info
