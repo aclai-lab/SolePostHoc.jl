@@ -16,7 +16,7 @@ Create a rule extractor based on the InTrees method.
 - `pruning_decay_threshold::Union{Float64,Nothing}=nothing`: threshold used in pruning to remove or not a joint from the rule
 - `rule_selection_method::Symbol=:CBC`: rule selection method. Currently only supports `:CBC`
 - `rule_complexity_metric::Symbol=:natoms`: Metric to use for estimating a rule complexity measure
-- `min_coverage::Union{Float64,Nothing}=nothing`: minimum rule coverage for STEL
+- `min_coverage::Union{Float64,Nothing}=nothing`: minimum rule coverage for stel
 - `silent::Bool=true`: suppress logging output
 - `return_info::Bool=false`: return extra info from extraction
 - `rng::AbstractRNG=Random.TaskLocalRNG()`: RNG used for any randomized steps (e.g., feature selection)
@@ -77,19 +77,89 @@ get_silent(r::InTreesRuleExtractor)                  = r.silent
 get_return_info(r::InTreesRuleExtractor)             = r.return_info
 get_rng(r::InTreesRuleExtractor)                     = r.rng
 
+# ---------------------------------------------------------------------------- #
+#                           Intrees pruning utility                            #
+# ---------------------------------------------------------------------------- #
+"""
+    intrees_prunerule(rc::Rule)::Rule
 
-############################################################################################
-############################################################################################
+Prunes redundant or irrelevant conjuncts of the antecedent of the input rule cascade
+considering the error metric
 
-include("intrees-pruning.jl")
+See also
+[`Rule`](@ref),
+[`rulemetrics`](@ref).
+"""
+@inline intrees_prunerule(
+    r::Rule,
+    X::AbstractInterpretationSet,
+    y::AbstractVector{<:SoleModels.Label};
+    kwargs...
+) = _prune_rule(typeof(antecedent(r)), r, X, y; kwargs...)
 
+@inline _prune_rule(::Type{<:Atom}, r::Rule{O}, args...; kwargs...) where{O} =
+    intrees_prunerule(Rule(LeftmostConjunctiveForm(
+        [antecedent(r)]), consequent(r), info(r)), args...; kwargs...,)
+
+function _prune_rule(
+    ::Type{<:LeftmostConjunctiveForm},
+    r                 :: Rule{O},
+    X                 :: AbstractInterpretationSet,
+    y                 :: AbstractVector{<:SoleModels.Label};
+    pruning_s         :: AbstractFloat,
+    pruning_decay_thr :: AbstractFloat,
+    kwargs...,
+) where {O}
+    nruleconjuncts = nconjuncts(r)
+    e_zero         = rulemetrics(r, X, y)[:error]
+    valid_idxs     = 1:nruleconjuncts
+    antd, cons     = antecedent(r), consequent(r)
+
+    for idx in reverse(valid_idxs)
+        (length(valid_idxs) < 2) && break
+
+        # Indices to be considered to evaluate the rule
+        other_idxs = intersect!(vcat(1:(idx-1), (idx+1):nruleconjuncts), valid_idxs)
+        rule = Rule(LeftmostConjunctiveForm(SoleLogics.grandchildren(antd)[other_idxs]), cons)
+
+        # Return error of the rule without idx-th pair
+        e_minus_i = rulemetrics(rule, X, y)[:error]
+        decay_i   = (e_minus_i - e_zero) / max(e_zero, pruning_s)
+
+        if decay_i ≤ pruning_decay_thr 
+             # Remove the idx-th pair in the vector of decisions
+            deleteat!([valid_idxs...], idx)
+            e_zero = e_minus_i
+        end
+    end
+
+    return Rule(LeftmostConjunctiveForm(SoleLogics.grandchildren(antd)[valid_idxs]), cons)
+end
+
+function _prune_rule(::Type{<:MultiFormula}, r::Rule{O}, args...; kwargs...) where {O}
+    @assert antecedent(r) isa MultiFormula "Cannot use this function on $(antecedent(r))"
+    children = [
+        MultiFormula(i_modality, modant) for (i_modality, modant) in modforms(antecedent(r))
+    ]
+
+    return  length(children) < 2 ? r :
+            intrees_prunerule(
+                Rule(LeftmostConjunctiveForm(children), consequent(r), info(r)),
+                args...;
+                kwargs...,
+            )
+end
+
+# ---------------------------------------------------------------------------- #
+#                                   InTrees                                    #
+# ---------------------------------------------------------------------------- #
 """
     intrees(model::Union{AbstractModel,DecisionForest}, X, y::AbstractVector{<:Label}; kwargs...)::DecisionList
 
 Return a decision list which approximates the behavior of the input `model` on the specified supervised dataset.
 The set of relevant and
 non-redundant rules in the decision list are obtained by means of rule selection, rule pruning,
-and sequential covering (STEL).
+and sequential covering (stel).
 
 # References
 - Deng, Houtao. "Interpreting tree ensembles with intrees." International Journal of Data Science and Analytics 7.4 (2019): 277-287.
@@ -101,7 +171,7 @@ and sequential covering (STEL).
 - `rule_selection_method::Symbol=:CBC`: rule selection method. Currently only supports `:CBC`
 - `rule_complexity_metric::Symbol=:natoms`: Metric to use for estimating a rule complexity measure
 - `max_rules::Int=-1`: maximum number of rules in the final decision list (excluding default rule). Use -1 for unlimited rules.
-- `min_coverage::Union{Float64,Nothing}=nothing`: minimum rule coverage for STEL
+- `min_coverage::Union{Float64,Nothing}=nothing`: minimum rule coverage for stel
 - See [`modalextractrules`](@ref) keyword arguments...
 
 Although the method was originally presented for forests it is hereby extended to work with any symbolic models.
@@ -250,67 +320,56 @@ function intrees(
         return_info && (info = merge(info, (; unselected_ruleset = ruleset)))
 
         if get_rule_selection_method(extractor) == :CBC
-            matrixrulemetrics = Matrix{Float64}(undef, length(ruleset), 3)
+            matrixrulemetrics     = Matrix{Float64}(undef, length(ruleset), 3)
             afterselectionruleset = Vector{BitVector}(undef, length(ruleset))
-            Threads.@threads for (i, rule) in collect(enumerate(ruleset))
-                eval_result = rulemetrics(rule, X, y)
+
+            Threads.@threads for i in axes(ruleset, 1)
+                eval_result = rulemetrics(ruleset[i], X, y)
                 afterselectionruleset[i] = eval_result[:checkmask,]
-                matrixrulemetrics[i, 1] = eval_result[:coverage]
-                matrixrulemetrics[i, 2] = eval_result[:error]
-                matrixrulemetrics[i, 3] = eval_result[get_rule_complexity_metric(extractor)]
+                matrixrulemetrics[i, 1]  = eval_result[:coverage]
+                matrixrulemetrics[i, 2]  = eval_result[:error]
+                matrixrulemetrics[i, 3]  = eval_result[get_rule_complexity_metric(extractor)]
             end
-            #M = hcat([evaluaterule(rule, X, y)[:checkmask,] for rule in ruleset]...)
-            M = hcat(afterselectionruleset...)
 
-            #best_idxs = findcorrelation(Statistics.cor(M); threshold = accuracy_rule_selection) using Statistics
-            #best_idxs = cfs(M,y)
-
-            #coefReg = 0.95 .- (0.01*matrixrulemetrics[:,3]/max(matrixrulemetrics[:,3]...))
-            #@show coefReg
-            rf = DT.build_forest(y, M, 2, 50, 0.7, -1; rng = get_rng(extractor))
+            rf = DT.build_forest(y, hcat(afterselectionruleset...), 2, 50, 0.7, -1; rng=get_rng(extractor))
             importances = begin
-                #importance = impurity_importance(rf, coefReg)
                 importance = DT.impurity_importance(rf)
                 importance/max(importance...)
             end
-            # @show importances
+
             best_idxs = begin
                 selected_features = findall(importances .> 0.01)
-                # @show selected_features
-                ruleSetPrunedRRF = hcat(
+
+                ruleset_pruned_rrf = hcat(
                     matrixrulemetrics[selected_features, :],
                     importances[selected_features],
                     selected_features,
                 )
                 finalmatrix = sortslices(
-                    ruleSetPrunedRRF,
+                    ruleset_pruned_rrf,
                     dims = 1,
                     by = x->(x[4], x[2], x[3]),
                     rev = true,
                 )
 
                 # Get all selected rules indices or limit if max_rules is specified
-                if get_max_rules(extractor) > 0
-                    best_idxs = Int.(finalmatrix[1:min(max_rules, size(finalmatrix, 1)), 5])
-                else
-                    best_idxs = Int.(finalmatrix[:, 5])
-                end
+                get_max_rules(extractor) > 0 ?
+                    Int64.(finalmatrix[1:min(max_rules, size(finalmatrix, 1)), 5]) :
+                    Int64.(finalmatrix[:, 5])
             end
-            # @show best_idxs
+
             ruleset[best_idxs]
         else
             error("Unexpected rule selection method specified: $(rule_selection_method)")
         end
     end
-    
+
     silent || println("# rules selected: $(length(ruleset)).")
 
-    ########################################################################################
     # Construct a rule-based model from the set of best rules
-    ########################################################################################
-    silent || println("Applying STEL...")
+    silent || println("Applying stel...")
 
-    dl = STEL(
+    dl = stel(
         ruleset, X, y;
         max_rules=get_max_rules(extractor),
         min_coverage=get_min_coverage(extractor), 
@@ -319,18 +378,14 @@ function intrees(
         silent
     )
 
-    if return_info
-        return dl, info
-    else
-        return dl
-    end
+    return return_info ? (dl, info) : dl
 end
 
 
 
 
 
-function STEL(
+function stel(
     ruleset,
     X,
     y;
