@@ -18,7 +18,6 @@ Create a rule extractor based on the InTrees method.
 - `rule_complexity_metric::Symbol=:natoms`: Metric to use for estimating a rule complexity measure
 - `min_coverage::Union{Float64,Nothing}=nothing`: minimum rule coverage for stel
 - `silent::Bool=true`: suppress logging output
-- `return_info::Bool=false`: return extra info from extraction
 - `rng::AbstractRNG=Random.TaskLocalRNG()`: RNG used for any randomized steps (e.g., feature selection)
 
 See also [`intrees`](@ref).
@@ -32,7 +31,6 @@ struct InTreesRuleExtractor <: RuleExtractor
     rule_selection_method   :: Symbol
     rule_complexity_metric  :: Symbol
     silent                  :: Bool
-    return_info             :: Bool
     rng                     :: AbstractRNG
 
     function InTreesRuleExtractor(;
@@ -45,7 +43,6 @@ struct InTreesRuleExtractor <: RuleExtractor
         rule_complexity_metric  :: Symbol=:natoms,
         # accuracy_rule_selection = nothing,
         silent                  :: Bool=true,
-        return_info             :: Bool=false,
         rng                     :: AbstractRNG=Random.TaskLocalRNG()
     )
         new(
@@ -57,7 +54,6 @@ struct InTreesRuleExtractor <: RuleExtractor
             rule_selection_method,
             rule_complexity_metric,
             silent,
-            return_info,
             rng
         )
     end
@@ -74,7 +70,6 @@ get_max_rules(r::InTreesRuleExtractor)               = r.max_rules
 get_rule_selection_method(r::InTreesRuleExtractor)   = r.rule_selection_method
 get_rule_complexity_metric(r::InTreesRuleExtractor)  = r.rule_complexity_metric
 get_silent(r::InTreesRuleExtractor)                  = r.silent
-get_return_info(r::InTreesRuleExtractor)             = r.return_info
 get_rng(r::InTreesRuleExtractor)                     = r.rng
 
 # ---------------------------------------------------------------------------- #
@@ -273,7 +268,6 @@ function intrees(
     info = (;)
 
     silent      = get_silent(extractor)
-    return_info = get_return_info(extractor)
 
     # Extract rules from each tree, obtain full ruleset
     silent || println("Extracting starting rules...")
@@ -288,8 +282,6 @@ function intrees(
     # Prune rules with respect to a dataset
     if get_prune_rules(extractor)
         silent || println("Pruning $(length(ruleset)) rules...")
-
-        return_info && (info = merge(info, (; unpruned_ruleset = ruleset)))
 
         ruleset = begin
             afterpruningruleset = Vector{Rule}(undef, length(ruleset))
@@ -317,8 +309,6 @@ function intrees(
     )
 
     ruleset = begin
-        return_info && (info = merge(info, (; unselected_ruleset = ruleset)))
-
         if get_rule_selection_method(extractor) == :CBC
             matrixrulemetrics     = Matrix{Float64}(undef, length(ruleset), 3)
             afterselectionruleset = Vector{BitVector}(undef, length(ruleset))
@@ -369,7 +359,7 @@ function intrees(
     # Construct a rule-based model from the set of best rules
     silent || println("Applying stel...")
 
-    dl = stel(
+    stel(
         ruleset, X, y;
         max_rules=get_max_rules(extractor),
         min_coverage=get_min_coverage(extractor), 
@@ -377,8 +367,6 @@ function intrees(
         rng=get_rng(extractor),
         silent
     )
-
-    return return_info ? (dl, info) : dl
 end
 
 

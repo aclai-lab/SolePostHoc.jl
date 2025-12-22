@@ -53,10 +53,12 @@ include("intrees/apiIntrees.jl")
 
 function modalextractrules(extractor::InTreesRuleExtractor; kwargs...)
     dl = intrees(extractor; kwargs...)
-    ll = listrules(dl, use_shortforms = false) # decision list to list of rules
-    rules_obj = convert_classification_rules(dl, ll)
-    dsintrees = DecisionSet(rules_obj)
-    return dsintrees
+    @show typeof(dl)
+    dl
+    # ll = listrules(dl, use_shortforms=false) # decision list to list of rules
+    # rules_obj = convert_classification_rules(dl, ll)
+    # dsintrees = DecisionSet(rules_obj)
+    # return dsintrees
 end
 
 #======================================================================================================================================
