@@ -147,6 +147,49 @@ function _prune_ruleset(
 end
 
 # ---------------------------------------------------------------------------- #
+#                                    Cbc                                       #
+# ---------------------------------------------------------------------------- #
+function _select_rules_cbc(ruleset, X, y, extractor)
+    n_rules    = length(ruleset)
+    metrics    = Matrix{Float64}(undef, n_rules, 3)
+    checkmasks = Vector{BitVector}(undef, n_rules)
+    
+    @inbounds Threads.@threads for i in eachindex(ruleset)
+        eval_result = rulemetrics(ruleset[i], X, y)
+        checkmasks[i] = eval_result[:checkmask,]
+        metrics[i, 1] = eval_result[:coverage]
+        metrics[i, 2] = eval_result[:error]
+        metrics[i, 3] = eval_result[get_rule_complexity_metric(extractor)]
+    end
+    
+    # build random forest for feature importance
+    rf = DT.build_forest(y, hcat(checkmasks...), 2, 50, 0.7, -1; rng=get_rng(extractor))
+    importance = DT.impurity_importance(rf)
+    importances = importance ./ maximum(importance)
+    
+    # select features with sufficient importance
+    selected_idxs = findall(importances .> 0.01)
+    isempty(selected_idxs) && return ruleset
+    
+    # combine metrics with importance and original indices
+    combined = hcat(
+        metrics[selected_idxs, :],
+        importances[selected_idxs],
+        selected_idxs
+    )
+    
+    # sort by importance (desc), error (asc), complexity (asc)
+    sorted = sortslices(combined, dims=1, by=x->(-x[4], x[2], x[3]))
+    
+    # extract final indices, limiting if max_rules is set
+    max_rules  = get_max_rules(extractor)
+    n_selected = max_rules > 0 ? min(max_rules, size(sorted, 1)) : size(sorted, 1)
+    final_idxs = Int64.(sorted[1:n_selected, 5])
+    
+    return ruleset[final_idxs]
+end
+
+# ---------------------------------------------------------------------------- #
 #                                    Stel                                      #
 # ---------------------------------------------------------------------------- #
 @inline _is_true_antecedent(ant) =
@@ -169,25 +212,21 @@ function _select_best_rule(rules_error, rules_coverage, rules_length, rng)
     # filter out NaN values and find candidates
     valid_mask = .!isnan.(rules_error)
     valid_idxs = findall(valid_mask)
-    
     isempty(valid_idxs) && return first(valid_idxs)
     
     # minimum error
     min_error = minimum(rules_error[valid_idxs])
     candidates = findall(rules_error .== min_error)
-    
     length(candidates) == 1 && return candidates[1]
     
     # maximum coverage among candidates
     max_coverage = maximum(rules_coverage[candidates])
     candidates = candidates[rules_coverage[candidates] .== max_coverage]
-    
     length(candidates) == 1 && return candidates[1]
     
     # minimum length among candidates
     min_length = minimum(rules_length[candidates])
     candidates = candidates[rules_length[candidates] .== min_length]
-    
     length(candidates) == 1 && return candidates[1]
     
     # random selection
@@ -195,7 +234,7 @@ function _select_best_rule(rules_error, rules_coverage, rules_length, rng)
 end
 
 function stel(
-    r                      :: Vector{<:Rule},
+    r                      :: AbstractVector{<:Rule},
     X                      :: AbstractInterpretationSet,
     y                      :: AbstractVector{<:SM.Label};
     max_rules              :: Int64=-1,
@@ -230,8 +269,8 @@ function stel(
         Threads.@threads for i in eachindex(ruleset)
             metrics = _compute_rule_metrics(ruleset[i], X, y, rule_complexity_metric)
             rules_coverage[i] = metrics.coverage
-            rules_error[i] = metrics.error
-            rules_length[i] = metrics.length
+            rules_error[i]    = metrics.error
+            rules_length[i]   = metrics.length
         end
 
         # select best rule
@@ -311,54 +350,14 @@ function intrees(
     # prune rules if enabled
     get_prune_rules(extractor) && (ruleset = _prune_ruleset(ruleset, X, y, extractor))
 
-    # Rule selection to obtain the best rules
-    ruleset = begin
-        if get_rule_selection_method(extractor) == :CBC
-            matrixrulemetrics     = Matrix{Float64}(undef, length(ruleset), 3)
-            afterselectionruleset = Vector{BitVector}(undef, length(ruleset))
-
-            Threads.@threads for i in axes(ruleset, 1)
-                eval_result = rulemetrics(ruleset[i], X, y)
-                afterselectionruleset[i] = eval_result[:checkmask,]
-                matrixrulemetrics[i, 1]  = eval_result[:coverage]
-                matrixrulemetrics[i, 2]  = eval_result[:error]
-                matrixrulemetrics[i, 3]  = eval_result[get_rule_complexity_metric(extractor)]
-            end
-
-            rf = DT.build_forest(y, hcat(afterselectionruleset...), 2, 50, 0.7, -1; rng=get_rng(extractor))
-            importances = begin
-                importance = DT.impurity_importance(rf)
-                importance/max(importance...)
-            end
-
-            best_idxs = begin
-                selected_features = findall(importances .> 0.01)
-
-                ruleset_pruned_rrf = hcat(
-                    matrixrulemetrics[selected_features, :],
-                    importances[selected_features],
-                    selected_features,
-                )
-                finalmatrix = sortslices(
-                    ruleset_pruned_rrf,
-                    dims = 1,
-                    by = x->(x[4], x[2], x[3]),
-                    rev = true,
-                )
-
-                # Get all selected rules indices or limit if max_rules is specified
-                get_max_rules(extractor) > 0 ?
-                    Int64.(finalmatrix[1:min(max_rules, size(finalmatrix, 1)), 5]) :
-                    Int64.(finalmatrix[:, 5])
-            end
-
-            ruleset[best_idxs]
-        else
-            error("Unexpected rule selection method specified: $(rule_selection_method)")
-        end
+    # rule selection
+    ruleset = if get_rule_selection_method(extractor) == :CBC
+        _select_rules_cbc(ruleset, X, y, extractor)
+    else
+        error("Unexpected rule selection method: $(get_rule_selection_method(extractor))")
     end
 
-    # Construct a rule-based model from the set of best rules
+    # construct final decision list via sequential covering
     stel(
         ruleset, X, y;
         max_rules=get_max_rules(extractor),
