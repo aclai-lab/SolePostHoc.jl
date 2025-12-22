@@ -1,6 +1,7 @@
 import DecisionTree as DT
-using ComplexityMeasures
-using SoleModels
+using  ComplexityMeasures
+using  SoleModels
+const  SM = SoleModels
 
 # ---------------------------------------------------------------------------- #
 #                                InTrees struct                                #
@@ -70,55 +71,39 @@ get_rng(r::InTreesRuleExtractor)                     = r.rng
 # ---------------------------------------------------------------------------- #
 #                           Intrees pruning utility                            #
 # ---------------------------------------------------------------------------- #
-"""
-    intrees_prunerule(rc::Rule)::Rule
-
-Prunes redundant or irrelevant conjuncts of the antecedent of the input rule cascade
-considering the error metric
-
-See also
-[`Rule`](@ref),
-[`rulemetrics`](@ref).
-"""
-@inline intrees_prunerule(
-    r::Rule,
-    X::AbstractInterpretationSet,
-    y::AbstractVector{<:SoleModels.Label};
-    kwargs...
-) = _prune_rule(typeof(antecedent(r)), r, X, y; kwargs...)
-
-@inline _prune_rule(::Type{<:Atom}, r::Rule{O}, args...; kwargs...) where{O} =
-    intrees_prunerule(Rule(LeftmostConjunctiveForm(
-        [antecedent(r)]), consequent(r), info(r)), args...; kwargs...,)
+function _prune_rule(::Type{<:Atom}, r::Rule{O}, args...; kwargs...) where{O}
+    r = Rule(LeftmostConjunctiveForm([antecedent(r)]), consequent(r), info(r))
+    _prune_rule(typeof(antecedent(r)), r, args...; kwargs...,)
+end
 
 function _prune_rule(
     ::Type{<:LeftmostConjunctiveForm},
     r                 :: Rule{O},
     X                 :: AbstractInterpretationSet,
-    y                 :: AbstractVector{<:SoleModels.Label};
+    y                 :: AbstractVector{<:SM.Label};
     pruning_s         :: AbstractFloat,
     pruning_decay_thr :: AbstractFloat,
     kwargs...,
 ) where {O}
-    nruleconjuncts = nconjuncts(r)
-    e_zero         = rulemetrics(r, X, y)[:error]
+    nruleconjuncts = SM.nconjuncts(r)
+    e_zero         = SM.rulemetrics(r, X, y)[:error]
     valid_idxs     = 1:nruleconjuncts
-    antd, cons     = antecedent(r), consequent(r)
+    antd, cons     = SM.antecedent(r), SM.consequent(r)
 
     for idx in reverse(valid_idxs)
         (length(valid_idxs) < 2) && break
 
-        # Indices to be considered to evaluate the rule
-        other_idxs = intersect!(vcat(1:(idx-1), (idx+1):nruleconjuncts), valid_idxs)
+        # indices to be considered to evaluate the rule
+        other_idxs = setdiff(valid_idxs, idx)
         rule = Rule(LeftmostConjunctiveForm(SoleLogics.grandchildren(antd)[other_idxs]), cons)
 
-        # Return error of the rule without idx-th pair
-        e_minus_i = rulemetrics(rule, X, y)[:error]
+        # return error of the rule without idx-th pair
+        e_minus_i = SM.rulemetrics(rule, X, y)[:error]
         decay_i   = (e_minus_i - e_zero) / max(e_zero, pruning_s)
 
         if decay_i ≤ pruning_decay_thr 
-             # Remove the idx-th pair in the vector of decisions
-            deleteat!([valid_idxs...], idx)
+            # remove the idx-th pair in the vector of decisions
+            valid_idxs = setdiff(valid_idxs, idx)
             e_zero = e_minus_i
         end
     end
@@ -132,17 +117,156 @@ function _prune_rule(::Type{<:MultiFormula}, r::Rule{O}, args...; kwargs...) whe
         MultiFormula(i_modality, modant) for (i_modality, modant) in modforms(antecedent(r))
     ]
 
-    return  length(children) < 2 ? r :
-            intrees_prunerule(
-                Rule(LeftmostConjunctiveForm(children), consequent(r), info(r)),
-                args...;
-                kwargs...,
+    return  length(children) < 2 ? r : begin
+            r = Rule(LeftmostConjunctiveForm(children), consequent(r), info(r))
+            _prune_rule(typeof(antecedent(r)), r, args...; kwargs...,)
+    end
+end
+
+function _prune_ruleset(
+    ruleset :: Vector{<:Rule},
+    X :: AbstractInterpretationSet,
+    y :: AbstractVector{<:SM.Label},
+    extractor :: InTreesRuleExtractor
+)
+    pruned = similar(ruleset)
+    
+    @inbounds Threads.@threads for i in eachindex(ruleset)
+        pruned[i] = if ruleset[i].antecedent isa SoleLogics.BooleanTruth
+            ruleset[i]  # keep BooleanTruth rules as-is (e.g., from XGBoost)
+        else
+            _prune_rule(
+                typeof(antecedent(ruleset[i])), ruleset[i], X, y;
+                pruning_s=get_pruning_s(extractor),
+                pruning_decay_thr=get_pruning_decay_threshold(extractor)
             )
+        end
+    end
+    
+    return pruned
+end
+
+# ---------------------------------------------------------------------------- #
+#                                    Stel                                      #
+# ---------------------------------------------------------------------------- #
+@inline _is_true_antecedent(ant) =
+    isa(ant, BooleanTruth) && (ant == BooleanTruth(true) || string(ant) == "⊤")
+
+@inline _get_pred_class(pred_model) =
+    isa(pred_model, ConstantModel) ? pred_model.outcome : string(pred_model)
+
+function _compute_rule_metrics(s, X, y, rule_complexity_metric)
+    return if _is_true_antecedent(antecedent(s))
+        pred_class = _get_pred_class(consequent(s))
+        (coverage = 1.0, error = sum(y .!= pred_class) / length(y), length = 1)
+    else
+        metrics = SM.rulemetrics(s, X, y)
+        (coverage = metrics[:coverage], error = metrics[:error], length = metrics[rule_complexity_metric])
+    end
+end
+
+function _select_best_rule(rules_error, rules_coverage, rules_length, rng)
+    # filter out NaN values and find candidates
+    valid_mask = .!isnan.(rules_error)
+    valid_idxs = findall(valid_mask)
+    
+    isempty(valid_idxs) && return first(valid_idxs)
+    
+    # minimum error
+    min_error = minimum(rules_error[valid_idxs])
+    candidates = findall(rules_error .== min_error)
+    
+    length(candidates) == 1 && return candidates[1]
+    
+    # maximum coverage among candidates
+    max_coverage = maximum(rules_coverage[candidates])
+    candidates = candidates[rules_coverage[candidates] .== max_coverage]
+    
+    length(candidates) == 1 && return candidates[1]
+    
+    # minimum length among candidates
+    min_length = minimum(rules_length[candidates])
+    candidates = candidates[rules_length[candidates] .== min_length]
+    
+    length(candidates) == 1 && return candidates[1]
+    
+    # random selection
+    return rand(rng, candidates)
+end
+
+function stel(
+    r                      :: Vector{<:Rule},
+    X                      :: AbstractInterpretationSet,
+    y                      :: AbstractVector{<:SM.Label};
+    max_rules              :: Int64=-1,
+    min_coverage           :: Float64=0.01,
+    rule_complexity_metric :: Symbol=:natoms,
+    rng                    :: AbstractRNG=Random.TaskLocalRNG()
+)
+    rules = Rule[]
+    ruleset = [r..., Rule(SM.bestguess(y; suppress_parity_warning = true))]
+
+    # filter rules by minimum coverage
+    ruleset = filter(ruleset) do s
+        return _is_true_antecedent(antecedent(s)) ? true : SM.rulemetrics(s, X, y)[:coverage] ≥ min_coverage
+    end
+
+    nrules = length(ruleset)
+    rules_coverage = Vector{Float64}(undef, nrules)
+    rules_error    = Vector{Float64}(undef, nrules)
+    rules_length   = Vector{Int64}(undef, nrules)
+
+    while true
+        # check max rules limit
+        if max_rules > 0 && length(rules) ≥ max_rules - 1
+            return DecisionList(rules, SM.bestguess(y; suppress_parity_warning=true))
+        end
+
+        nrules = length(ruleset)
+        resize!(rules_coverage, nrules)
+        resize!(rules_error, nrules)
+        resize!(rules_length, nrules)
+
+        Threads.@threads for i in eachindex(ruleset)
+            metrics = _compute_rule_metrics(ruleset[i], X, y, rule_complexity_metric)
+            rules_coverage[i] = metrics.coverage
+            rules_error[i] = metrics.error
+            rules_length[i] = metrics.length
+        end
+
+        # select best rule
+        idx_best = _select_best_rule(rules_error, rules_coverage, rules_length, rng)
+        push!(rules, ruleset[idx_best])
+
+        # compute remaining instances
+        idx_remaining = _is_true_antecedent(antecedent(ruleset[idx_best])) ?
+            Int64[] :
+            findall(.!evaluaterule(ruleset[idx_best], X, y)[:checkmask,])
+
+        # exit condition
+        idx_best == nrules && return DecisionList(rules[1:(end-1)], consequent(rules[end]))
+        length(idx_remaining) == 0 && DecisionList(rules, SM.bestguess(y; suppress_parity_warning = true))
+
+        # update for next iteration
+        @views begin
+            X = X[idx_remaining, :]
+            y = y[idx_remaining]
+        end
+        
+        idx_best != length(ruleset) && (ruleset[idx_best] = ruleset[end])
+        resize!(ruleset, length(ruleset) - 1)
+        ruleset[end] = Rule(SM.bestguess(y; suppress_parity_warning = true))
+    end
+    error("Unexpected error.")
 end
 
 # ---------------------------------------------------------------------------- #
 #                                   InTrees                                    #
 # ---------------------------------------------------------------------------- #
+@inline starterruleset(model::AbstractModel; kwargs...) = unique!(
+    reduce(vcat, [listrules(subm; kwargs...) for subm in SM.models(model)]),
+)
+
 """
     intrees(model::Union{AbstractModel,DecisionForest}, X, y::AbstractVector{<:Label}; kwargs...)::DecisionList
 
@@ -176,119 +300,16 @@ function intrees(
     extractor :: InTreesRuleExtractor;
     model     :: AbstractModel,
     X         :: AbstractInterpretationSet,
-    y         :: AbstractVector{<:SoleModels.Label}
+    y         :: AbstractVector{<:SM.Label}
 )
-    """
-        cfs()
-
-    Prunes redundant or irrelevant conjuncts of the antecedent of the input rule cascade
-    considering the error metric
-
-    See also
-    [`Rule`](@ref),
-    [`rulemetrics`](@ref).
-    """
-    function cfs(X::AbstractInterpretationSet, y::AbstractVector{<:Label})
-        @show typeof(_x)
-        @show typeof(_y)
-        entropyd(_x) = ComplexityMeasures.entropy(probabilities(_x))
-        midd(_x, _y) = -entropyd(collect(zip(_x, _y)))+entropyd(_x)+entropyd(_y)
-        information_gain(f1, f2) = entropyd(f1) - (entropyd(f1) - midd(f1, f2))
-        su(f1, f2) = (2.0 * information_gain(f1, f2) / (entropyd(f1) + entropyd(f2)))
-        function merit_calculation(X, y::AbstractVector{<:Label})
-            n_samples, n_features = size(X)
-            rff = 0
-            rcf = 0
-
-            for i in collect(1:n_features)
-                fi = X[:, i]
-                rcf += su(fi, y)  # su is the symmetrical uncertainty of fi and y
-                for j in collect(1:n_features)
-                    if j > i
-                        fj = X[:, j]
-                        rff += su(fi, fj)
-                    end
-                end
-            end
-
-            rff *= 2
-            merits = rcf / sqrt(n_features + rff)
-        end
-
-        n_samples, n_features = size(X)
-        F = [] # vector of returned indices samples
-        M = [] # vector which stores the merit values
-
-        while true
-            merit = -100000000000
-            idx = -1
-
-            for i in collect(1:n_features)
-                if i ∉ F
-                    append!(F, i)
-                    idxs_column = F[findall(F .> 0)]
-                    t = merit_calculation(X[:, idxs_column], y)
-
-                    if t > merit
-                        merit = t
-                        idx = i
-                    end
-
-                    pop!(F)
-                end
-            end
-
-            append!(F, idx)
-            append!(M, merit)
-
-            (length(M) > 5) &&
-                (M[length(M)] <= M[length(M)-1]) &&
-                (M[length(M)-1] <= M[length(M)-2]) &&
-                (M[length(M)-2] <= M[length(M)-3]) &&
-                (M[length(M)-3] <= M[length(M)-4]) &&
-                break
-        end
-
-        valid_idxs = findall(F .> 0)
-        # @show F
-        # @show valid_idxs
-        return F[valid_idxs]
-    end
-
-    @inline starterruleset(model::AbstractModel; kwargs...) =
-        unique!(
-            reduce(vcat, [listrules(subm; kwargs...) for subm in SoleModels.models(model)]),
-        )
-
-    # Extract rules from each tree, obtain full ruleset
+    # Extract rules from model
     listrules_kwargs = (use_shortforms=true, normalize=true)
-    ruleset =
-        isensemble(model) ?
-            starterruleset(model; listrules_kwargs...) :
-            listrules(model; listrules_kwargs...)
-    fnames = featurenames(model)
+    ruleset = isensemble(model) ?
+        starterruleset(model; listrules_kwargs...) :
+        listrules(model; listrules_kwargs...)
 
-    # Prune rules with respect to a dataset
-    if get_prune_rules(extractor)
-        ruleset = begin
-            afterpruningruleset = Vector{Rule}(undef, length(ruleset))
-
-            Threads.@threads for i in axes(ruleset, 1)
-                if ruleset[i].antecedent isa SoleLogics.BooleanTruth
-                    # this case happens with XgBoost: the rule is a simply BooleanTruth
-                    afterpruningruleset[i] = ruleset[i]
-                else
-                    afterpruningruleset[i] =
-                        intrees_prunerule(
-                            ruleset[i], X, y;
-                            pruning_s=get_pruning_s(extractor),
-                            pruning_decay_thr=get_pruning_decay_threshold(extractor)
-                        )
-                end
-            end
-            afterpruningruleset
-        end
-    end
+    # prune rules if enabled
+    get_prune_rules(extractor) && (ruleset = _prune_ruleset(ruleset, X, y, extractor))
 
     # Rule selection to obtain the best rules
     ruleset = begin
@@ -345,160 +366,4 @@ function intrees(
         rule_complexity_metric=get_rule_complexity_metric(extractor),
         rng=get_rng(extractor)
     )
-end
-
-
-
-
-
-function stel(
-    ruleset,
-    X,
-    y;
-    max_rules::Int = -1,
-    min_coverage,
-    rule_complexity_metric = :natoms,
-    rng::AbstractRNG = MersenneTwister(1)
-)
-    D = deepcopy(X) # Copy of the original dataset
-    L = deepcopy(y)
-    R = Rule[]      # Ordered rule list
-    # S is the vector of rules left
-    S = [deepcopy(ruleset)..., Rule(bestguess(y; suppress_parity_warning = true))]
-    # Rules with a frequency less than min_coverage
-    S = begin
-        rules_coverage = Vector{Float64}(undef, length(S))
-
-        Threads.@threads for (i, s) in collect(enumerate(S))
-            if isa(antecedent(s), BooleanTruth)
-                # Se l'antecedente è BooleanTruth, verifica il valore
-                if antecedent(s) == BooleanTruth(true) || string(antecedent(s)) == "⊤"
-                    rules_coverage[i] = 1.0
-                else
-                    rules_coverage[i] = 0.0
-                end
-            else
-                rules_coverage[i] = rulemetrics(s, X, y)[:coverage]
-            end
-        end
-
-        idxs_undeleted = findall(rules_coverage .>= min_coverage)
-        S[idxs_undeleted]
-    end
-
-    # Metrics update based on remaining instances
-    rules_coverage = Vector{Float64}(undef, length(S))
-    rules_error = Vector{Float64}(undef, length(S))
-    rules_length = Vector{Int}(undef, length(S))
-
-    while true
-        # Check if we've reached the maximum number of rules (excluding the default rule)
-        if max_rules > 0 && length(R) >= max_rules - 1
-            return DecisionList(R, bestguess(L; suppress_parity_warning = true))
-        end
-
-        resize!(rules_coverage, length(S))
-        resize!(rules_error, length(S))
-        resize!(rules_length, length(S))
-
-        Threads.@threads for (i, s) in collect(enumerate(S))
-            if isa(antecedent(s), BooleanTruth)                                             #TODO ASK MICHI {}
-                # Gestione speciale per BooleanTruth
-                if antecedent(s) == BooleanTruth(true) || string(antecedent(s)) == "⊤"
-                    rules_coverage[i] = 1.0
-                    # Calcola l'errore basato sulla distribuzione delle classi
-                    pred_model = consequent(s)
-                    # Estrai il valore effettivo dal modello
-                    if isa(pred_model, ConstantModel)
-                        pred_class = pred_model.outcome  # Assumo che il valore sia accessibile con .value
-                    else
-                        pred_class = string(pred_model)
-                    end
-                    rules_error[i] = sum(L .!= pred_class) / length(L)
-                else
-                    rules_coverage[i] = 0.0
-                    rules_error[i] = 1.0  # Errore massimo per false
-                end
-                rules_length[i] = 1  # Lunghezza minima per BooleanTruth
-            else # TODO ASK MICHI }
-                metrics = rulemetrics(s, D, L)
-                rules_coverage[i] = metrics[:coverage]
-                rules_error[i] = metrics[:error]
-                rules_length[i] = metrics[rule_complexity_metric]
-            end # TODO ASK MICHI ~
-        end
-
-        # Best rule index
-        idx_best = begin
-            idx_best = nothing
-            # First: find the rule with minimum error
-            m = minimum(filter(!isnan, rules_error))
-            best_idxs = findall(rules_error .== m)
-            (length(best_idxs) == 1) && (idx_best = best_idxs[1])
-
-            # If not one, find the rule with maximum coverage
-            if isnothing(idx_best)
-                # @show rules_coverage[best_idxs]
-                m = maximum(filter(!isnan, rules_coverage[best_idxs]))
-                idx_coverage = findall(rules_coverage[best_idxs] .== m)
-                best_idxs = best_idxs[idx_coverage]
-                (length(best_idxs) == 1) && (idx_best = best_idxs[1])
-            end
-
-            # If not one, find the rule with minimum length
-            if isnothing(idx_best)
-                m = minimum(filter(!isnan, rules_length[best_idxs]))
-                idx_length = findall(rules_length[best_idxs] .== m)
-                best_idxs = best_idxs[idx_length]
-                (length(best_idxs) == 1) && (idx_best = best_idxs[1])
-            end
-
-            # Final case: more than one rule with minimum length
-            # Randomly choose a rule
-            if isnothing(idx_best)
-                idx_best = rand(rng, best_idxs)
-            end
-
-            idx_best
-        end
-
-        # Add at the end the best rule
-        push!(R, S[idx_best])
-
-        # Indices of the remaining instances
-        idx_remaining = begin
-            if isa(antecedent(S[idx_best]), BooleanTruth)                                                       # TODO ASK MICHI {
-                if antecedent(S[idx_best]) == BooleanTruth(true) ||
-                   string(antecedent(S[idx_best])) == "⊤"
-                    # Se l'antecedente è true, nessuna istanza rimane
-                    Int[]
-                else
-                    # Se l'antecedente è false, tutte le istanze rimangono
-                    collect(1:length(L))
-                end
-            else                                                                                                # TODO ASK MICHI  }
-                sat_unsat = evaluaterule(S[idx_best], D, L)[:checkmask,]
-                # Remain in D the rule that not satisfying the best rule's pruning_s condition
-                findall(sat_unsat .== false)
-            end                                                                                                 # TODO ASK MICHI ~
-        end
-
-        # Exit condition
-        if idx_best == length(S)
-            # @show S
-            # @show R
-            # @show DecisionList(R[1:end-1], consequent(R[end]))
-            return DecisionList(R[1:(end-1)], consequent(R[end]))
-        elseif length(idx_remaining) == 0
-            return DecisionList(R, bestguess(y; suppress_parity_warning = true))
-        end
-
-        D = slicedataset(D, idx_remaining; return_view = true)
-        L = L[idx_remaining]
-        # Delete the best rule from S
-        deleteat!(S, idx_best)
-        # Update of the default rule
-        S[end] = Rule(bestguess(L; suppress_parity_warning = true))
-    end
-    error("Unexpected error.")
 end
