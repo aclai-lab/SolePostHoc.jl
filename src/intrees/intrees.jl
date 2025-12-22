@@ -233,7 +233,7 @@ function _select_best_rule(rules_error, rules_coverage, rules_length, rng)
     return rand(rng, candidates)
 end
 
-function stel(
+function _stel(
     r                      :: AbstractVector{<:Rule},
     X                      :: AbstractInterpretationSet,
     y                      :: AbstractVector{<:SM.Label};
@@ -267,10 +267,18 @@ function stel(
         resize!(rules_length, nrules)
 
         Threads.@threads for i in eachindex(ruleset)
-            metrics = _compute_rule_metrics(ruleset[i], X, y, rule_complexity_metric)
-            rules_coverage[i] = metrics.coverage
-            rules_error[i]    = metrics.error
-            rules_length[i]   = metrics.length
+            r = ruleset[i]
+            if _is_true_antecedent(antecedent(r))
+                rules_coverage[i] = 1.0
+                pred_class = _get_pred_class(consequent(r))
+                rules_error[i] = sum(@. y != pred_class) / length(y)
+                rules_length[i] = 1
+            else
+                metrics = rulemetrics(r, X, y)
+                rules_coverage[i] = metrics.coverage
+                rules_error[i] = metrics.error
+                rules_length[i] = metrics[rule_complexity_metric]
+            end
         end
 
         # select best rule
@@ -293,8 +301,8 @@ function stel(
         end
         
         idx_best != length(ruleset) && (ruleset[idx_best] = ruleset[end])
-        resize!(ruleset, length(ruleset) - 1)
-        ruleset[end] = Rule(SM.bestguess(y; suppress_parity_warning = true))
+        deleteat!(ruleset, idx_best)
+        ruleset[end] = Rule(SM.bestguess(y; suppress_parity_warning=true))
     end
     error("Unexpected error.")
 end
@@ -302,7 +310,7 @@ end
 # ---------------------------------------------------------------------------- #
 #                                   InTrees                                    #
 # ---------------------------------------------------------------------------- #
-@inline starterruleset(model::AbstractModel; kwargs...) = unique!(
+@inline _starterruleset(model::AbstractModel; kwargs...) = unique!(
     reduce(vcat, [listrules(subm; kwargs...) for subm in SM.models(model)]),
 )
 
@@ -344,7 +352,7 @@ function intrees(
     # Extract rules from model
     listrules_kwargs = (use_shortforms=true, normalize=true)
     ruleset = isensemble(model) ?
-        starterruleset(model; listrules_kwargs...) :
+        _starterruleset(model; listrules_kwargs...) :
         listrules(model; listrules_kwargs...)
 
     # prune rules if enabled
@@ -358,7 +366,7 @@ function intrees(
     end
 
     # construct final decision list via sequential covering
-    stel(
+    _stel(
         ruleset, X, y;
         max_rules=get_max_rules(extractor),
         min_coverage=get_min_coverage(extractor), 
