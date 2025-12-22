@@ -17,7 +17,6 @@ Create a rule extractor based on the InTrees method.
 - `rule_selection_method::Symbol=:CBC`: rule selection method. Currently only supports `:CBC`
 - `rule_complexity_metric::Symbol=:natoms`: Metric to use for estimating a rule complexity measure
 - `min_coverage::Union{Float64,Nothing}=nothing`: minimum rule coverage for stel
-- `silent::Bool=true`: suppress logging output
 - `rng::AbstractRNG=Random.TaskLocalRNG()`: RNG used for any randomized steps (e.g., feature selection)
 
 See also [`intrees`](@ref).
@@ -30,7 +29,6 @@ struct InTreesRuleExtractor <: RuleExtractor
     max_rules               :: Int64
     rule_selection_method   :: Symbol
     rule_complexity_metric  :: Symbol
-    silent                  :: Bool
     rng                     :: AbstractRNG
 
     function InTreesRuleExtractor(;
@@ -42,7 +40,6 @@ struct InTreesRuleExtractor <: RuleExtractor
         rule_selection_method   :: Symbol=:CBC,
         rule_complexity_metric  :: Symbol=:natoms,
         # accuracy_rule_selection = nothing,
-        silent                  :: Bool=true,
         rng                     :: AbstractRNG=Random.TaskLocalRNG()
     )
         new(
@@ -53,7 +50,6 @@ struct InTreesRuleExtractor <: RuleExtractor
             max_rules,
             rule_selection_method,
             rule_complexity_metric,
-            silent,
             rng
         )
     end
@@ -69,7 +65,6 @@ get_min_coverage(r::InTreesRuleExtractor)            = r.min_coverage
 get_max_rules(r::InTreesRuleExtractor)               = r.max_rules
 get_rule_selection_method(r::InTreesRuleExtractor)   = r.rule_selection_method
 get_rule_complexity_metric(r::InTreesRuleExtractor)  = r.rule_complexity_metric
-get_silent(r::InTreesRuleExtractor)                  = r.silent
 get_rng(r::InTreesRuleExtractor)                     = r.rng
 
 # ---------------------------------------------------------------------------- #
@@ -265,13 +260,7 @@ function intrees(
             reduce(vcat, [listrules(subm; kwargs...) for subm in SoleModels.models(model)]),
         )
 
-    info = (;)
-
-    silent      = get_silent(extractor)
-
     # Extract rules from each tree, obtain full ruleset
-    silent || println("Extracting starting rules...")
-
     listrules_kwargs = (use_shortforms=true, normalize=true)
     ruleset =
         isensemble(model) ?
@@ -281,8 +270,6 @@ function intrees(
 
     # Prune rules with respect to a dataset
     if get_prune_rules(extractor)
-        silent || println("Pruning $(length(ruleset)) rules...")
-
         ruleset = begin
             afterpruningruleset = Vector{Rule}(undef, length(ruleset))
 
@@ -304,10 +291,6 @@ function intrees(
     end
 
     # Rule selection to obtain the best rules
-    silent || println(
-        "Selecting via $(string(rule_selection_method)) from a pool of $(length(ruleset)) rules...",
-    )
-
     ruleset = begin
         if get_rule_selection_method(extractor) == :CBC
             matrixrulemetrics     = Matrix{Float64}(undef, length(ruleset), 3)
@@ -354,18 +337,13 @@ function intrees(
         end
     end
 
-    silent || println("# rules selected: $(length(ruleset)).")
-
     # Construct a rule-based model from the set of best rules
-    silent || println("Applying stel...")
-
     stel(
         ruleset, X, y;
         max_rules=get_max_rules(extractor),
         min_coverage=get_min_coverage(extractor), 
         rule_complexity_metric=get_rule_complexity_metric(extractor),
-        rng=get_rng(extractor),
-        silent
+        rng=get_rng(extractor)
     )
 end
 
@@ -380,8 +358,7 @@ function stel(
     max_rules::Int = -1,
     min_coverage,
     rule_complexity_metric = :natoms,
-    rng::AbstractRNG = MersenneTwister(1),
-    silent = true,
+    rng::AbstractRNG = MersenneTwister(1)
 )
     D = deepcopy(X) # Copy of the original dataset
     L = deepcopy(y)
@@ -409,31 +386,20 @@ function stel(
         S[idxs_undeleted]
     end
 
-    silent || println("# rules in S: $(length(S))")
-    silent || println("# rules in R: $(length(R))")
-
     # Metrics update based on remaining instances
     rules_coverage = Vector{Float64}(undef, length(S))
     rules_error = Vector{Float64}(undef, length(S))
     rules_length = Vector{Int}(undef, length(S))
 
     while true
-        silent || println()
-        silent || println()
-        silent || println()
-
         # Check if we've reached the maximum number of rules (excluding the default rule)
         if max_rules > 0 && length(R) >= max_rules - 1
-            silent ||
-                println("Maximum number of rules reached ($(max_rules-1) + default rule).")
             return DecisionList(R, bestguess(L; suppress_parity_warning = true))
         end
 
         resize!(rules_coverage, length(S))
         resize!(rules_error, length(S))
         resize!(rules_length, length(S))
-
-        silent || println("Rules left: $(length(rules_coverage)).")
 
         Threads.@threads for (i, s) in collect(enumerate(S))
             if isa(antecedent(s), BooleanTruth)                                             #TODO ASK MICHI {}
@@ -461,47 +427,29 @@ function stel(
                 rules_length[i] = metrics[rule_complexity_metric]
             end # TODO ASK MICHI ~
         end
-        silent || println("Rules error:")
-        silent || println(rules_error)
-
-        #metrics = [rulemetrics(s,D,y) for s in S]
-        #silent || println(metrics[1])
-        #rules_coverage = [metrics[i][:coverage] for i in eachindex(metrics)]
-        #rules_error = [metrics[i][:error] for i in eachindex(metrics)]
-        #rules_length = [metrics[i][rule_complexity_metric] for i in eachindex(metrics)]
 
         # Best rule index
         idx_best = begin
             idx_best = nothing
             # First: find the rule with minimum error
-            silent || println("By error")
             m = minimum(filter(!isnan, rules_error))
-            silent || println("Minimum rule error: $(m)")
             best_idxs = findall(rules_error .== m)
             (length(best_idxs) == 1) && (idx_best = best_idxs[1])
-            silent || println("Idxs min error: $(best_idxs)")
 
             # If not one, find the rule with maximum coverage
             if isnothing(idx_best)
-                silent || println("By coverage")
                 # @show rules_coverage[best_idxs]
                 m = maximum(filter(!isnan, rules_coverage[best_idxs]))
-                silent || println("Max coverage: $(m)")
                 idx_coverage = findall(rules_coverage[best_idxs] .== m)
                 best_idxs = best_idxs[idx_coverage]
-                silent || println("Idxs max coverage: $(best_idxs)")
                 (length(best_idxs) == 1) && (idx_best = best_idxs[1])
             end
 
             # If not one, find the rule with minimum length
             if isnothing(idx_best)
-                silent || println("By length")
-                # @show rules_length[best_idxs]
                 m = minimum(filter(!isnan, rules_length[best_idxs]))
-                silent || println("Min length: $(m)")
                 idx_length = findall(rules_length[best_idxs] .== m)
                 best_idxs = best_idxs[idx_length]
-                silent || println("Idxs min length: $(best_idxs)")
                 (length(best_idxs) == 1) && (idx_best = best_idxs[1])
             end
 
@@ -513,11 +461,9 @@ function stel(
 
             idx_best
         end
-        silent || println("Idx best: $(idx_best)")
 
         # Add at the end the best rule
         push!(R, S[idx_best])
-        silent || println("# rules in R: $(length(R))")
 
         # Indices of the remaining instances
         idx_remaining = begin
