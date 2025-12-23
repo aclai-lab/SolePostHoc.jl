@@ -291,18 +291,20 @@ function _stel(
             findall(.!evaluaterule(ruleset[idx_best], X, y)[:checkmask,])
 
         # exit condition
-        idx_best == nrules && return DecisionList(rules[1:(end-1)], consequent(rules[end]))
-        length(idx_remaining) == 0 && DecisionList(rules, SM.bestguess(y; suppress_parity_warning = true))
+        if idx_best == length(ruleset)
+            return DecisionList(rules[1:(end-1)], consequent(rules[end]))
+        elseif length(idx_remaining) == 0
+            return DecisionList(rules, bestguess(y; suppress_parity_warning = true))
+        end
 
         # update for next iteration
         @views begin
             X = X[idx_remaining, :]
             y = y[idx_remaining]
         end
-        
-        idx_best != length(ruleset) && (ruleset[idx_best] = ruleset[end])
+
         deleteat!(ruleset, idx_best)
-        ruleset[end] = Rule(SM.bestguess(y; suppress_parity_warning=true))
+        ruleset[end] = Rule(bestguess(y; suppress_parity_warning = true))
     end
     error("Unexpected error.")
 end

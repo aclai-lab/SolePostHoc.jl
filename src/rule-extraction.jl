@@ -49,15 +49,8 @@ featurenames(s::AbstractModel) = s.info.featurenames
 export InTreesRuleExtractor
 export intrees
 include("intrees/intrees.jl")
-include("intrees/apiIntrees.jl")
 
-function modalextractrules(extractor::InTreesRuleExtractor; kwargs...)
-    dl = intrees(extractor; kwargs...)
-    # ll = listrules(dl, use_shortforms=false) # decision list to list of rules
-    # rules_obj = convert_classification_rules(dl, ll)
-    # dsintrees = DecisionSet(rules_obj)
-    # return dsintrees
-end
+@inline modalextractrules(extractor::InTreesRuleExtractor; kwargs...) = DecisionSet(listrules(intrees(extractor; kwargs...), use_shortforms=false))
 
 #======================================================================================================================================
                                                         Lumen
