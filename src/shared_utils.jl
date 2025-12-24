@@ -130,12 +130,13 @@ function convertApi(f)
 end
 
 # ---------------------------------------------------------------------------- #
-
-# Function that, given a vector of ClassificationRule (ll),
+#                            Convert Symbolic Rules                            #
+# ---------------------------------------------------------------------------- #
+# function that, given a vector of ClassificationRule (ll),
 # groups the antecedents by outcome and creates a new Rule for each outcome.
 # The antecedent of the new Rule is obtained by concatenating (with " ∨ ")
 # the strings corresponding to each rule (obtained with leftmost_conjunctive_form_to_string).
-function convert_classification_rules(
+function convert_symbolic_rules(
     ::SoleModels.DecisionList,
     ll::AbstractVector{<:SoleModels.ClassificationRule},
 )
@@ -177,7 +178,7 @@ function convert_classification_rules(
     return rules
 end
 
-function convert_classification_rules(
+function convert_symbolic_rules(
     ::SoleModels.DecisionEnsemble,
     ll::AbstractVector{<:SoleModels.ClassificationRule},
 )
