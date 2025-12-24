@@ -147,9 +147,9 @@ function _prune_rule(::Type{<:MultiFormula}, r::Rule{O}, args...; kwargs...) whe
 end
 
 function _prune_ruleset(
-    ruleset :: Vector{<:Rule},
-    X :: AbstractInterpretationSet,
-    y :: AbstractVector{<:SM.Label},
+    ruleset   :: Vector{<:Rule},
+    X         :: AbstractInterpretationSet,
+    y         :: AbstractVector{<:SM.Label},
     extractor :: InTreesRuleExtractor
 )
     pruned = similar(ruleset)
@@ -160,8 +160,8 @@ function _prune_ruleset(
         else
             _prune_rule(
                 typeof(antecedent(ruleset[i])), ruleset[i], X, y;
-                pruning_s=get_pruning_s(extractor),
-                pruning_decay_thr=get_pruning_decay_threshold(extractor)
+                pruning_s         = get_pruning_s(extractor),
+                pruning_decay_thr = get_pruning_decay_threshold(extractor)
             )
         end
     end
@@ -240,23 +240,23 @@ end
 
 function _select_best_rule(rules_error, rules_coverage, rules_length, rng)
     # filter out NaN values and find candidates
-    valid_mask = .!isnan.(rules_error)
-    valid_idxs = findall(valid_mask)
+    valid_mask   = .!isnan.(rules_error)
+    valid_idxs   = findall(valid_mask)
     isempty(valid_idxs) && return first(valid_idxs)
     
     # minimum error
-    min_error = minimum(rules_error[valid_idxs])
-    candidates = findall(rules_error .== min_error)
+    min_error    = minimum(rules_error[valid_idxs])
+    candidates   = findall(rules_error .== min_error)
     length(candidates) == 1 && return candidates[1]
     
     # maximum coverage among candidates
     max_coverage = maximum(rules_coverage[candidates])
-    candidates = candidates[rules_coverage[candidates] .== max_coverage]
+    candidates   = candidates[rules_coverage[candidates] .== max_coverage]
     length(candidates) == 1 && return candidates[1]
     
     # minimum length among candidates
-    min_length = minimum(rules_length[candidates])
-    candidates = candidates[rules_length[candidates] .== min_length]
+    min_length   = minimum(rules_length[candidates])
+    candidates   = candidates[rules_length[candidates] .== min_length]
     length(candidates) == 1 && return candidates[1]
     
     # random selection
@@ -300,14 +300,14 @@ function _stel(
             r = ruleset[i]
             if _is_true_antecedent(antecedent(r))
                 rules_coverage[i] = 1.0
-                pred_class = _get_pred_class(consequent(r))
-                rules_error[i] = sum(@. y != pred_class) / length(y)
-                rules_length[i] = 1
+                pred_class        = _get_pred_class(consequent(r))
+                rules_error[i]    = sum(@. y != pred_class) / length(y)
+                rules_length[i]   = 1
             else
                 metrics = rulemetrics(r, X, y)
                 rules_coverage[i] = metrics.coverage
-                rules_error[i] = metrics.error
-                rules_length[i] = metrics[rule_complexity_metric]
+                rules_error[i]    = metrics.error
+                rules_length[i]   = metrics[rule_complexity_metric]
             end
         end
 
@@ -400,9 +400,9 @@ function intrees(
     # construct final decision list via sequential covering
     _stel(
         ruleset, X, y;
-        max_rules=get_max_rules(extractor),
-        min_coverage=get_min_coverage(extractor), 
-        rule_complexity_metric=get_rule_complexity_metric(extractor),
-        rng=get_rng(extractor)
+        max_rules              = get_max_rules(extractor),
+        min_coverage           = get_min_coverage(extractor), 
+        rule_complexity_metric = get_rule_complexity_metric(extractor),
+        rng                    = get_rng(extractor)
     )
 end
