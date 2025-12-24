@@ -23,34 +23,51 @@ Create a rule extractor based on the InTrees method.
 See also [`intrees`](@ref).
 """
 struct InTreesRuleExtractor <: RuleExtractor
+    dns                     :: Bool
     prune_rules             :: Bool
     pruning_s               :: Float64
     pruning_decay_threshold :: Float64
+    cbc_threshold           :: Float64
     min_coverage            :: Float64
     max_rules               :: Int64
     rule_selection_method   :: Symbol
     rule_complexity_metric  :: Symbol
+    n_subfeatures           :: Int64
+    n_trees                 :: Int64
+    partial_sampling        :: Float64
+    max_depth               :: Int64
     rng                     :: AbstractRNG
 
     function InTreesRuleExtractor(;
+        dns                     :: Bool=true,
         prune_rules             :: Bool=true,
         pruning_s               :: Float64=1.0e-6,
         pruning_decay_threshold :: Float64=0.05,
+        cbc_threshold           :: Float64=0.01,
         min_coverage            :: Float64=0.01,
         max_rules               :: Int64=-1,
         rule_selection_method   :: Symbol=:CBC,
         rule_complexity_metric  :: Symbol=:natoms,
-        # accuracy_rule_selection = nothing,
+        n_subfeatures           :: Int64=-1,
+        n_trees                 :: Int64=100,
+        partial_sampling        :: Float64=0.7,
+        max_depth               :: Int64=5,
         rng                     :: AbstractRNG=Random.TaskLocalRNG()
     )
         new(
+            dns,
             prune_rules,
             pruning_s,
             pruning_decay_threshold,
+            cbc_threshold,
             min_coverage,
             max_rules,
             rule_selection_method,
             rule_complexity_metric,
+            n_subfeatures,
+            n_trees,
+            partial_sampling,
+            max_depth,
             rng
         )
     end
@@ -59,13 +76,19 @@ end
 # ---------------------------------------------------------------------------- #
 #                                  methods                                     #
 # ---------------------------------------------------------------------------- #
+get_dns(r::InTreesRuleExtractor)                     = r.dns
 get_prune_rules(r::InTreesRuleExtractor)             = r.prune_rules
 get_pruning_s(r::InTreesRuleExtractor)               = r.pruning_s
 get_pruning_decay_threshold(r::InTreesRuleExtractor) = r.pruning_decay_threshold
+get_cbc_threshold(r::InTreesRuleExtractor)           = r.cbc_threshold
 get_min_coverage(r::InTreesRuleExtractor)            = r.min_coverage
 get_max_rules(r::InTreesRuleExtractor)               = r.max_rules
 get_rule_selection_method(r::InTreesRuleExtractor)   = r.rule_selection_method
 get_rule_complexity_metric(r::InTreesRuleExtractor)  = r.rule_complexity_metric
+get_n_subfeatures(r::InTreesRuleExtractor)           = r.n_subfeatures
+get_n_trees(r::InTreesRuleExtractor)                 = r.n_trees
+get_partial_sampling(r::InTreesRuleExtractor)        = r.partial_sampling
+get_max_depth(r::InTreesRuleExtractor)               = r.max_depth
 get_rng(r::InTreesRuleExtractor)                     = r.rng
 
 # ---------------------------------------------------------------------------- #
@@ -163,12 +186,19 @@ function _select_rules_cbc(ruleset, X, y, extractor)
     end
     
     # build random forest for feature importance
-    rf = DT.build_forest(y, hcat(checkmasks...), 2, 50, 0.7, -1; rng=get_rng(extractor))
+    rf = DT.build_forest(
+        y, hcat(checkmasks...), 
+        get_n_subfeatures(extractor),
+        get_n_trees(extractor),
+        get_partial_sampling(extractor),
+        get_max_depth(extractor);
+        # 2, 50, 0.7, -1; 
+        rng=get_rng(extractor))
     importance = DT.impurity_importance(rf)
     importances = importance ./ maximum(importance)
     
     # select features with sufficient importance
-    selected_idxs = findall(importances .> 0.01)
+    selected_idxs = findall(importances .> get_cbc_threshold(extractor))
     isempty(selected_idxs) && return ruleset
     
     # combine metrics with importance and original indices

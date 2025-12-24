@@ -55,10 +55,13 @@ include("/home/paso/Documents/Aclai/Sole/SolePostHoc.jl/src/deprecated/intrees/a
 
 function modalextractrules(extractor::InTreesRuleExtractor; kwargs...)
     dl = intrees(extractor; kwargs...)
-    ll = listrules(dl, use_shortforms=false) # decision list to list of rules
-    rules_obj = convert_classification_rules(dl, ll)
-    dsintrees = DecisionSet(rules_obj)
-    return dsintrees
+    ll = listrules(intrees(extractor; kwargs...), use_shortforms=false)
+    if get_dns(extractor)
+        rules_obj = convert_classification_rules(dl, ll)
+        return DecisionSet(rules_obj)
+    else
+        DecisionSet(ll)
+    end
 end
 
 #======================================================================================================================================
