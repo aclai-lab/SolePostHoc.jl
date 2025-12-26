@@ -51,7 +51,7 @@ export intrees
 include("intrees/intrees.jl")
 include("/home/paso/Documents/Aclai/Sole/SolePostHoc.jl/src/deprecated/intrees/apiIntrees.jl")
 
-function modalextractrules(extractor::InTreesRuleExtractor; kwargs...)
+function modalextractrules(extractor::InTreesRuleExtractor; kwargs...)::DecisionSet
     dl = intrees(extractor; kwargs...)
     ll = listrules(intrees(extractor; kwargs...), use_shortforms=false)
     if get_dns(extractor)

@@ -141,8 +141,8 @@ function _prune_rule(::Type{<:MultiFormula}, r::Rule{O}, args...; kwargs...) whe
     ]
 
     return  length(children) < 2 ? r : begin
-            r = Rule(LeftmostConjunctiveForm(children), consequent(r), info(r))
-            _prune_rule(typeof(antecedent(r)), r, args...; kwargs...,)
+        r = Rule(LeftmostConjunctiveForm(children), consequent(r), info(r))
+        _prune_rule(typeof(antecedent(r)), r, args...; kwargs...,)
     end
 end
 
@@ -154,7 +154,7 @@ function _prune_ruleset(
 )
     pruned = similar(ruleset)
     
-    @inbounds Threads.@threads for i in eachindex(ruleset)
+    for i in eachindex(ruleset)
         pruned[i] = if ruleset[i].antecedent isa SoleLogics.BooleanTruth
             ruleset[i]  # keep BooleanTruth rules as-is (e.g., from XGBoost)
         else
@@ -177,7 +177,7 @@ function _select_rules_cbc(ruleset, X, y, extractor)
     metrics    = Matrix{Float64}(undef, n_rules, 3)
     checkmasks = Vector{BitVector}(undef, n_rules)
     
-    @inbounds Threads.@threads for i in eachindex(ruleset)
+    for i in eachindex(ruleset)
         eval_result = rulemetrics(ruleset[i], X, y)
         checkmasks[i] = eval_result[:checkmask,]
         metrics[i, 1] = eval_result[:coverage]
@@ -194,7 +194,7 @@ function _select_rules_cbc(ruleset, X, y, extractor)
         get_max_depth(extractor);
         # 2, 50, 0.7, -1; 
         rng=get_rng(extractor))
-    importance = DT.impurity_importance(rf)
+    importance  = DT.impurity_importance(rf)
     importances = importance ./ maximum(importance)
     
     # select features with sufficient importance
@@ -296,7 +296,7 @@ function _stel(
         resize!(rules_error, nrules)
         resize!(rules_length, nrules)
 
-        Threads.@threads for i in eachindex(ruleset)
+        @simd for i in eachindex(ruleset)
             r = ruleset[i]
             if _is_true_antecedent(antecedent(r))
                 rules_coverage[i] = 1.0
@@ -383,16 +383,16 @@ function intrees(
 )
     # Extract rules from model
     listrules_kwargs = (use_shortforms=true, normalize=true)
-    ruleset = isensemble(model) ?
+    set = isensemble(model) ?
         _starterruleset(model; listrules_kwargs...) :
         listrules(model; listrules_kwargs...)
 
     # prune rules if enabled
-    get_prune_rules(extractor) && (ruleset = _prune_ruleset(ruleset, X, y, extractor))
+    get_prune_rules(extractor) && (set = _prune_ruleset(set, X, y, extractor))
 
     # rule selection
     ruleset = if get_rule_selection_method(extractor) == :CBC
-        _select_rules_cbc(ruleset, X, y, extractor)
+        _select_rules_cbc(set, X, y, extractor)
     else
         error("Unexpected rule selection method: $(get_rule_selection_method(extractor))")
     end

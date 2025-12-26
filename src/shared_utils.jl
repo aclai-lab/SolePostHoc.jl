@@ -12,7 +12,7 @@ function antecedent_to_string(antecedent)
         op_str = get_op_str(SoleData.test_operator(cond))
         thr    = SoleData.(cond)
 
-        push!(parts, "($i_name $op_str $thr)")
+        push!(parts, "([$i_name] $op_str $thr)")
     end
     return join(parts, " ∧ ")
 end
@@ -73,54 +73,6 @@ end
     "(" * join(map(_element_to_string, SoleLogics.grandchildren(cf)), " ∧ ") * ")"
 
 # ---------------------------------------------------------------------------- #
-#                                  dnf rules                                   #
-# ---------------------------------------------------------------------------- #
-function build_dnf_rules(rules)
-    # 1) Group antecedent strings (conjunctions) by class
-    class_to_antecedents = Dict{String,Vector{String}}()
-    for r in rules
-        c = r.consequent.outcome   # now is string =to "Iris-setosa"
-        ant_str = antecedent_to_string(r.antecedent)
-        push!(get!(class_to_antecedents, c, String[]), ant_str)
-    end
-
-    # 2) Create a vector of rules (Rule)
-    minimized_rules = Rule[]  # an empty "Vector{Rule}"
-
-    # Sort the classes to have a repeatable order (optional)
-    sorted_classes = sort(collect(keys(class_to_antecedents)))
-    for c in sorted_classes
-        # All conjunctions for class c
-        all_conjunctions = class_to_antecedents[c]
-        # Join with " ∨ "
-        big_dnf_str = join(all_conjunctions, " ∨ ")
-
-        # Parse the string into a SoleLogics formula
-        φ = SoleLogics.parseformula(
-            big_dnf_str;
-            atom_parser = a -> Atom(
-                parsecondition(
-                    ScalarCondition,
-                    a;
-                    featuretype = VariableValue,
-                    featvaltype = Real,
-                ),
-            ),
-        )
-        # Create the rule (formula + outcome as string)
-        push!(minimized_rules, Rule(φ, c))
-    end
-
-    return minimized_rules
-end
-
-function convertApi(f)
-    ll = listrules(f, use_shortforms = true)
-    minimized_rules = build_dnf_rules(ll)
-    ds = DecisionSet(minimized_rules)
-end
-
-# ---------------------------------------------------------------------------- #
 #                        convert classification rules                          #
 # ---------------------------------------------------------------------------- #
 # function that, given a vector of ClassificationRule (ll),
@@ -156,8 +108,7 @@ function convert_classif_rules(
         φ = dnf_to_syntaxbranch(φ)
 
         # create new rule with the SyntaxBranch representation
-        new_rule = Rule(φ, outcome)
-        push!(rules, new_rule)
+        push!(rules, Rule(φ, outcome))
     end
 
     return rules
