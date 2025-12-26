@@ -1,89 +1,80 @@
 # ---------------------------------------------------------------------------- #
-#                  used by InTrees, Trepan and Refne methods                   #
+#                              element to string                               #
 # ---------------------------------------------------------------------------- #
-struct MyRule
-    formula::Formula   # Here the parsed formula is saved
-    outcome::String    # Now storing the class label directly as string
-end
+@inline get_op_str(op) = op == (<)  ? "<" : op == (<=) ? "≤" : op == (>)  ? ">" : op == (>=) ? "≥" : string(op)
 
 function antecedent_to_string(antecedent)
     atoms = antecedent.grandchildren
     parts = String[]
     for atom in atoms
-        cond = atom.value
-        feat = cond.metacond.feature.i_variable
-        op = cond.metacond.test_operator
-        thr = cond.threshold
+        cond   = SoleLogics.value(atom)
+        i_name = SoleData.featurename(SoleData.feature(cond))
+        op_str = get_op_str(SoleData.test_operator(cond))
+        thr    = SoleData.(cond)
 
-        op_str =
-            op === (<) ? "<" :
-            op === (<=) ? "≤" : op === (>) ? ">" : op === (>=) ? "≥" : string(op)
-
-        push!(parts, "(V$feat $op_str $thr)")
+        push!(parts, "($i_name $op_str $thr)")
     end
     return join(parts, " ∧ ")
 end
 
-# ---------------------------------------------------------------------------- #
-#                      used by InTrees and Refne methods                       #
-# ---------------------------------------------------------------------------- #
-# Recursive function that converts an element (Atom, SyntaxBranch, or similar) to a string
-function element_to_string(x)
-    if x isa Atom
-        # Returns a string representing the range as two conditions
-        cond = x.value
-        if cond isa SoleData.RangeScalarCondition
-            i_var = cond.feature.i_variable
-            lower_op = cond.minincluded ? "≥" : ">"
-            upper_op = cond.maxincluded ? "≤" : "<"
-            # Returns a string representing the range as two conditions
-            return "(" *
-                   join(
-                       [
-                           "V$(i_var) $(lower_op) $(cond.minval)",
-                           "V$(i_var) $(upper_op) $(cond.maxval)",
-                       ],
-                       " ∧ ",
-                   ) *
-                   ")"
-        elseif hasproperty(cond, :metacond)
-            # Standard scalar condition
-            i_var = cond.metacond.feature.i_variable
-            op_fun = cond.metacond.test_operator
-            thr = cond.threshold
-            op_str =
-                op_fun === (<) ? "<" :
-                op_fun === (<=) ? "≤" :
-                op_fun === (>) ? ">" : op_fun === (>=) ? "≥" : string(op_fun)
-            return "V$(i_var) $(op_str) $(thr)"
-        else
-            return string(cond)
-        end
-    elseif x isa SyntaxBranch
-        # Process a SyntaxBranch: we convert the token to a string and recursively process the children
-        t = string(x.token)
-        children_strs = map(element_to_string, x.children)
-        if t == "¬"
-            # For denial we assume only one child
-            return "¬ " * children_strs[1]
-        else
-            # For other operators (e.g. "∧") join the children, enclosing the expression in parentheses
-            return "(" * join(children_strs, " " * t * " ") * ")"
-        end
-    elseif hasproperty(x, :grandchildren)
-        # If the element has the grandchildren field (e.g. LeftmostConjunctiveForm), process it with the specific function
-        return leftmost_conjunctive_form_to_string(x)
+# recursive function that converts an element (Atom, SyntaxBranch, or similar) to a string
+function _element_to_string(x::Atom)
+    cond   = SoleLogics.value(x)
+    i_name = SoleData.featurename(SoleData.feature(cond))
+    digits = SoleData.get_threshold_display_method(nothing, 2)
+
+    return if cond isa SoleData.RangeScalarCondition
+        lower_op = SoleData.minincluded(cond) ? "≥" : ">"
+        upper_op = SoleData.maxincluded(cond) ? "≤" : "<"
+        
+        "(" *
+            join(
+                [
+                    "[$(i_name)] $(lower_op) $(digits(SoleData.minval(cond)))",
+                    "[$(i_name)] $(upper_op) $(digits(SoleData.maxval(cond)))",
+                ],
+                " ∧ ",
+            ) *
+        ")"
+    elseif hasproperty(cond, :metacond)
+        # standard scalar condition
+        op_str = get_op_str(SoleData.test_operator(cond))
+        
+        "[$(i_name)] $(op_str) $(digits(SoleData.threshold(cond)))"
     else
-        return string(x)
+        syntaxstring(x; threshold_digits=2)
+    end
+end
+
+function _element_to_string(x::SyntaxBranch)
+    t = SoleLogics.token(x)
+    children_strs = map(_element_to_string, SoleLogics.children(x))
+    return if t == ¬
+        # for denial we assume only one child
+        "¬ " * children_strs[1]
+    else
+        # for other operators (e.g. "∧") join the children, enclosing the expression in parentheses
+        "(" * join(children_strs, " " * string(t) * " ") * ")"
+    end
+end
+
+function _element_to_string(x::Any)
+    if hasproperty(x, :grandchildren)
+        # if the element has the grandchildren field (e.g. LeftmostConjunctiveForm), process it with the specific function
+        _element_to_string(grandchildren(x))
+    else
+        syntaxstring(x; threshold_digits=2)
     end
 end
 
 # Function to convert a LeftmostConjunctiveForm to a readable string,
-# using element_to_string on each element of cf.grandchildren.
-function leftmost_conjunctive_form_to_string(cf)
-    return "(" * join(map(element_to_string, cf.grandchildren), " ∧ ") * ")"
-end
+# using _element_to_string on each element of cf.grandchildren.
+@inline lf_to_string(cf::SoleLogics.LeftmostConjunctiveForm) =
+    "(" * join(map(_element_to_string, SoleLogics.grandchildren(cf)), " ∧ ") * ")"
 
+# ---------------------------------------------------------------------------- #
+#                                  dnf rules                                   #
+# ---------------------------------------------------------------------------- #
 function build_dnf_rules(rules)
     # 1) Group antecedent strings (conjunctions) by class
     class_to_antecedents = Dict{String,Vector{String}}()
@@ -130,81 +121,44 @@ function convertApi(f)
 end
 
 # ---------------------------------------------------------------------------- #
-#                            Convert Symbolic Rules                            #
+#                        convert classification rules                          #
 # ---------------------------------------------------------------------------- #
 # function that, given a vector of ClassificationRule (ll),
 # groups the antecedents by outcome and creates a new Rule for each outcome.
-# The antecedent of the new Rule is obtained by concatenating (with " ∨ ")
-# the strings corresponding to each rule (obtained with leftmost_conjunctive_form_to_string).
-function convert_symbolic_rules(
+# the antecedent of the new Rule is obtained by concatenating (with " ∨ ")
+# the strings corresponding to each rule (obtained with _lf_to_string).
+function convert_classif_rules(
     ::SoleModels.DecisionList,
     ll::AbstractVector{<:SoleModels.ClassificationRule},
-)
-    # Group antecedent strings by outcome
+)::Vector{Rule}
+    # group antecedent strings by outcome
     grouped = Dict{String,Vector{String}}()
+
     for rule in ll
-        outcome = rule.consequent.outcome
-        antecedent_str =
-            hasproperty(rule.antecedent, :grandchildren) ?
-            leftmost_conjunctive_form_to_string(rule.antecedent) : string(rule.antecedent)
+        outcome = consequent(rule).outcome
+        antecedent_str = hasproperty(antecedent(rule), :grandchildren) ?
+            lf_to_string(antecedent(rule)) :
+            string(antecedent(rule))
         push!(get!(grouped, outcome, String[]), antecedent_str)
     end
 
-    # For each outcome, join the strings (each one is a conjunction) with " ∨ "
-    # and create a new Rule parsing the DNF string
     rules = Rule[]
+
     for (outcome, antecedent_list) in grouped
         dnf_string = join(antecedent_list, " ∨ ")
-        #println("DNF per outcome ", outcome, ": ", dnf_string)
 
-        # Parsing DNF string into a formula
-        φ = SoleLogics.parseformula(dnf_string; atom_parser = atom_parser)
+        φ = SoleLogics.parseformula(dnf_string; atom_parser)
 
-        #println("pre : ", φ)
-        #dump(φ)
+        # parsing and apply dnf transformation
+        φ = SoleLogics.dnf(φ)
 
-        #Apply DNF transformation
-        dnf_result = dnf(φ)
-        #println("post :", dnf_result)
-        #dump(dnf_result)
+        # convert dnf form back to SyntaxBranch representation
+        φ = dnf_to_syntaxbranch(φ)
 
-        # Convert DNF form back to SyntaxBranch representation
-        syntax_branch = dnf_to_syntaxbranch(dnf_result)
-
-        # Create new rule with the SyntaxBranch representation
-        new_rule = Rule(syntax_branch, outcome)
-        push!(rules, new_rule)
-    end
-    return rules
-end
-
-function convert_symbolic_rules(
-    ::SoleModels.DecisionEnsemble,
-    ll::AbstractVector{<:SoleModels.ClassificationRule},
-)
-    # Group antecedent strings by outcome
-    grouped = Dict{String,Vector{String}}()
-    for rule in ll
-        outcome = rule.consequent.outcome
-        antecedent_str =
-            hasproperty(rule.antecedent, :grandchildren) ?
-            leftmost_conjunctive_form_to_string(rule.antecedent) : string(rule.antecedent)
-        push!(get!(grouped, outcome, String[]), antecedent_str)
-    end
-
-    # For each outcome, join the strings (each one is a conjunction) with " ∨ "
-    # and create a new Rule parsing the DNF string
-    rules = Rule[]
-    for (outcome, antecedent_list) in grouped
-        dnf_string = join(antecedent_list, " ∨ ")
-        println("DNF per outcome ", outcome, ": ", dnf_string)
-        # Parsing DNF string into a formula
-        φ = SoleLogics.parseformula(dnf_string; atom_parser = atom_parser)
-        println("pre : ", φ)
-        φ = dnf(φ, reduce_negations = false, allow_atom_flipping = true)
+        # create new rule with the SyntaxBranch representation
         new_rule = Rule(φ, outcome)
-        println("post :", φ)
         push!(rules, new_rule)
     end
+
     return rules
 end

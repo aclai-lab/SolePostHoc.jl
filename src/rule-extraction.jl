@@ -35,7 +35,7 @@ function _get_rule_extractor_docstring(ruleextractorname::String, method)
            """See also [`modalextractrules`](@ref), [`RuleExtractor`](@ref)."""
 end
 
-export convert_symbolic_rules, refne_classification_rules
+export convert_classif_rules, refne_classification_rules
 include("shared_utils.jl")
 
 # ---------------------------------------------------------------------------- #
@@ -55,7 +55,7 @@ function modalextractrules(extractor::InTreesRuleExtractor; kwargs...)
     dl = intrees(extractor; kwargs...)
     ll = listrules(intrees(extractor; kwargs...), use_shortforms=false)
     if get_dns(extractor)
-        rules_obj = convert_symbolic_rules(dl, ll)
+        rules_obj = convert_classif_rules(dl, ll)
         return DecisionSet(rules_obj)
     else
         DecisionSet(ll)
@@ -156,7 +156,7 @@ struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
 function modalextractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
     dl = rulecosiplus(m, args...; kwargs...) # decision list   
     ll = listrules(dl, use_shortforms = false) # decision list to list of rules
-    rules_obj = convert_symbolic_rules(dl, ll)
+    rules_obj = convert_classif_rules(dl, ll)
     dsrulecosiplus = DecisionSet(rules_obj)
     return dsrulecosiplus
 end
