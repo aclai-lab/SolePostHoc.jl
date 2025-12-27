@@ -48,8 +48,8 @@ struct InTreesRuleExtractor <: RuleExtractor
         max_rules               :: Int64=-1,
         rule_selection_method   :: Symbol=:CBC,
         rule_complexity_metric  :: Symbol=:natoms,
-        n_subfeatures           :: Int64=-1,
-        n_trees                 :: Int64=100,
+        n_subfeatures           :: Int64=2,
+        n_trees                 :: Int64=50,
         partial_sampling        :: Float64=0.7,
         max_depth               :: Int64=5,
         rng                     :: AbstractRNG=Random.TaskLocalRNG()
@@ -192,7 +192,6 @@ function _select_rules_cbc(ruleset, X, y, extractor)
         get_n_trees(extractor),
         get_partial_sampling(extractor),
         get_max_depth(extractor);
-        # 2, 50, 0.7, -1; 
         rng=get_rng(extractor))
     importance  = DT.impurity_importance(rf)
     importances = importance ./ maximum(importance)
