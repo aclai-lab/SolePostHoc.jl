@@ -51,9 +51,10 @@ export intrees
 include("intrees/intrees.jl")
 include("/home/paso/Documents/Aclai/Sole/SolePostHoc.jl/src/deprecated/intrees/apiIntrees.jl")
 
-function modalextractrules(extractor::InTreesRuleExtractor; kwargs...)::DecisionSet
+# function modalextractrules(extractor::InTreesRuleExtractor; kwargs...)::DecisionSet
+function modalextractrules(extractor::InTreesRuleExtractor; kwargs...)
     dl = intrees(extractor; kwargs...)
-    ll = listrules(intrees(extractor; kwargs...), use_shortforms=false)
+    ll = listrules(dl, use_shortforms=false)
     if get_dns(extractor)
         rules_obj = convert_classif_rules(dl, ll)
         return DecisionSet(rules_obj)
