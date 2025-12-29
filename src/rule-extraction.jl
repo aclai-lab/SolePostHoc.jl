@@ -49,7 +49,6 @@ featurenames(s::AbstractModel) = s.info.featurenames
 export InTreesRuleExtractor
 export intrees
 include("intrees/intrees.jl")
-include("/home/paso/Documents/Aclai/Sole/SolePostHoc.jl/src/deprecated/intrees/apiIntrees.jl")
 
 # function modalextractrules(extractor::InTreesRuleExtractor; kwargs...)::DecisionSet
 function modalextractrules(extractor::InTreesRuleExtractor; kwargs...)
