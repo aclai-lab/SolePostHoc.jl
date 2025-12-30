@@ -3,6 +3,8 @@
 # ---------------------------------------------------------------------------- #
 @inline get_op_str(op) = op == (<)  ? "<" : op == (<=) ? "≤" : op == (>)  ? ">" : op == (>=) ? "≥" : string(op)
 
+
+
 function antecedent_to_string(antecedent)
     atoms = antecedent.grandchildren
     parts = String[]
@@ -10,7 +12,7 @@ function antecedent_to_string(antecedent)
         cond   = SoleLogics.value(atom)
         i_name = SoleData.featurename(SoleData.feature(cond))
         op_str = get_op_str(SoleData.test_operator(cond))
-        thr    = SoleData.(cond)
+        thr    = SoleData.threshold(cond)
 
         push!(parts, "([$i_name] $op_str $thr)")
     end
