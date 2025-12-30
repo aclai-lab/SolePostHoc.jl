@@ -113,3 +113,58 @@ function convert_classif_rules(
 
     return rules
 end
+
+"""
+    make_decisionset(dl::DecisionList)
+    make_decisionset(de::DecisionEnsemble)
+
+Converts a DecisionList or a DecisionEnsemble to a DecisionSet
+by grouping rules by outcome.
+Returns a new DecisionSet with one rule per class in DNF form.
+"""
+function make_decisionset(dl::DecisionList)::DecisionSet
+    rules_list = listrules(dl, use_shortforms = true)
+
+    # group antecedents by outcome
+    class_to_antecedents = Dict{String,Vector{String}}()
+
+    for r in rules_list
+        c = r.consequent.outcome
+        ant_str = el_to_string(r.antecedent)
+        push!(get!(class_to_antecedents, c, String[]), ant_str)
+    end
+
+    # Create minimized rules
+    minimized_rules = Rule[]
+
+    # Sort classes for repeatable order
+    sorted_classes = sort(collect(keys(class_to_antecedents)))
+    for c in sorted_classes
+        all_conjunctions = class_to_antecedents[c]
+        big_dnf_str = join(all_conjunctions, " ∨ ")
+
+        φ = SoleLogics.parseformula(
+            big_dnf_str;
+            atom_parser = a -> Atom(
+                parsecondition(
+                    ScalarCondition,
+                    a;
+                    featuretype = VariableValue,
+                    featvaltype = Real,
+                ),
+            ),
+        )
+        println("pre : ", φ)
+        φ = dnf(φ)
+        push!(minimized_rules, Rule(φ, c))
+        println("post :", φ)
+    end
+
+    return DecisionSet(minimized_rules)
+end
+
+function make_decisionset(de::DecisionEnsemble)::DecisionSet
+    ll = listrules(de, use_shortforms = true)
+    minimized_rules = build_dnf_rules(ll)
+    ds = DecisionSet(minimized_rules)
+end

@@ -117,7 +117,7 @@ struct REFNERuleExtractor <: RuleExtractor end
 
 function modalextractrules(::REFNERuleExtractor, m, args...; kwargs...)
     dl = refne(m, args...; kwargs...)
-    ds = convertApi(dl)
+    ds = make_decisionset(dl)
     return ds
 end
 
@@ -136,7 +136,7 @@ struct TREPANRuleExtractor <: RuleExtractor end
 
 function modalextractrules(::TREPANRuleExtractor, m, args...; kwargs...)
     dl = trepan(m, args...; kwargs...)
-    ds = convertApi(dl)
+    ds = make_decisionset(dl)
     return ds
 end
 
