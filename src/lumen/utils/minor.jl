@@ -136,7 +136,7 @@ function process_alphabet(
         end
     end
 
-    univariate_alphabets = []
+    univariate_alphabets = SoleData.UnivariateScalarAlphabet[]
 
     for (feat, thresholds) in sort(collect(thresholds_by_feature))
         test_op = test_operator_by_feature[feat]
