@@ -219,87 +219,46 @@ function _select_rules_cbc(ruleset, X, y, extractor)
 end
 
 # ---------------------------------------------------------------------------- #
-#                             dnf to syntaxbranch                              #
+#                           syntaxbranch conversions                           #
 # ---------------------------------------------------------------------------- #
-# Function to convert a DNF formula back to SyntaxBranch representation
-function dnf_to_syntaxbranch(dnf_formula)
-    if dnf_formula isa LeftmostLinearForm
-        # This is a disjunction of conjunctions (typical DNF structure)
-        disjuncts = dnf_formula.grandchildren
+function _to_syntaxbranch(
+    formula::Union{LeftmostLinearForm, LeftmostConjunctiveForm},
+    connective::NamedConnective
+)
+    # this is a disjunction of conjunctions (typical DNF structure)
+    disjuncts = formula.grandchildren
 
-        if length(disjuncts) == 1
-            # If there's only one disjunct, we just need the conjunction
-            return conjunction_to_syntaxbranch(disjuncts[1])
-        elseif length(disjuncts) == 2
-            # Binary disjunction of two conjunctions
-            child1 = conjunction_to_syntaxbranch(disjuncts[1])
-            child2 = conjunction_to_syntaxbranch(disjuncts[2])
-            return SyntaxBranch(NamedConnective{:∨}(), (child1, child2))
-        else
-            # For more than two disjuncts, create nested binary disjunctions
-            current_branch = conjunction_to_syntaxbranch(disjuncts[1])
+    return if length(disjuncts) == 1
+        # if there's only one disjunct, we just need the conjunction
+        conjunction_to_syntaxbranch(disjuncts[1])
+    elseif length(disjuncts) == 2
+        # binary disjunction of two conjunctions
+        child1 = conjunction_to_syntaxbranch(disjuncts[1])
+        child2 = conjunction_to_syntaxbranch(disjuncts[2])
+        SyntaxBranch(connective, (child1, child2))
+    else
+        # for more than two disjuncts, create nested binary disjunctions
+        current_branch = conjunction_to_syntaxbranch(disjuncts[1])
 
-            # Combine with each remaining disjunct using binary disjunction
-            for i = 2:length(disjuncts)
-                next_disjunct = conjunction_to_syntaxbranch(disjuncts[i])
-                current_branch =
-                    SyntaxBranch(NamedConnective{:∨}(), (current_branch, next_disjunct))
-            end
-
-            return current_branch
+        # combine with each remaining disjunct using binary disjunction
+        foldl(2:length(disjuncts); init=conjunction_to_syntaxbranch(disjuncts[1])) do branch, i
+            SyntaxBranch(connective, (branch, conjunction_to_syntaxbranch(disjuncts[i])))
         end
-    elseif dnf_formula isa LeftmostConjunctiveForm
-        # This is just a conjunction
-        return conjunction_to_syntaxbranch(dnf_formula)
-    elseif dnf_formula isa Literal
-        # This is a single literal
-        return literal_to_syntaxbranch(dnf_formula)
-    elseif dnf_formula isa Atom
-        # This is a single atom
-        return dnf_formula
-    else
-        error("Unexpected formula type: $(typeof(dnf_formula))")
+        current_branch
     end
 end
 
-# Convert a conjunction (LeftmostConjunctiveForm) to SyntaxBranch
-function conjunction_to_syntaxbranch(conjunction)
-    literals = conjunction.grandchildren
+@inline literal_to_syntaxbranch(literal::Literal) =
+    literal.ispos ? literal.atom : SyntaxBranch(NamedConnective{:¬}(), (literal.atom,))
 
-    if length(literals) == 1
-        # If there's only one literal, we don't need a conjunction
-        return literal_to_syntaxbranch(literals[1])
-    elseif length(literals) == 2
-        # Create a conjunction of two literals (binary operation)
-        child1 = literal_to_syntaxbranch(literals[1])
-        child2 = literal_to_syntaxbranch(literals[2])
-        return SyntaxBranch(NamedConnective{:∧}(), (child1, child2))
-    else
-        # For more than two literals, create nested binary conjunctions
-        # Convert first literal to SyntaxBranch
-        current_branch = literal_to_syntaxbranch(literals[1])
+@inline dnf_to_syntaxbranch(dnf_formula::LeftmostLinearForm) = _to_syntaxbranch(dnf_formula, NamedConnective{:∨}())
+@inline dnf_to_syntaxbranch(dnf_formula::LeftmostConjunctiveForm) = conjunction_to_syntaxbranch(dnf_formula)
+@inline dnf_to_syntaxbranch(dnf_formula::Literal) = literal_to_syntaxbranch(dnf_formula)
+@inline dnf_to_syntaxbranch(dnf_formula::Atom) = dnf_formula
 
-        # Combine with each remaining literal using binary conjunction
-        for i = 2:length(literals)
-            next_literal = literal_to_syntaxbranch(literals[i])
-            current_branch =
-                SyntaxBranch(NamedConnective{:∧}(), (current_branch, next_literal))
-        end
-
-        return current_branch
-    end
-end
-
-function literal_to_syntaxbranch(literal)
-    if literal.ispos
-        # Positive literal, just return the atom
-        return literal.atom
-    else
-        # Negative literal, wrap the atom in a negation
-        return SyntaxBranch(NamedConnective{:¬}(), (literal.atom,))
-    end
-end
-
+@inline conjunction_to_syntaxbranch(conjunction::LeftmostConjunctiveForm) =
+    _to_syntaxbranch(conjunction, NamedConnective{:∧}())
+@inline conjunction_to_syntaxbranch(conjunction::Literal) = literal_to_syntaxbranch(conjunction)
 
 # ---------------------------------------------------------------------------- #
 #                                    Stel                                      #
