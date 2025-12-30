@@ -114,6 +114,48 @@ function convert_classif_rules(
     return rules
 end
 
+# ---------------------------------------------------------------------------- #
+#                                decision set                                  #
+# ---------------------------------------------------------------------------- #
+function build_dnf_rules(rules)
+    # group antecedent strings (conjunctions) by class
+    class_to_antecedents = Dict{String,Vector{String}}()
+    for r in rules
+        c = r.consequent.outcome
+        ant_str = antecedent_to_string(r.antecedent)
+        push!(get!(class_to_antecedents, c, String[]), ant_str)
+    end
+
+    # create a vector of rules
+    minimized_rules = Rule[]
+
+    # sort classes to have a repeatable order
+    sorted_classes = sort(collect(keys(class_to_antecedents)))
+    for c in sorted_classes
+        # all conjunctions for class c
+        all_conjunctions = class_to_antecedents[c]
+        # join with " ∨ "
+        big_dnf_str = join(all_conjunctions, " ∨ ")
+
+        # parse the string into a SoleLogics formula
+        φ = SoleLogics.parseformula(
+            big_dnf_str;
+            atom_parser = a -> Atom(
+                parsecondition(
+                    ScalarCondition,
+                    a;
+                    featuretype = VariableValue,
+                    featvaltype = Real,
+                ),
+            ),
+        )
+        # create the rule (formula + outcome as string)
+        push!(minimized_rules, Rule(φ, c))
+    end
+
+    return minimized_rules
+end
+
 """
     make_decisionset(dl::DecisionList)
     make_decisionset(de::DecisionEnsemble)
