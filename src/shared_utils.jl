@@ -3,8 +3,6 @@
 # ---------------------------------------------------------------------------- #
 @inline get_op_str(op) = op == (<)  ? "<" : op == (<=) ? "≤" : op == (>)  ? ">" : op == (>=) ? "≥" : string(op)
 
-
-
 function antecedent_to_string(antecedent)
     atoms = antecedent.grandchildren
     parts = String[]
@@ -101,9 +99,8 @@ function convert_classif_rules(
     for (outcome, antecedent_list) in grouped
         dnf_string = join(antecedent_list, " ∨ ")
 
-        φ = SoleLogics.parseformula(dnf_string; atom_parser)
-
         # parsing and apply dnf transformation
+        φ = SoleLogics.parseformula(dnf_string; atom_parser)
         φ = SoleLogics.dnf(φ)
 
         # convert dnf form back to SyntaxBranch representation

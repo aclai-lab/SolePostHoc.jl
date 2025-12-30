@@ -222,8 +222,8 @@ end
 #                           syntaxbranch conversions                           #
 # ---------------------------------------------------------------------------- #
 function _to_syntaxbranch(
-    formula::Union{LeftmostLinearForm, LeftmostConjunctiveForm},
-    connective::NamedConnective
+    formula    :: Union{LeftmostLinearForm, LeftmostConjunctiveForm},
+    connective :: NamedConnective
 )
     # this is a disjunction of conjunctions (typical DNF structure)
     disjuncts = formula.grandchildren
@@ -279,7 +279,12 @@ function _compute_rule_metrics(s, X, y, rule_complexity_metric)
     end
 end
 
-function _select_best_rule(rules_error, rules_coverage, rules_length, rng)
+function _select_best_rule(
+    rules_error    :: Vector{T},
+    rules_coverage :: Vector{T},
+    rules_length   :: Vector{Int64},
+    rng            :: AbstractRNG
+) where {T<:Float64}
     # filter out NaN values and find candidates
     valid_mask   = .!isnan.(rules_error)
     valid_idxs   = findall(valid_mask)
@@ -308,10 +313,10 @@ function _stel(
     r                      :: AbstractVector{<:Rule},
     X                      :: AbstractInterpretationSet,
     y                      :: AbstractVector{<:SM.Label};
-    max_rules              :: Int64=-1,
-    min_coverage           :: Float64=0.01,
-    rule_complexity_metric :: Symbol=:natoms,
-    rng                    :: AbstractRNG=Random.TaskLocalRNG()
+    max_rules              :: Int64       = -1,
+    min_coverage           :: Float64     = 0.01,
+    rule_complexity_metric :: Symbol      = :natoms,
+    rng                    :: AbstractRNG = Random.TaskLocalRNG()
 )
     rules = Rule[]
     ruleset = [r..., Rule(SM.bestguess(y; suppress_parity_warning = true))]
