@@ -114,6 +114,48 @@ function convert_classif_rules(
 end
 
 # ---------------------------------------------------------------------------- #
+#                           syntaxbranch conversions                           #
+# ---------------------------------------------------------------------------- #
+function _to_syntaxbranch(
+    formula    :: Union{LeftmostLinearForm, LeftmostConjunctiveForm},
+    connective :: NamedConnective
+)
+    # this is a disjunction of conjunctions (typical DNF structure)
+    disjuncts = formula.grandchildren
+
+    return if length(disjuncts) == 1
+        # if there's only one disjunct, we just need the conjunction
+        conjunction_to_syntaxbranch(disjuncts[1])
+    elseif length(disjuncts) == 2
+        # binary disjunction of two conjunctions
+        child1 = conjunction_to_syntaxbranch(disjuncts[1])
+        child2 = conjunction_to_syntaxbranch(disjuncts[2])
+        SyntaxBranch(connective, (child1, child2))
+    else
+        # for more than two disjuncts, create nested binary disjunctions
+        current_branch = conjunction_to_syntaxbranch(disjuncts[1])
+
+        # combine with each remaining disjunct using binary disjunction
+        foldl(2:length(disjuncts); init=conjunction_to_syntaxbranch(disjuncts[1])) do branch, i
+            SyntaxBranch(connective, (branch, conjunction_to_syntaxbranch(disjuncts[i])))
+        end
+        current_branch
+    end
+end
+
+@inline literal_to_syntaxbranch(literal::Literal) =
+    literal.ispos ? literal.atom : SyntaxBranch(NamedConnective{:¬}(), (literal.atom,))
+
+@inline dnf_to_syntaxbranch(dnf_formula::LeftmostLinearForm) = _to_syntaxbranch(dnf_formula, NamedConnective{:∨}())
+@inline dnf_to_syntaxbranch(dnf_formula::LeftmostConjunctiveForm) = conjunction_to_syntaxbranch(dnf_formula)
+@inline dnf_to_syntaxbranch(dnf_formula::Literal) = literal_to_syntaxbranch(dnf_formula)
+@inline dnf_to_syntaxbranch(dnf_formula::Atom) = dnf_formula
+
+@inline conjunction_to_syntaxbranch(conjunction::LeftmostConjunctiveForm) =
+    _to_syntaxbranch(conjunction, NamedConnective{:∧}())
+@inline conjunction_to_syntaxbranch(conjunction::Literal) = literal_to_syntaxbranch(conjunction)
+
+# ---------------------------------------------------------------------------- #
 #                                decision set                                  #
 # ---------------------------------------------------------------------------- #
 function build_dnf_rules(rules)
