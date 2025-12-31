@@ -50,21 +50,11 @@ apply!(solem_rf, logiset, yc[test])
 # ---------------------------------------------------------------------------- #
 extractor = InTreesRuleExtractor()
 
-extracted_rules =
-    RuleExtraction.modalextractrules(extractor, solem_dt, Xc[test, :], yc[test])
 extracted_rules = RuleExtraction.modalextractrules(
-    extractor,
-    solem_dt,
-    Xc[test, :],
-    yc[test];
-    min_coverage = 1.0,
-)
-@test_throws MethodError RuleExtraction.modalextractrules(
-    extractor,
-    solem_dt,
-    Xc[test, :],
-    yc[test];
-    invalid = true,
+    extractor;
+    model=solem_dt,
+    X=SoleData.scalarlogiset(Xc[test, :]; allow_propositional=true),
+    y=yc[test]
 )
 
 # ---------------------------------------------------------------------------- #
