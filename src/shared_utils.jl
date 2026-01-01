@@ -136,44 +136,44 @@ end
 # ---------------------------------------------------------------------------- #
 #                           syntaxbranch conversions                           #
 # ---------------------------------------------------------------------------- #
+# function to convert a formula back to SyntaxBranch representation
 function _to_syntaxbranch(
-    formula    :: Union{LeftmostLinearForm, LeftmostConjunctiveForm},
-    connective :: NamedConnective
+    lf         :: Union{LeftmostLinearForm, LeftmostConjunctiveForm},
+    connective :: NamedConnective,
+    func       :: Base.Callable
 )
     # this is a disjunction of conjunctions (typical DNF structure)
-    disjuncts = formula.grandchildren
+    formula = lf.grandchildren
 
-    return if length(disjuncts) == 1
-        # if there's only one disjunct, we just need the conjunction
-        conjunction_to_syntaxbranch(disjuncts[1])
-    elseif length(disjuncts) == 2
-        # binary disjunction of two conjunctions
-        child1 = conjunction_to_syntaxbranch(disjuncts[1])
-        child2 = conjunction_to_syntaxbranch(disjuncts[2])
-        SyntaxBranch(connective, (child1, child2))
+    if length(formula) == 1
+        # if there's only one formula, we just need the conjunction
+        return func(formula[1])
+    elseif length(formula) == 2
+        # Binary disjunction of two conjunctions
+        child1 = func(formula[1])
+        child2 = func(formula[2])
+        return SyntaxBranch(connective, (child1, child2))
     else
-        # for more than two disjuncts, create nested binary disjunctions
-        current_branch = conjunction_to_syntaxbranch(disjuncts[1])
-
-        # combine with each remaining disjunct using binary disjunction
-        foldl(2:length(disjuncts); init=conjunction_to_syntaxbranch(disjuncts[1])) do branch, i
-            SyntaxBranch(connective, (branch, conjunction_to_syntaxbranch(disjuncts[i])))
+        # for more than two formula, create nested binary disjunctions
+        current_branch = func(formula[1])
+        current_branch = foldl(formula[2:end]; init=func(formula[1])) do branch, f
+            SyntaxBranch(connective, (branch, func(f)))
         end
-        current_branch
     end
+
+    return current_branch
 end
 
-@inline literal_to_syntaxbranch(literal::Literal) =
-    literal.ispos ? literal.atom : SyntaxBranch(NamedConnective{:¬}(), (literal.atom,))
-
-@inline dnf_to_syntaxbranch(dnf_formula::LeftmostLinearForm) = _to_syntaxbranch(dnf_formula, NamedConnective{:∨}())
+@inline dnf_to_syntaxbranch(dnf_formula::LeftmostLinearForm) = _to_syntaxbranch(dnf_formula, NamedConnective{:∨}(), conjunction_to_syntaxbranch)
 @inline dnf_to_syntaxbranch(dnf_formula::LeftmostConjunctiveForm) = conjunction_to_syntaxbranch(dnf_formula)
 @inline dnf_to_syntaxbranch(dnf_formula::Literal) = literal_to_syntaxbranch(dnf_formula)
 @inline dnf_to_syntaxbranch(dnf_formula::Atom) = dnf_formula
 
-@inline conjunction_to_syntaxbranch(conjunction::LeftmostConjunctiveForm) =
-    _to_syntaxbranch(conjunction, NamedConnective{:∧}())
-@inline conjunction_to_syntaxbranch(conjunction::Literal) = literal_to_syntaxbranch(conjunction)
+# convert a conjunction (LeftmostConjunctiveForm) to SyntaxBranch
+@inline conjunction_to_syntaxbranch(conjunction::LeftmostConjunctiveForm) = _to_syntaxbranch(conjunction, NamedConnective{:∧}(), literal_to_syntaxbranch)
+
+# convert a Literal to SyntaxBranch
+@inline literal_to_syntaxbranch(literal) = return literal.ispos ? literal.atom : SyntaxBranch(NamedConnective{:¬}(), (literal.atom,))
 
 # ---------------------------------------------------------------------------- #
 #                                decision set                                  #
