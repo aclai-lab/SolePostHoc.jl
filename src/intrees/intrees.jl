@@ -1,7 +1,7 @@
 import DecisionTree as DT
 using  ComplexityMeasures
 using  SoleModels
-const  SM = SoleModels
+using  DataFrames
 
 # ---------------------------------------------------------------------------- #
 #                                InTrees struct                                #
@@ -103,15 +103,15 @@ function _prune_rule(
     ::Type{<:LeftmostConjunctiveForm},
     r                 :: Rule{O},
     X                 :: AbstractInterpretationSet,
-    y                 :: AbstractVector{<:SM.Label};
+    y                 :: AbstractVector{<:SoleModels.Label};
     pruning_s         :: AbstractFloat,
     pruning_decay_thr :: AbstractFloat,
     kwargs...,
 ) where {O}
-    nruleconjuncts = SM.nconjuncts(r)
-    e_zero         = SM.rulemetrics(r, X, y)[:error]
+    nruleconjuncts = SoleModels.nconjuncts(r)
+    e_zero         = SoleModels.rulemetrics(r, X, y)[:error]
     valid_idxs     = 1:nruleconjuncts
-    antd, cons     = SM.antecedent(r), SM.consequent(r)
+    antd, cons     = SoleModels.antecedent(r), SoleModels.consequent(r)
 
     for idx in reverse(valid_idxs)
         (length(valid_idxs) < 2) && break
@@ -121,7 +121,7 @@ function _prune_rule(
         rule = Rule(LeftmostConjunctiveForm(SoleLogics.grandchildren(antd)[other_idxs]), cons)
 
         # return error of the rule without idx-th pair
-        e_minus_i = SM.rulemetrics(rule, X, y)[:error]
+        e_minus_i = SoleModels.rulemetrics(rule, X, y)[:error]
         decay_i   = (e_minus_i - e_zero) / max(e_zero, pruning_s)
 
         if decay_i ≤ pruning_decay_thr 
@@ -149,7 +149,7 @@ end
 function _prune_ruleset(
     ruleset   :: Vector{<:Rule},
     X         :: AbstractInterpretationSet,
-    y         :: AbstractVector{<:SM.Label},
+    y         :: AbstractVector{<:SoleModels.Label},
     extractor :: InTreesRuleExtractor
 )
     pruned = similar(ruleset)
@@ -232,7 +232,7 @@ function _compute_rule_metrics(s, X, y, rule_complexity_metric)
         pred_class = _get_pred_class(consequent(s))
         (coverage = 1.0, error = sum(y .!= pred_class) / length(y), length = 1)
     else
-        metrics = SM.rulemetrics(s, X, y)
+        metrics = SoleModels.rulemetrics(s, X, y)
         (coverage = metrics[:coverage], error = metrics[:error], length = metrics[rule_complexity_metric])
     end
 end
@@ -270,18 +270,18 @@ end
 function _stel(
     r                      :: AbstractVector{<:Rule},
     X                      :: AbstractInterpretationSet,
-    y                      :: AbstractVector{<:SM.Label};
+    y                      :: AbstractVector{<:SoleModels.Label};
     max_rules              :: Int64       = -1,
     min_coverage           :: Float64     = 0.01,
     rule_complexity_metric :: Symbol      = :natoms,
     rng                    :: AbstractRNG = Random.TaskLocalRNG()
 )
     rules = Rule[]
-    ruleset = [r..., Rule(SM.bestguess(y; suppress_parity_warning = true))]
+    ruleset = [r..., Rule(SoleModels.bestguess(y; suppress_parity_warning = true))]
 
     # filter rules by minimum coverage
     ruleset = filter(ruleset) do s
-        return _is_true_antecedent(antecedent(s)) ? true : SM.rulemetrics(s, X, y)[:coverage] ≥ min_coverage
+        return _is_true_antecedent(antecedent(s)) ? true : SoleModels.rulemetrics(s, X, y)[:coverage] ≥ min_coverage
     end
 
     nrules = length(ruleset)
@@ -292,7 +292,7 @@ function _stel(
     while true
         # check max rules limit
         if max_rules > 0 && length(rules) ≥ max_rules - 1
-            return DecisionList(rules, SM.bestguess(y; suppress_parity_warning=true))
+            return DecisionList(rules, SoleModels.bestguess(y; suppress_parity_warning=true))
         end
 
         nrules = length(ruleset)
@@ -347,7 +347,7 @@ end
 #                                   InTrees                                    #
 # ---------------------------------------------------------------------------- #
 @inline _starterruleset(model::AbstractModel; kwargs...) = unique!(
-    reduce(vcat, [listrules(subm; kwargs...) for subm in SM.models(model)]),
+    reduce(vcat, [listrules(subm; kwargs...) for subm in SoleModels.models(model)]),
 )
 
 """
@@ -380,10 +380,10 @@ See also
 [`rulemetrics`](@ref).
 """
 function intrees(
-    extractor :: InTreesRuleExtractor;
-    model     :: AbstractModel,
+    extractor :: InTreesRuleExtractor,
     X         :: AbstractInterpretationSet,
-    y         :: AbstractVector{<:SM.Label}
+    y         :: AbstractVector{<:SoleModels.Label},
+    model     :: AbstractModel
 )
     # Extract rules from model
     listrules_kwargs = (use_shortforms=true, normalize=true)
@@ -410,3 +410,6 @@ function intrees(
         rng                    = get_rng(extractor)
     )
 end
+
+intrees(extractor::InTreesRuleExtractor, X::AbstractDataFrame, args...) =
+    intrees(extractor, SoleData.scalarlogiset(X; allow_propositional=true), args...)

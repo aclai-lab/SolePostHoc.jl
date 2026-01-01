@@ -73,6 +73,23 @@ end
     "(" * join(map(_element_to_string, SoleLogics.grandchildren(cf)), " ∧ ") * ")"
 
 # ---------------------------------------------------------------------------- #
+#                                  atom parser                                 #
+# ---------------------------------------------------------------------------- #
+# Custom Atom parser for SoleLogics.parseformula.
+# Since conditions are now written as scalar conditions, we use the parser for ScalarCondition here.
+atom_parser = function (a::String)
+    #println("Parsing atom: ", a)
+    return Atom(
+        parsecondition(
+            SoleData.ScalarCondition,
+            a;
+            featuretype = SoleData.VariableValue,
+            featvaltype = Real,
+        ),
+    )
+end
+
+# ---------------------------------------------------------------------------- #
 #                        convert classification rules                          #
 # ---------------------------------------------------------------------------- #
 # function that, given a vector of ClassificationRule (ll),
@@ -111,6 +128,9 @@ function convert_classif_rules(
     end
 
     return rules
+
+    # φ = SoleModels.joinrules(ll)
+    # Rule.(SoleLogics.dnf.(SoleModels.antecedent.(φ)), SoleModels.consequent.(φ))
 end
 
 # ---------------------------------------------------------------------------- #

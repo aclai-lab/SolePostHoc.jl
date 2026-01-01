@@ -50,8 +50,8 @@ export InTreesRuleExtractor
 export intrees
 include("intrees/intrees.jl")
 
-function modalextractrules(extractor::InTreesRuleExtractor; kwargs...)::DecisionSet
-    dl = intrees(extractor; kwargs...)
+function modalextractrules(extractor::InTreesRuleExtractor, args...)::DecisionSet
+    dl = intrees(extractor, args...)
     ll = listrules(dl, use_shortforms=false)
     return if get_dns(extractor)
         rules_obj = convert_classif_rules(dl, ll)
