@@ -24,28 +24,16 @@ if !@isdefined sklearn
     const sklearn = PyNULL()
 end
 
-Conda.pip_interop(true, PyCall.Conda.ROOTENV)
-PyCall.Conda.pip(
-    "install",
-    "git+https://github.com/jobregon1212/rulecosi.git",
-    PyCall.Conda.ROOTENV,
-)
-PyCall.Conda.pip("install", "scikit-learn", PyCall.Conda.ROOTENV)
-
 function __init__()
     # First ensure pip interop is enabled
-    Conda.pip_interop(true, PyCall.Conda.ROOTENV)
-
+    Conda.pip_interop(true)
+    
     # Try to import rulecosi, if it fails, install it via pip
     try
         copy!(rulecosi, pyimport("rulecosi"))
     catch
         @info "Installing rulecosi via pip..."
-        PyCall.Conda.pip(
-            "install",
-            "git+https://github.com/jobregon1212/rulecosi.git",
-            PyCall.Conda.ROOTENV,
-        )
+        Conda.pip("install", "git+https://github.com/jobregon1212/rulecosi.git")
         copy!(rulecosi, pyimport("rulecosi"))
     end
 
