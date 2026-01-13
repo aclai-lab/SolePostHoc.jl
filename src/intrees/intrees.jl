@@ -76,20 +76,20 @@ end
 # ---------------------------------------------------------------------------- #
 #                                  methods                                     #
 # ---------------------------------------------------------------------------- #
-get_dns(r::InTreesRuleExtractor)                     = r.dns
-get_prune_rules(r::InTreesRuleExtractor)             = r.prune_rules
-get_pruning_s(r::InTreesRuleExtractor)               = r.pruning_s
-get_pruning_decay_threshold(r::InTreesRuleExtractor) = r.pruning_decay_threshold
-get_cbc_threshold(r::InTreesRuleExtractor)           = r.cbc_threshold
-get_min_coverage(r::InTreesRuleExtractor)            = r.min_coverage
-get_max_rules(r::InTreesRuleExtractor)               = r.max_rules
-get_rule_selection_method(r::InTreesRuleExtractor)   = r.rule_selection_method
-get_rule_complexity_metric(r::InTreesRuleExtractor)  = r.rule_complexity_metric
-get_n_subfeatures(r::InTreesRuleExtractor)           = r.n_subfeatures
-get_n_trees(r::InTreesRuleExtractor)                 = r.n_trees
-get_partial_sampling(r::InTreesRuleExtractor)        = r.partial_sampling
-get_max_depth(r::InTreesRuleExtractor)               = r.max_depth
-get_rng(r::InTreesRuleExtractor)                     = r.rng
+@inline get_dns(r::InTreesRuleExtractor)                     = r.dns
+@inline get_prune_rules(r::InTreesRuleExtractor)             = r.prune_rules
+@inline get_pruning_s(r::InTreesRuleExtractor)               = r.pruning_s
+@inline get_pruning_decay_threshold(r::InTreesRuleExtractor) = r.pruning_decay_threshold
+@inline get_cbc_threshold(r::InTreesRuleExtractor)           = r.cbc_threshold
+@inline get_min_coverage(r::InTreesRuleExtractor)            = r.min_coverage
+@inline get_max_rules(r::InTreesRuleExtractor)               = r.max_rules
+@inline get_rule_selection_method(r::InTreesRuleExtractor)   = r.rule_selection_method
+@inline get_rule_complexity_metric(r::InTreesRuleExtractor)  = r.rule_complexity_metric
+@inline get_n_subfeatures(r::InTreesRuleExtractor)           = r.n_subfeatures
+@inline get_n_trees(r::InTreesRuleExtractor)                 = r.n_trees
+@inline get_partial_sampling(r::InTreesRuleExtractor)        = r.partial_sampling
+@inline get_max_depth(r::InTreesRuleExtractor)               = r.max_depth
+@inline get_rng(r::InTreesRuleExtractor)                     = r.rng
 
 # ---------------------------------------------------------------------------- #
 #                           Intrees pruning utility                            #
@@ -154,7 +154,7 @@ function _prune_ruleset(
 )
     pruned = similar(ruleset)
     
-    for i in eachindex(ruleset)
+    @inbounds Threads.@threads for i in eachindex(ruleset)
         pruned[i] = if ruleset[i].antecedent isa SoleLogics.BooleanTruth
             ruleset[i]  # keep BooleanTruth rules as-is (e.g., from XGBoost)
         else
@@ -300,7 +300,7 @@ function _stel(
         resize!(rules_error, nrules)
         resize!(rules_length, nrules)
 
-        @simd for i in eachindex(ruleset)
+        @inbounds Threads.@threads for i in eachindex(ruleset)
             r = ruleset[i]
             if _is_true_antecedent(antecedent(r))
                 rules_coverage[i] = 1.0
