@@ -1,4 +1,4 @@
-#module RuleExtraction
+module RuleExtraction
 
 using Reexport
 # using Test     --- not needed
@@ -161,4 +161,4 @@ end
 # end
 
 
-#end
+end
