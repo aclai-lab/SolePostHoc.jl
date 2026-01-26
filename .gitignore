@@ -4,6 +4,7 @@
 /Manifest.toml
 /Manifest.toml.bk
 /docs/build/
+/docs/Manifest.toml
 Manifest.toml.bak
 src/BA-Trees/src/temp_ba_trees/*
 src/lumen/reportAlphabet.jl
