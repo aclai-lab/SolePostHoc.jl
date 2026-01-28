@@ -1,7 +1,7 @@
 name = "SolePostHoc"
 uuid = "cf1aa0c3-12c9-4ebe-9bdc-bd6c2ca79b72"
-authors = ["Michele Ghiotti", "Giovanni Pagliarini", "Riccardo Pasini", "Marco Perrotta", "Eduard I. Stan"]
 version = "0.1.0"
+authors = ["Michele Ghiotti", "Giovanni Pagliarini", "Riccardo Pasini", "Marco Perrotta", "Eduard I. Stan"]
 
 [deps]
 AbstractTrees = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
@@ -22,6 +22,7 @@ IterTools = "c8e1da08-722c-5040-9ed9-7db0dc04731e"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
+MLJ = "add582a8-e3ab-11e8-2d5e-e98b27df1bc7"
 MLJDecisionTreeInterface = "c6f25543-311c-4c74-83dc-3ea6d1015661"
 ModalDecisionTrees = "e54bda2e-c571-11ec-9d64-0242ac120002"
 MultivariateStats = "6f286f6a-111f-5878-ab1e-185364afe411"
@@ -61,6 +62,7 @@ IterTools = "1"
 JSON = "0.21, 1"
 LinearAlgebra = "1"
 Logging = "1.11"
+MLJ = "0.19.2"
 MLJDecisionTreeInterface = "0.4"
 ModalDecisionTrees = "0.5.2, 0.5"
 MultivariateStats = "0.10"
