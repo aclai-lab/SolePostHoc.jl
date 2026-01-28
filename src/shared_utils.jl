@@ -1,6 +1,6 @@
-# ---------------------------------------------------------------------------- #
-#                  used by InTrees, Trepan and Refne methods                   #
-# ---------------------------------------------------------------------------- #
+#===========================================================================================
+                            used by InTrees, Trepan and Refne methods
+===========================================================================================#
 struct MyRule
     formula::Formula   # Here the parsed formula is saved
     outcome::String    # Now storing the class label directly as string
@@ -24,9 +24,9 @@ function antecedent_to_string(antecedent)
     return join(parts, " ∧ ")
 end
 
-# ---------------------------------------------------------------------------- #
-#                      used by InTrees and Refne methods                       #
-# ---------------------------------------------------------------------------- #
+#===========================================================================================
+                          used by InTrees and Refne methods
+===========================================================================================#
 # Recursive function that converts an element (Atom, SyntaxBranch, or similar) to a string
 function element_to_string(x)
     if x isa Atom
@@ -60,18 +60,21 @@ function element_to_string(x)
             return string(cond)
         end
     elseif x isa SyntaxBranch
-        # Process a SyntaxBranch: we convert the token to a string and recursively process the children
+        # Process a SyntaxBranch: we convert the token to a string and recursively process
+        # the children
         t = string(x.token)
         children_strs = map(element_to_string, x.children)
         if t == "¬"
             # For denial we assume only one child
             return "¬ " * children_strs[1]
         else
-            # For other operators (e.g. "∧") join the children, enclosing the expression in parentheses
+            # For other operators (e.g. "∧") join the children, enclosing the expression
+            # in parentheses
             return "(" * join(children_strs, " " * t * " ") * ")"
         end
     elseif hasproperty(x, :grandchildren)
-        # If the element has the grandchildren field (e.g. LeftmostConjunctiveForm), process it with the specific function
+        # If the element has the grandchildren field (e.g. LeftmostConjunctiveForm),
+        # process it with the specific function
         return leftmost_conjunctive_form_to_string(x)
     else
         return string(x)
@@ -129,12 +132,12 @@ function convertApi(f)
     ds = DecisionSet(minimized_rules)
 end
 
-# ---------------------------------------------------------------------------- #
-
+#==========================================================================================#
 # Function that, given a vector of ClassificationRule (ll),
 # groups the antecedents by outcome and creates a new Rule for each outcome.
 # The antecedent of the new Rule is obtained by concatenating (with " ∨ ")
-# the strings corresponding to each rule (obtained with leftmost_conjunctive_form_to_string).
+# the strings corresponding to each rule
+# (obtained with leftmost_conjunctive_form_to_string).
 function convert_classification_rules(
     ::SoleModels.DecisionList,
     ll::AbstractVector{<:SoleModels.ClassificationRule},
