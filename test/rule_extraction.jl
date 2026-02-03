@@ -23,7 +23,7 @@ ttpairs = MLJ.MLJBase.train_test_pairs(Holdout(; shuffle = true), 1:length(yc), 
 train = ttpairs[1][1]
 test = ttpairs[1][2]
 
-DTModel = @load DecisionTreeClassifier pkg=DecisionTree verbosity=0
+DTModel = MLJ.@load DecisionTreeClassifier pkg=DecisionTree verbosity=0
 model = DTModel()
 mach = machine(model, Xc, yc)
 
@@ -34,7 +34,7 @@ solem_dt = solemodel(MLJ.fitted_params(mach).tree; featurenames, classlabels)
 logiset = scalarlogiset(Xc[test, :], allow_propositional = true)
 apply!(solem_dt, logiset, yc[test])
 
-DTModel = @load RandomForestClassifier pkg=DecisionTree verbosity=0
+DTModel = MLJ.@load RandomForestClassifier pkg=DecisionTree verbosity=0
 model = DTModel(n_trees = 2)
 mach = machine(model, Xc, yc)
 
