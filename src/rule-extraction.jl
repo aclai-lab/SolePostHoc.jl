@@ -35,36 +35,31 @@ function _get_rule_extractor_docstring(ruleextractorname::String, method)
            """See also [`modalextractrules`](@ref), [`RuleExtractor`](@ref)."""
 end
 
-export convert_classification_rules, refne_classification_rules
+export convert_classif_rules, refne_classification_rules
 include("shared_utils.jl")
 
-#===========================================================================================
-                                        InTrees
-===========================================================================================#
 
+# ---------------------------------------------------------------------------- #
+#                                    utils                                     #
+# ---------------------------------------------------------------------------- #
+featurenames(s::AbstractModel) = s.info.featurenames
+
+# ---------------------------------------------------------------------------- #
+#                                  InTrees                                     #
+# ---------------------------------------------------------------------------- #
 export InTreesRuleExtractor
 export intrees
 include("intrees/intrees.jl")
-include("intrees/apiIntrees.jl")
 
-
-"""$(_get_rule_extractor_docstring("InTreesRuleExtractor", intrees))"""
-@kwdef struct InTreesRuleExtractor <: RuleExtractor
-    prune_rules::Bool = true
-    pruning_s::Union{Float64,Nothing} = nothing
-    pruning_decay_threshold::Union{Float64,Nothing} = nothing
-    rule_selection_method::Symbol = :CBC
-    rule_complexity_metric::Symbol = :natoms
-    # accuracy_rule_selection = nothing
-    min_coverage::Union{Float64,Nothing} = nothing
-end
-
-function modalextractrules(::InTreesRuleExtractor, m, args...; kwargs...)
-    dl = intrees(m, args...; kwargs...)
-    ll = listrules(dl, use_shortforms = false) # decision list to list of rules
-    rules_obj = convert_classification_rules(dl, ll)
-    dsintrees = DecisionSet(rules_obj)
-    return dsintrees
+function modalextractrules(extractor::InTreesRuleExtractor, args...)::DecisionSet
+    dl = intrees(extractor, args...)
+    ll = listrules(dl, use_shortforms=false)
+    return if get_dns(extractor)
+        rules_obj = convert_classif_rules(dl, ll)
+        DecisionSet(rules_obj)
+    else
+        DecisionSet(ll)
+    end
 end
 
 #===========================================================================================

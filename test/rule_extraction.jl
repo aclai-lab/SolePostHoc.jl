@@ -49,17 +49,19 @@ apply!(solem_rf, logiset, yc[test])
 #                          intrees rules extraction                           #
 # ---------------------------------------------------------------------------- #
 extractor = InTreesRuleExtractor()
-
 extracted_rules =
     RuleExtraction.modalextractrules(extractor, solem_dt, Xc[test, :], yc[test])
+
+extractor = InTreesRuleExtractor(min_coverage=1.0)
 extracted_rules = RuleExtraction.modalextractrules(
     extractor,
     solem_dt,
     Xc[test, :],
-    yc[test];
-    min_coverage = 1.0,
+    yc[test]
 )
-@test_throws MethodError RuleExtraction.modalextractrules(
+
+@test_throws MethodError InTreesRuleExtractor(invalid=true)
+@test_throws ErrorException RuleExtraction.modalextractrules(
     extractor,
     solem_dt,
     Xc[test, :],
