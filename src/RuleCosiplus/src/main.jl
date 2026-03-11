@@ -6,59 +6,35 @@ using DataFrames
 using CSV
 using Random
 using JSON
-using SoleModels      # Assicurati che i moduli SoleModels e SoleLogics siano configurati
+using SoleModels
 using SoleLogics
 import Dates: now
 using DataStructures
 using CategoricalArrays
 
-include("apiRuleCosi.jl")
+using CondaPkg
+CondaPkg.add_pip("scikit-learn")
+CondaPkg.add_pip("rulecosi"; version="@ git+https://github.com/jobregon1212/rulecosi.git")
 
+using PythonCall
+
+const rulecosi = PythonCall.pynew()
+const sklearn = PythonCall.pynew()
+
+include("apiRuleCosi.jl")
 
 export rulecosiplus
 
-if !@isdefined rulecosi
-    const rulecosi = PyNULL()
-end
-if !@isdefined sklearn
-    const sklearn = PyNULL()
-end
-
-Conda.pip_interop(true, PyCall.Conda.ROOTENV)
-PyCall.Conda.pip(
-    "install",
-    "git+https://github.com/jobregon1212/rulecosi.git",
-    PyCall.Conda.ROOTENV,
-)
-PyCall.Conda.pip("install", "scikit-learn", PyCall.Conda.ROOTENV)
-
 function __init__()
-    # First ensure pip interop is enabled
-    Conda.pip_interop(true, PyCall.Conda.ROOTENV)
-
-    # Try to import rulecosi, if it fails, install it via pip
     try
-        copy!(rulecosi, pyimport("rulecosi"))
-    catch
-        @info "Installing rulecosi via pip..."
-        PyCall.Conda.pip(
-            "install",
-            "git+https://github.com/jobregon1212/rulecosi.git",
-            PyCall.Conda.ROOTENV,
-        )
-        copy!(rulecosi, pyimport("rulecosi"))
+        PythonCall.pycopy!(rulecosi, pyimport("rulecosi"))
+        PythonCall.pycopy!(sklearn, pyimport("sklearn.ensemble"))
+    catch e
+        @warn "Failed to import Python dependencies. RuleCOSI+ will not be available." exception=e
+        return
     end
 
-    # Try to import sklearn, if it fails, install it via pip
-    try
-        copy!(sklearn, pyimport("sklearn.ensemble"))
-    catch
-        @info "Installing scikit-learn via pip..."
-        PyCall.Conda.pip("install", "scikit-learn", PyCall.Conda.ROOTENV)
-        copy!(sklearn, pyimport("sklearn.ensemble"))
-    end
-
-    py"""
+    @pyexec """
     import numpy as np
     from sklearn.ensemble import RandomForestClassifier
     from sklearn.tree import DecisionTreeClassifier
@@ -459,14 +435,14 @@ function rulecosiplus(ensemble::Any, X_train::Any, y_train::Any; silent::Bool = 
     dict_model = serialize_julia_ensemble(ensemble, classes)
 
     # Build sklearn model
-    builder = py"build_sklearn_model_from_julia"
+    builder = @pyeval("build_sklearn_model_from_julia")
     base_ensemble = builder(dict_model)
 
     silent || println("======================")
     silent || println("Ensemble serialize:", dict_model)
     silent || println("======================")
 
-    num_estimators = pycall(pybuiltin("len"), Int, base_ensemble["estimators_"])
+    num_estimators = pyconvert(Int, pybuiltins.len(base_ensemble.estimators_))
     silent || println("number of trees in base_ensemble:", num_estimators)
 
     n_samples = size(X_train_matrix, 1)
@@ -622,7 +598,7 @@ function rulecosiplus(ensemble::Any, X_train::Any, y_train::Any; silent::Bool = 
 
     max_rules = max(20, n_classes * 5)
 
-    raw_rules = py"get_simplified_rules"(rc, 4, 1)
+    raw_rules = @pyeval("get_simplified_rules")(rc, 4, 1)
     silent || println("Raw rules:")
 
     if silent == false

@@ -142,26 +142,24 @@ end
 
 #===========================================================================================
                                         RULECOSIPLUS
-============================================================================================
+===========================================================================================#
 # TODO RULECOSIPLUS NOT WORK YET BECAUSE DEPENDS ON PYTHON PACKAGE.
 export RULECOSIPLUSRuleExtractor
 
 include("RuleCosiplus/src/main.jl")
-include("RuleCosiplus/src/apiRuleCosi.jl")
-@reexport using .RULECOSIPLUS
+# include("RuleCosiplus/src/apiRuleCosi.jl")
+# @reexport using .RULECOSIPLUS
 
 
-"""$(_get_rule_extractor_docstring("RULECOSIPLUSRuleExtractor", RULECOSIPLUS))"""
-struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
+# """$(_get_rule_extractor_docstring("RULECOSIPLUSRuleExtractor", RULECOSIPLUS))"""
+# struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
 
-function modalextractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
-    dl = rulecosiplus(m, args...; kwargs...) # decision list
-    ll = listrules(dl, use_shortforms = false) # decision list to list of rules
-    rules_obj = convert_classification_rules(dl, ll)
-    dsrulecosiplus = DecisionSet(rules_obj)
-    return dsrulecosiplus
-end
-
-===========================================================================================#
+# function modalextractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
+#     dl = rulecosiplus(m, args...; kwargs...) # decision list
+#     ll = listrules(dl, use_shortforms = false) # decision list to list of rules
+#     rules_obj = convert_classification_rules(dl, ll)
+#     dsrulecosiplus = DecisionSet(rules_obj)
+#     return dsrulecosiplus
+# end
 
 end
