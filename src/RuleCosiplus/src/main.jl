@@ -1,7 +1,7 @@
 module RULECOSIPLUS
 
-using PyCall
-using Conda
+# using PyCall
+# using Conda
 using DataFrames
 using CSV
 using Random
