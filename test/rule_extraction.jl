@@ -6,7 +6,6 @@ using DataFrames, Random
 using SoleData.Artifacts
 
 # fill your Artifacts.toml file;
-# @test_nowarn fillartifacts()
 fillartifacts()
 
 
@@ -105,11 +104,11 @@ extracted_rules = RuleExtraction.modalextractrules(
 # ---------------------------------------------------------------------------- #
 #                         rulecosi rules extraction                            #
 # ---------------------------------------------------------------------------- #
-    # extractor=RULECOSIPLUSRuleExtractor()
-    # 
-    # extracted_rules =
-    #     RuleExtraction.modalextractrules(extractor, solem_rf, Xc[test, :], yc[test])
-    # 
+    extractor=RULECOSIPLUSRuleExtractor()
+
+    extracted_rules =
+        RuleExtraction.modalextractrules(extractor, solem_rf, Xc[test, :], yc[test])
+
 # ---------------------------------------------------------------------------- #
 #                           refne rules extraction                             #
 # ---------------------------------------------------------------------------- #
