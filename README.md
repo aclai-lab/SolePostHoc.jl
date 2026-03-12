@@ -7,7 +7,7 @@
 [![Last Commit](https://img.shields.io/github/last-commit/aclai-lab/SolePostHoc.jl?color=5464F4)](https://github.com/aclai-lab/SolePostHoc.jl/commits/main)
 [![Coverage](https://codecov.io/gh/aclai-lab/SolePostHoc.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/aclai-lab/SolePostHoc.jl) 
 [![License](https://img.shields.io/github/license/aclai-lab/SolePostHoc.jl?color=389826)](https://github.com/aclai-lab/SolePostHoc.jl/blob/main/LICENSE)
-[![Julia](https://img.shields.io/badge/julia-1.10%2B-389826)](https://julialang.org/)
+[![Julia](https://img.shields.io/badge/julia-1.12%2B-389826)](https://julialang.org/)
 [![Issues](https://img.shields.io/github/issues/aclai-lab/SolePostHoc.jl?color=9558B2)](https://github.com/aclai-lab/SolePostHoc.jl/issues)
 
 ## In a nutshell
@@ -21,7 +21,6 @@
 - **InTrees**;
 - **TREPAN**;
 - **REFNE**;
-- **RuleCOSI+**;
 - **BATrees**.
 
 ### Model Analysis Capabilities

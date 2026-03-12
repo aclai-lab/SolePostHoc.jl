@@ -38,6 +38,7 @@ end
 export convert_classif_rules, refne_classification_rules
 include("shared_utils.jl")
 
+
 # ---------------------------------------------------------------------------- #
 #                                    utils                                     #
 # ---------------------------------------------------------------------------- #
@@ -61,9 +62,9 @@ function modalextractrules(extractor::InTreesRuleExtractor, args...)::DecisionSe
     end
 end
 
-#======================================================================================================================================
-                                                        Lumen
-======================================================================================================================================#
+#===========================================================================================
+                                        Lumen
+===========================================================================================#
 
 export lumen, Lumen
 export LumenRuleExtractor
@@ -82,9 +83,9 @@ function modalextractrules(::LumenRuleExtractor, m, args...; kwargs...)
     return ds
 end
 
-#======================================================================================================================================
-                                                        Batrees
-======================================================================================================================================#
+#===========================================================================================
+                                        Batrees
+===========================================================================================#
 
 export batrees, BATrees
 export BATreesRuleExtractor
@@ -101,9 +102,9 @@ function modalextractrules(::BATreesRuleExtractor, m, args...; kwargs...)
     return dsbatrees
 end
 
-#======================================================================================================================================
-                                                        Refne
-======================================================================================================================================#
+#===========================================================================================
+                                        Refne
+===========================================================================================#
 export REFNERuleExtractor
 
 include("Refne/src/main.jl")
@@ -120,9 +121,9 @@ function modalextractrules(::REFNERuleExtractor, m, args...; kwargs...)
     return ds
 end
 
-#======================================================================================================================================
-                                                        TrePan
-======================================================================================================================================#
+#===========================================================================================
+                                        TrePan
+===========================================================================================#
 export TREPANRuleExtractor
 
 include("Trepan/src/main.jl")
@@ -139,10 +140,10 @@ function modalextractrules(::TREPANRuleExtractor, m, args...; kwargs...)
     return ds
 end
 
-#======================================================================================================================================
-                                                        RULECOSIPLUS
-======================================================================================================================================#
-# export RULECOSIPLUSRuleExtractor
+#===========================================================================================
+                                        RULECOSIPLUS
+===========================================================================================#
+export RULECOSIPLUSRuleExtractor
 
 # include("RuleCosiplus/src/main.jl")
 # include("RuleCosiplus/src/apiRuleCosi.jl")
@@ -152,13 +153,12 @@ end
 # """$(_get_rule_extractor_docstring("RULECOSIPLUSRuleExtractor", RULECOSIPLUS))"""
 # struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
 
-# function modalextractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
-#     dl = rulecosiplus(m, args...; kwargs...) # decision list   
-#     ll = listrules(dl, use_shortforms = false) # decision list to list of rules
-#     rules_obj = convert_classif_rules(dl, ll)
-#     dsrulecosiplus = DecisionSet(rules_obj)
-#     return dsrulecosiplus
-# end
-
+function modalextractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
+    dl = rulecosiplus(m, args...; kwargs...) # decision list
+    ll = listrules(dl, use_shortforms = false) # decision list to list of rules
+    rules_obj = convert_classif_rules(dl, ll)
+    dsrulecosiplus = DecisionSet(rules_obj)
+    return dsrulecosiplus
+end
 
 end

@@ -6,7 +6,6 @@ using DataFrames, Random
 using SoleData.Artifacts
 
 # fill your Artifacts.toml file;
-# @test_nowarn fillartifacts()
 fillartifacts()
 
 
@@ -23,7 +22,7 @@ ttpairs = MLJ.MLJBase.train_test_pairs(Holdout(; shuffle = true), 1:length(yc), 
 train = ttpairs[1][1]
 test = ttpairs[1][2]
 
-DTModel = @load DecisionTreeClassifier pkg=DecisionTree verbosity=0
+DTModel = MLJ.@load DecisionTreeClassifier pkg=DecisionTree verbosity=0
 model = DTModel()
 mach = machine(model, Xc, yc)
 
@@ -34,7 +33,7 @@ solem_dt = solemodel(MLJ.fitted_params(mach).tree; featurenames, classlabels)
 logiset = scalarlogiset(Xc[test, :], allow_propositional = true)
 apply!(solem_dt, logiset, yc[test])
 
-DTModel = @load RandomForestClassifier pkg=DecisionTree verbosity=0
+DTModel = MLJ.@load RandomForestClassifier pkg=DecisionTree verbosity=0
 model = DTModel(n_trees = 2)
 mach = machine(model, Xc, yc)
 
@@ -49,12 +48,24 @@ apply!(solem_rf, logiset, yc[test])
 #                          intrees rules extraction                           #
 # ---------------------------------------------------------------------------- #
 extractor = InTreesRuleExtractor()
+extracted_rules =
+    RuleExtraction.modalextractrules(extractor, solem_dt, Xc[test, :], yc[test])
 
+extractor = InTreesRuleExtractor(min_coverage=1.0)
 extracted_rules = RuleExtraction.modalextractrules(
-    extractor;
-    model=solem_dt,
-    X=SoleData.scalarlogiset(Xc[test, :]; allow_propositional=true),
-    y=yc[test]
+    extractor,
+    solem_dt,
+    Xc[test, :],
+    yc[test]
+)
+
+@test_throws MethodError InTreesRuleExtractor(invalid=true)
+@test_throws ErrorException RuleExtraction.modalextractrules(
+    extractor,
+    solem_dt,
+    Xc[test, :],
+    yc[test];
+    invalid = true,
 )
 
 # ---------------------------------------------------------------------------- #
@@ -93,10 +104,10 @@ extracted_rules = RuleExtraction.modalextractrules(
 # ---------------------------------------------------------------------------- #
 #                         rulecosi rules extraction                            #
 # ---------------------------------------------------------------------------- #
-extractor=RULECOSIPLUSRuleExtractor()
+    extractor=RULECOSIPLUSRuleExtractor()
 
-extracted_rules =
-    RuleExtraction.modalextractrules(extractor, solem_rf, Xc[test, :], yc[test])
+    extracted_rules =
+        RuleExtraction.modalextractrules(extractor, solem_rf, Xc[test, :], yc[test])
 
 # ---------------------------------------------------------------------------- #
 #                           refne rules extraction                             #

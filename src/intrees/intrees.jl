@@ -23,36 +23,36 @@ Create a rule extractor based on the InTrees method.
 See also [`intrees`](@ref).
 """
 struct InTreesRuleExtractor <: RuleExtractor
-    dns                     :: Bool
-    prune_rules             :: Bool
-    pruning_s               :: Float64
-    pruning_decay_threshold :: Float64
-    cbc_threshold           :: Float64
-    min_coverage            :: Float64
-    max_rules               :: Int64
-    rule_selection_method   :: Symbol
-    rule_complexity_metric  :: Symbol
-    n_subfeatures           :: Int64
-    n_trees                 :: Int64
-    partial_sampling        :: Float64
-    max_depth               :: Int64
-    rng                     :: AbstractRNG
+    dns::Bool
+    prune_rules::Bool
+    pruning_s::Float64
+    pruning_decay_threshold::Float64
+    cbc_threshold::Float64
+    min_coverage::Float64
+    max_rules::Int64
+    rule_selection_method::Symbol
+    rule_complexity_metric::Symbol
+    n_subfeatures::Int64
+    n_trees::Int64
+    partial_sampling::Float64
+    max_depth::Int64
+    rng::AbstractRNG
 
     function InTreesRuleExtractor(;
-        dns                     :: Bool=true,
-        prune_rules             :: Bool=true,
-        pruning_s               :: Float64=1.0e-6,
-        pruning_decay_threshold :: Float64=0.05,
-        cbc_threshold           :: Float64=0.01,
-        min_coverage            :: Float64=0.01,
-        max_rules               :: Int64=-1,
-        rule_selection_method   :: Symbol=:CBC,
-        rule_complexity_metric  :: Symbol=:natoms,
-        n_subfeatures           :: Int64=2,
-        n_trees                 :: Int64=50,
-        partial_sampling        :: Float64=0.7,
-        max_depth               :: Int64=5,
-        rng                     :: AbstractRNG=Random.TaskLocalRNG()
+        dns::Bool=true,
+        prune_rules::Bool=true,
+        pruning_s::Float64=1.0e-6,
+        pruning_decay_threshold::Float64=0.05,
+        cbc_threshold::Float64=0.01,
+        min_coverage::Float64=0.01,
+        max_rules::Int64=-1,
+        rule_selection_method::Symbol=:CBC,
+        rule_complexity_metric::Symbol=:natoms,
+        n_subfeatures::Int64=2,
+        n_trees::Int64=50,
+        partial_sampling::Float64=0.7,
+        max_depth::Int64=5,
+        rng::AbstractRNG=Random.TaskLocalRNG()
     )
         new(
             dns,
@@ -76,20 +76,20 @@ end
 # ---------------------------------------------------------------------------- #
 #                                  methods                                     #
 # ---------------------------------------------------------------------------- #
-@inline get_dns(r::InTreesRuleExtractor)                     = r.dns
-@inline get_prune_rules(r::InTreesRuleExtractor)             = r.prune_rules
-@inline get_pruning_s(r::InTreesRuleExtractor)               = r.pruning_s
+@inline get_dns(r::InTreesRuleExtractor) = r.dns
+@inline get_prune_rules(r::InTreesRuleExtractor) = r.prune_rules
+@inline get_pruning_s(r::InTreesRuleExtractor) = r.pruning_s
 @inline get_pruning_decay_threshold(r::InTreesRuleExtractor) = r.pruning_decay_threshold
-@inline get_cbc_threshold(r::InTreesRuleExtractor)           = r.cbc_threshold
-@inline get_min_coverage(r::InTreesRuleExtractor)            = r.min_coverage
-@inline get_max_rules(r::InTreesRuleExtractor)               = r.max_rules
-@inline get_rule_selection_method(r::InTreesRuleExtractor)   = r.rule_selection_method
-@inline get_rule_complexity_metric(r::InTreesRuleExtractor)  = r.rule_complexity_metric
-@inline get_n_subfeatures(r::InTreesRuleExtractor)           = r.n_subfeatures
-@inline get_n_trees(r::InTreesRuleExtractor)                 = r.n_trees
-@inline get_partial_sampling(r::InTreesRuleExtractor)        = r.partial_sampling
-@inline get_max_depth(r::InTreesRuleExtractor)               = r.max_depth
-@inline get_rng(r::InTreesRuleExtractor)                     = r.rng
+@inline get_cbc_threshold(r::InTreesRuleExtractor) = r.cbc_threshold
+@inline get_min_coverage(r::InTreesRuleExtractor) = r.min_coverage
+@inline get_max_rules(r::InTreesRuleExtractor) = r.max_rules
+@inline get_rule_selection_method(r::InTreesRuleExtractor) = r.rule_selection_method
+@inline get_rule_complexity_metric(r::InTreesRuleExtractor) = r.rule_complexity_metric
+@inline get_n_subfeatures(r::InTreesRuleExtractor) = r.n_subfeatures
+@inline get_n_trees(r::InTreesRuleExtractor) = r.n_trees
+@inline get_partial_sampling(r::InTreesRuleExtractor) = r.partial_sampling
+@inline get_max_depth(r::InTreesRuleExtractor) = r.max_depth
+@inline get_rng(r::InTreesRuleExtractor) = r.rng
 
 # ---------------------------------------------------------------------------- #
 #                           Intrees pruning utility                            #
@@ -101,17 +101,17 @@ end
 
 function _prune_rule(
     ::Type{<:LeftmostConjunctiveForm},
-    r                 :: Rule{O},
-    X                 :: AbstractInterpretationSet,
-    y                 :: AbstractVector{<:SoleModels.Label};
-    pruning_s         :: AbstractFloat,
-    pruning_decay_thr :: AbstractFloat,
+    r::Rule{O},
+    X::AbstractInterpretationSet,
+    y::AbstractVector{<:SoleModels.Label};
+    pruning_s::AbstractFloat,
+    pruning_decay_thr::AbstractFloat,
     kwargs...,
 ) where {O}
     nruleconjuncts = SoleModels.nconjuncts(r)
-    e_zero         = SoleModels.rulemetrics(r, X, y)[:error]
-    valid_idxs     = 1:nruleconjuncts
-    antd, cons     = SoleModels.antecedent(r), SoleModels.consequent(r)
+    e_zero = SoleModels.rulemetrics(r, X, y)[:error]
+    valid_idxs = 1:nruleconjuncts
+    antd, cons = SoleModels.antecedent(r), SoleModels.consequent(r)
 
     for idx in reverse(valid_idxs)
         (length(valid_idxs) < 2) && break
@@ -122,7 +122,7 @@ function _prune_rule(
 
         # return error of the rule without idx-th pair
         e_minus_i = SoleModels.rulemetrics(rule, X, y)[:error]
-        decay_i   = (e_minus_i - e_zero) / max(e_zero, pruning_s)
+        decay_i = (e_minus_i - e_zero) / max(e_zero, pruning_s)
 
         if decay_i ≤ pruning_decay_thr 
             # remove the idx-th pair in the vector of decisions
@@ -147,10 +147,10 @@ function _prune_rule(::Type{<:MultiFormula}, r::Rule{O}, args...; kwargs...) whe
 end
 
 function _prune_ruleset(
-    ruleset   :: Vector{<:Rule},
-    X         :: AbstractInterpretationSet,
-    y         :: AbstractVector{<:SoleModels.Label},
-    extractor :: InTreesRuleExtractor
+    ruleset::Vector{<:Rule},
+    X::AbstractInterpretationSet,
+    y::AbstractVector{<:SoleModels.Label},
+    extractor::InTreesRuleExtractor
 )
     pruned = similar(ruleset)
     
@@ -160,8 +160,8 @@ function _prune_ruleset(
         else
             _prune_rule(
                 typeof(antecedent(ruleset[i])), ruleset[i], X, y;
-                pruning_s         = get_pruning_s(extractor),
-                pruning_decay_thr = get_pruning_decay_threshold(extractor)
+                pruning_s=get_pruning_s(extractor),
+                pruning_decay_thr=get_pruning_decay_threshold(extractor)
             )
         end
     end
@@ -193,7 +193,7 @@ function _select_rules_cbc(ruleset, X, y, extractor)
         get_partial_sampling(extractor),
         get_max_depth(extractor);
         rng=get_rng(extractor))
-    importance  = DT.impurity_importance(rf)
+    importance = DT.impurity_importance(rf)
     importances = importance ./ maximum(importance)
     
     # select features with sufficient importance
@@ -211,7 +211,7 @@ function _select_rules_cbc(ruleset, X, y, extractor)
     sorted = sortslices(combined, dims=1, by=x->(-x[4], x[2], x[3]))
     
     # extract final indices, limiting if max_rules is set
-    max_rules  = get_max_rules(extractor)
+    max_rules = get_max_rules(extractor)
     n_selected = max_rules > 0 ? min(max_rules, size(sorted, 1)) : size(sorted, 1)
     final_idxs = Int64.(sorted[1:n_selected, 5])
     
@@ -233,34 +233,34 @@ function _compute_rule_metrics(s, X, y, rule_complexity_metric)
         (coverage = 1.0, error = sum(y .!= pred_class) / length(y), length = 1)
     else
         metrics = SoleModels.rulemetrics(s, X, y)
-        (coverage = metrics[:coverage], error = metrics[:error], length = metrics[rule_complexity_metric])
+        (coverage=metrics[:coverage], error=metrics[:error], length=metrics[rule_complexity_metric])
     end
 end
 
 function _select_best_rule(
-    rules_error    :: Vector{T},
-    rules_coverage :: Vector{T},
-    rules_length   :: Vector{Int64},
-    rng            :: AbstractRNG
+    rules_error::Vector{T},
+    rules_coverage::Vector{T},
+    rules_length::Vector{Int64},
+    rng::AbstractRNG
 ) where {T<:Float64}
     # filter out NaN values and find candidates
-    valid_mask   = .!isnan.(rules_error)
-    valid_idxs   = findall(valid_mask)
+    valid_mask = .!isnan.(rules_error)
+    valid_idxs = findall(valid_mask)
     isempty(valid_idxs) && return first(valid_idxs)
-    
+
     # minimum error
-    min_error    = minimum(rules_error[valid_idxs])
-    candidates   = findall(rules_error .== min_error)
+    min_error = minimum(rules_error[valid_idxs])
+    candidates = findall(rules_error .== min_error)
     length(candidates) == 1 && return candidates[1]
-    
+
     # maximum coverage among candidates
     max_coverage = maximum(rules_coverage[candidates])
-    candidates   = candidates[rules_coverage[candidates] .== max_coverage]
+    candidates = candidates[rules_coverage[candidates].==max_coverage]
     length(candidates) == 1 && return candidates[1]
-    
+
     # minimum length among candidates
-    min_length   = minimum(rules_length[candidates])
-    candidates   = candidates[rules_length[candidates] .== min_length]
+    min_length = minimum(rules_length[candidates])
+    candidates = candidates[rules_length[candidates].==min_length]
     length(candidates) == 1 && return candidates[1]
     
     # random selection
@@ -268,26 +268,28 @@ function _select_best_rule(
 end
 
 function _stel(
-    r                      :: AbstractVector{<:Rule},
-    X                      :: AbstractInterpretationSet,
-    y                      :: AbstractVector{<:SoleModels.Label};
-    max_rules              :: Int64       = -1,
-    min_coverage           :: Float64     = 0.01,
-    rule_complexity_metric :: Symbol      = :natoms,
-    rng                    :: AbstractRNG = Random.TaskLocalRNG()
+    r::AbstractVector{<:Rule},
+    X::AbstractInterpretationSet,
+    y::AbstractVector{<:SoleModels.Label};
+    max_rules::Int64=-1,
+    min_coverage::Float64=0.01,
+    rule_complexity_metric::Symbol=:natoms,
+    rng::AbstractRNG=Random.TaskLocalRNG()
 )
     rules = Rule[]
     ruleset = [r..., Rule(SoleModels.bestguess(y; suppress_parity_warning = true))]
 
     # filter rules by minimum coverage
     ruleset = filter(ruleset) do s
-        return _is_true_antecedent(antecedent(s)) ? true : SoleModels.rulemetrics(s, X, y)[:coverage] ≥ min_coverage
+        return _is_true_antecedent(antecedent(s)) ?
+            true :
+            SoleModels.rulemetrics(s, X, y)[:coverage] ≥ min_coverage
     end
 
     nrules = length(ruleset)
     rules_coverage = Vector{Float64}(undef, nrules)
-    rules_error    = Vector{Float64}(undef, nrules)
-    rules_length   = Vector{Int64}(undef, nrules)
+    rules_error = Vector{Float64}(undef, nrules)
+    rules_length = Vector{Int64}(undef, nrules)
 
     while true
         # check max rules limit
@@ -304,14 +306,14 @@ function _stel(
             r = ruleset[i]
             if _is_true_antecedent(antecedent(r))
                 rules_coverage[i] = 1.0
-                pred_class        = _get_pred_class(consequent(r))
-                rules_error[i]    = sum(@. y != pred_class) / length(y)
-                rules_length[i]   = 1
+                pred_class = _get_pred_class(consequent(r))
+                rules_error[i] = sum(@. y != pred_class) / length(y)
+                rules_length[i] = 1
             else
                 metrics = rulemetrics(r, X, y)
                 rules_coverage[i] = metrics.coverage
-                rules_error[i]    = metrics.error
-                rules_length[i]   = metrics[rule_complexity_metric]
+                rules_error[i] = metrics.error
+                rules_length[i] = metrics[rule_complexity_metric]
             end
         end
 
@@ -380,10 +382,10 @@ See also
 [`rulemetrics`](@ref).
 """
 function intrees(
-    extractor :: InTreesRuleExtractor,
-    X         :: AbstractInterpretationSet,
-    y         :: AbstractVector{<:SoleModels.Label},
-    model     :: AbstractModel
+    extractor::InTreesRuleExtractor,
+    model::AbstractModel,
+    X::AbstractInterpretationSet,
+    y::AbstractVector{<:SoleModels.Label}
 )
     # Extract rules from model
     listrules_kwargs = (use_shortforms=true, normalize=true)
@@ -404,12 +406,18 @@ function intrees(
     # construct final decision list via sequential covering
     _stel(
         ruleset, X, y;
-        max_rules              = get_max_rules(extractor),
-        min_coverage           = get_min_coverage(extractor), 
-        rule_complexity_metric = get_rule_complexity_metric(extractor),
-        rng                    = get_rng(extractor)
+        max_rules=get_max_rules(extractor),
+        min_coverage=get_min_coverage(extractor),
+        rule_complexity_metric=get_rule_complexity_metric(extractor),
+        rng=get_rng(extractor)
     )
 end
+intrees(
+    extractor::InTreesRuleExtractor,
+    X::AbstractInterpretationSet,
+    y::AbstractVector{<:SoleModels.Label},
+    model::AbstractModel
+) = intrees(extractor, model, X, y)
 
-intrees(extractor::InTreesRuleExtractor, X::AbstractDataFrame, args...) =
-    intrees(extractor, SoleData.scalarlogiset(X; allow_propositional=true), args...)
+intrees(extractor::InTreesRuleExtractor, m, X::AbstractDataFrame, y) =
+    intrees(extractor, m, SoleData.scalarlogiset(X; allow_propositional=true), y)
