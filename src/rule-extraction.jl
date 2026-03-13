@@ -145,13 +145,13 @@ end
 ===========================================================================================#
 export RULECOSIPLUSRuleExtractor
 
-# include("RuleCosiplus/src/main.jl")
-# include("RuleCosiplus/src/apiRuleCosi.jl")
-# @reexport using .RULECOSIPLUS
+include("RuleCosiplus/src/main.jl")
+include("RuleCosiplus/src/apiRuleCosi.jl")
+@reexport using .RULECOSIPLUS
 
 
-# """$(_get_rule_extractor_docstring("RULECOSIPLUSRuleExtractor", RULECOSIPLUS))"""
-# struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
+"""$(_get_rule_extractor_docstring("RULECOSIPLUSRuleExtractor", RULECOSIPLUS))"""
+struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
 
 function modalextractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
     dl = rulecosiplus(m, args...; kwargs...) # decision list

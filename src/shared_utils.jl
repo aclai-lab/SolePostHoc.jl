@@ -9,7 +9,11 @@
 # ---------------------------------------------------------------------------- #
 #                              element to string                               #
 # ---------------------------------------------------------------------------- #
-@inline get_op_str(op) = op == (<)  ? "<" : op == (<=) ? "≤" : op == (>)  ? ">" : op == (>=) ? "≥" : string(op)
+@inline get_op_str(op) = op == (<) ?
+                         "<" : op == (<=) ?
+                         "≤" : op == (>) ?
+                         ">" : op == (>=) ?
+                         "≥" : string(op)
 
 function antecedent_to_string(antecedent)
     atoms = antecedent.grandchildren
@@ -415,9 +419,3 @@ end
 #     end
 #     return rules
 # end
-
-function make_decisionset(de::DecisionEnsemble)::DecisionSet
-    ll = listrules(de, use_shortforms = true)
-    minimized_rules = build_dnf_rules(ll)
-    ds = DecisionSet(minimized_rules)
-end
