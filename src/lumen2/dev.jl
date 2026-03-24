@@ -63,6 +63,8 @@ function setup_abc()
     # verify that binary exists and is executable
     isfile(abcbinary) || error("ABC binary not found at $abcbinary")
 
+    #abcbinary = ensure_abc_binary(; force_rebuild = force_rebuild_abc) emergency version
+
     # test that ABC binary is working
     try
         run(`$abcbinary -h`; wait=false)
