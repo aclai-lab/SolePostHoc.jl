@@ -7,6 +7,7 @@ const SM = SoleModels
 using SoleData
 const SD = SoleData
 
+using CategoricalArrays
 using DataFrames
 
 include("config.jl")
@@ -445,9 +446,9 @@ function lumen(
 
     # extract conjuncts
     extractrulesdata = ExtractRulesData(config, model)
-    nclasses = length(get_classnames(extractrulesdata))
+    classes = get_classnames(extractrulesdata)
+    nclasses = length(classes)
 
-    # formulas         = Vector{SL.LeftmostLinearForm}(undef, nclasses)
     formulas =
         Vector{Vector{Union{
             SL.LeftmostConjunctiveForm{SL.Atom},
@@ -458,8 +459,10 @@ function lumen(
         atoms = get_atoms(extractrulesdata, i)
         formulas[i] = run_minimization(config, atoms)
     end
-@show SL.LeftmostDisjunctiveForm.(formulas)
-    return SL.LeftmostDisjunctiveForm.(formulas)
+
+    return SM.DecisionSet(
+        SM.Rule.(SL.LeftmostDisjunctiveForm.(formulas), classes)
+    )
 end
 
 function lumen(
