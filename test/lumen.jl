@@ -38,6 +38,11 @@ ds = SX.setup_dataset(
 )
 # Train model with SoleXplorer
 solem = SX.train_test(ds)
-
-
-# _solexplorer(ds, solem; extractor, measures)
+# Explore the model
+# In this case, extracting rules with Lumen
+rules = SX.solexplorer(
+    ds, solem;
+    extractor=LumenRuleExtractor(
+        minimization_scheme=:abc
+    )
+)
