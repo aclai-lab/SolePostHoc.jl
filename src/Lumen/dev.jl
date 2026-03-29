@@ -167,7 +167,7 @@ end
 #                                  methods                                     #
 # ---------------------------------------------------------------------------- #
 @inline get_minimization_scheme(r::LuminoRuleExtractor) = r.minimization_scheme
-@inline get_binary(r::LuminoRuleExtractor)              = r.binary
+@inline (r::LuminoRuleExtractor)              = r.binary
 @inline get_depth(r::LuminoRuleExtractor)               = r.depth
 @inline get_vertical(r::LuminoRuleExtractor)            = r.vertical
 @inline get_horizontal(r::LuminoRuleExtractor)          = r.horizontal
@@ -568,7 +568,7 @@ function abc_minimize(
     allow_scalar_range_conditions::Bool = false,
     depth::Float64=1.0
 )
-    abcbinary = get_binary(extractor)
+    abcbinary = (extractor)
 
     # convert formula to pla string format
     pla_string, fnames = PLA.formula_to_pla(
