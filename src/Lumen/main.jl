@@ -17,7 +17,21 @@ export lumen, LumenConfig, LumenResult
 # ---------------------------------------------------------------------------- #
 #                   initial minimization algorithms setup                      #
 # ---------------------------------------------------------------------------- #
-function setup_espresso() end
+function setup_espresso()
+    # auto setup espresso binary if not specified
+    espressobinary = try
+        joinpath(SD.load(SD.MITESPRESSOLoader()), "espresso")
+    catch e
+        error("Failed to setup espresso binary: $e")
+    end
+
+    # verify that binary exists and is executable
+    isfile(espressobinary) ||
+        error("espresso binary not found at $espressobinary")
+
+    return espressobinary
+end
+
 function setup_boom() end
 
 function setup_abc() 
@@ -140,8 +154,10 @@ function _truths_by_thresholds(value::Float64, thresholds::Vector{Float64})
         _truths_by_thresholds(thresholds)[idx]
 end
 
-@inline  _truths_by_thresholds(values::Tuple{Vararg{Float64}}, thresholds::Vector{Vector{Float64}}) =
-    _truths_by_thresholds.(values, thresholds)
+@inline _truths_by_thresholds(
+    values::Tuple{Vararg{Float64}},
+    thresholds::Vector{Vector{Float64}}
+) = _truths_by_thresholds.(values, thresholds)
 
 function _thrs_with_prevfloat(thresholds::Vector{Float64})
     isempty(thresholds) && return [NaN]
@@ -277,9 +293,7 @@ struct ExtractRulesData
             grp_truths[i] = truths[indices]
         end
 
-        return ExtractRulesData(
-            grp_truths, thresholds, featurenames, classnames
-        )
+        return new(grp_truths, thresholds, featurenames, classnames)
     end
 end
 
@@ -412,6 +426,7 @@ end
 #                              minimization core                               #
 # ---------------------------------------------------------------------------- #
 function run_minimization(
+    ::Val{:abc},
     extractor::LumenConfig,
     atoms::Vector{Vector{SL.Atom}}
 )
@@ -420,12 +435,21 @@ function run_minimization(
             atoms, get_binary(extractor); fast = 1, depth=get_depth(extractor)
         )
 
-    if get_minimization_scheme(extractor) in
-        [:mitespresso, :boom, :abc, :abc_balanced, :abc_thorough]
-        minimized_formula = _refine_dnf(minimized_formula)
-    end
+    return _refine_dnf(minimized_formula)
+end
 
-    minimized_formula
+function run_minimization(
+    ::Val{:mitespresso},
+    extractor::LumenConfig,
+    atoms::Vector{Vector{SL.Atom}}
+    # TODO mitespresso_kwargs...
+)
+    minimized_formula =
+        SD.espresso_minimize(
+            atoms, get_binary(extractor); depth=get_depth(extractor)
+        )
+
+    return _refine_dnf(minimized_formula)
 end
 
 # ---------------------------------------------------------------------------- #
@@ -457,7 +481,7 @@ function lumen(
 
     Threads.@threads for i in 1:nclasses
         atoms = get_atoms(extractrulesdata, i)
-        formulas[i] = run_minimization(config, atoms)
+        formulas[i] = run_minimization(Val(get_minimization_scheme(config)), config, atoms)
     end
 
     return SM.DecisionSet(

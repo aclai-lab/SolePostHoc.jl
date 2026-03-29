@@ -11,12 +11,6 @@ using DataFrames, Random
 Xc, yc = @load_iris
 Xc = DataFrame(Xc)
 
-Xr, yr = @load_boston
-Xr = DataFrame(Xr)
-
-natopsloader = SX.NatopsLoader()
-Xts, yts = SX.load(natopsloader)
-
 # ---------------------------------------------------------------------------- #
 #                           How to use SoleXplorer                             #
 # ---------------------------------------------------------------------------- #

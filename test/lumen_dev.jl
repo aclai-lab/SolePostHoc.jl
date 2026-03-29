@@ -13,7 +13,8 @@ using SoleData.Artifacts
 abcloader = ABCLoader()
 mitloader = MITESPRESSOLoader()
 
-Xc, yc = @load_iris
+Xc, yc = MLJ.MLJBase.@load_iris
+# Xc, yc = MLJ.MLJBase.@load_crabs
 Xc = DataFrame(Xc)
 
 train_ratio = 0.7
@@ -23,7 +24,7 @@ train = ttpairs[1][1]
 test = ttpairs[1][2]
 
 DTModel = MLJ.@load RandomForestClassifier pkg=DecisionTree verbosity=0
-model = DTModel(n_trees = 2, rng=rng)
+model = DTModel(n_trees=5, rng=rng)
 mach = machine(model, Xc, yc)
 
 MLJ.fit!(mach, rows = train, verbosity = 0)
@@ -42,4 +43,5 @@ extracted_rules = RuleExtraction.extractrules(
     extractor,
     solem_rf;
     minimization_scheme = :abc,
+    # minimization_scheme = :mitespresso,
 );
