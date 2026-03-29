@@ -45,7 +45,7 @@ ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
 [sources]
 SoleData = {rev = "devMinimize", url = "https://github.com/aclai-lab/SoleData.jl"}
-SoleModels = {rev = "main", url = "https://github.com/aclai-lab/SoleData.jl"}
+SoleModels = {rev = "main", url = "https://github.com/aclai-lab/SoleModels.jl"}
 
 [compat]
 AbstractTrees = "0.4"
