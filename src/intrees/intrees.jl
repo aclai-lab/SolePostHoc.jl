@@ -371,7 +371,7 @@ and sequential covering (stel).
 - `rule_complexity_metric::Symbol=:natoms`: Metric to use for estimating a rule complexity measure
 - `max_rules::Int=-1`: maximum number of rules in the final decision list (excluding default rule). Use -1 for unlimited rules.
 - `min_coverage::Union{Float64,Nothing}=nothing`: minimum rule coverage for stel
-- See [`modalextractrules`](@ref) keyword arguments...
+- See [`extractrules`](@ref) keyword arguments...
 
 Although the method was originally presented for forests it is hereby extended to work with any symbolic models.
 

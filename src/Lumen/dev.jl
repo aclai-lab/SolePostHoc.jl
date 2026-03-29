@@ -1,5 +1,5 @@
 using Test
-# using SoleXplorer
+using SoleXplorer
 
 using MLJ
 using DataFrames
@@ -19,7 +19,7 @@ model = RandomForestClassifier(n_trees=5)
 # model = RandomForestClassifier(n_trees=20)
 # model = RandomForestClassifier(n_trees=100)
 
-modelc = symbolic_analysis(Xc, yc; model, resampling, seed)
+modelc = solexplorer(Xc, yc; model, resampling, seed)
 
 # ---------------------------------------------------------------------------- #
 # using SolePostHoc
@@ -552,7 +552,7 @@ end
 function clean_abc_output(raw_pla::String)
     lines = split(raw_pla, '\n')
     pla_lines = filter(l -> !isempty(strip(l)) &&
-                        (startswith(l, '.') || occursin(r"^[01\-]+ ", l)), lines)
+        (startswith(l, '.') || occursin(r"^[01\-]+ ", l)), lines)
     return join(pla_lines, '\n')
 end
 

@@ -19,7 +19,7 @@ SolePostHoc.jl provides knowledge extraction algorithms through a uniform interf
 
 ```julia
 struct ALGORITHMNAME <: RuleExtractor end
-modalextractrules(:ALGORITHMNAME, model, args...)
+extractrules(:ALGORITHMNAME, model, args...)
 ```
 
 SolePostHoc.jl integrates a wide range of algorithms for knowledge extraction, including:
