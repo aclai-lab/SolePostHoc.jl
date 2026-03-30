@@ -14,7 +14,8 @@ end
 println("Julia version: ", VERSION)
 
 test_suites =
-    [("Generic rule Extraction test with rule_extraction.jl", ["rule_extraction.jl"]),]
+    [("Generic rule Extraction test with rule_extraction.jl", ["rule_extraction.jl"]),
+    ("ORCA Forest Compression", ["orca_compression.jl"])]
 
 @testset "SolePostHoc.jl" begin
     for ts in eachindex(test_suites)
