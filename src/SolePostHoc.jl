@@ -14,7 +14,9 @@ listrules(m, X::AbstractDataFrame, y, args...; kwargs...) = listrules(m, args...
 mse = (y_pred, t_true) -> (sum((y_true .- y_pred) .^ 2) / length(y_true))
 
 include("rule-extraction.jl")
-
 @reexport using .RuleExtraction
+
+include("orca/orca.jl")
+@reexport using .orca
 
 end
