@@ -479,8 +479,7 @@ function lumen(
             SyntaxStructure
         }}}(undef, nclasses)
 
-    # Threads.@threads for i in 1:nclasses
-    for i in 1:nclasses
+    Threads.@threads for i in 1:nclasses
         atoms = get_atoms(extractrulesdata, i)
         formulas[i] = isempty(atoms) ?
             [] :
