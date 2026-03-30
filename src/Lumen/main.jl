@@ -432,7 +432,7 @@ function run_minimization(
 )
     minimized_formula =
         SD.abc_minimize(
-            atoms, get_binary(extractor); fast = 1, depth=get_depth(extractor)
+            atoms, get_binary(extractor); fast=1, depth=get_depth(extractor)
         )
 
     return _refine_dnf(minimized_formula)
@@ -492,7 +492,7 @@ function lumen(
     valid_mask = .!isempty.(formulas)
     formulas   = formulas[valid_mask]
     classes    = classes[valid_mask]
-    
+
     return SM.DecisionSet(
         SM.Rule.(SL.LeftmostDisjunctiveForm.(formulas), classes)
     )
