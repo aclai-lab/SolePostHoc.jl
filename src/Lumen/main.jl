@@ -407,17 +407,17 @@ function _refine_dnf(
     terms::Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, SyntaxStructure}}
 )  
     length(terms) ≤ 1 && return terms
-    
+
     all_bounds = map(term -> SD.extract_term_bounds(term; silent=true), terms)
-    
+
     # find terms not strictly dominated by any other term
     keep_mask = map(enumerate(all_bounds)) do (i, bounds_i)
         !any(j -> i ≠ j && SD.strictly_dominates(
             all_bounds[j], bounds_i), eachindex(all_bounds))
     end
-    
+
     kept_terms = terms[keep_mask]
-    
+
     # safety check: never return empty formula
     return isempty(kept_terms) ? terms : kept_terms
 end
