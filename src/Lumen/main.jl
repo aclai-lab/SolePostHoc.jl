@@ -479,11 +479,20 @@ function lumen(
             SyntaxStructure
         }}}(undef, nclasses)
 
-    Threads.@threads for i in 1:nclasses
+    # Threads.@threads for i in 1:nclasses
+    for i in 1:nclasses
         atoms = get_atoms(extractrulesdata, i)
-        formulas[i] = run_minimization(Val(get_minimization_scheme(config)), config, atoms)
+        formulas[i] = isempty(atoms) ?
+            [] :
+            run_minimization(
+                Val(get_minimization_scheme(config)), config, atoms
+            )
     end
 
+    valid_mask = .!isempty.(formulas)
+    formulas   = formulas[valid_mask]
+    classes    = classes[valid_mask]
+    
     return SM.DecisionSet(
         SM.Rule.(SL.LeftmostDisjunctiveForm.(formulas), classes)
     )
