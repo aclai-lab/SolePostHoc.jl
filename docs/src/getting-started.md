@@ -20,7 +20,7 @@ The second approach uses the unified interface through rule extractors:
 ```julia
 # Extract rules using the unified interface
 extractor = LumenRuleExtractor()
-decision_set = modalextractrules(extractor, model, X_test, y_test, args...)
+decision_set = extractrules(extractor, model, X_test, y_test, args...)
 ```
 
 The key advantage of the second approach is that it not only executes the original algorithm (equivalent to calling `lumen(...)` directly) but also converts the output into a `DecisionSet`. A `DecisionSet` is a vector of propositional logical rules in Disjunctive Normal Form (DNF), with one rule per class/label.
@@ -48,7 +48,7 @@ A `DecisionSet` represents the extracted knowledge as a collection of logical ru
 The main entry point for rule extraction is:
 
 ```julia
-modalextractrules(extractor::RuleExtractor, model, args...)
+extractrules(extractor::RuleExtractor, model, args...)
 ```
 
 ## Algorithm Types
@@ -143,7 +143,7 @@ struct MyCustomExtractor <: RuleExtractor
     # algorithm-specific parameters
 end
 
-function modalextractrules(extractor::MyCustomExtractor, model, args...)
+function extractrules(extractor::MyCustomExtractor, model, args...)
     # implement your custom convert `generic type of output in decision set` logic
     # return a DecisionSet
 end

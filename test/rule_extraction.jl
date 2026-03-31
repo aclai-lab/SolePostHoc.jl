@@ -49,10 +49,10 @@ apply!(solem_rf, logiset, yc[test])
 # ---------------------------------------------------------------------------- #
 extractor = InTreesRuleExtractor()
 extracted_rules =
-    RuleExtraction.modalextractrules(extractor, solem_dt, Xc[test, :], yc[test])
+    RuleExtraction.extractrules(extractor, solem_dt, Xc[test, :], yc[test])
 
 extractor = InTreesRuleExtractor(min_coverage=1.0)
-extracted_rules = RuleExtraction.modalextractrules(
+extracted_rules = RuleExtraction.extractrules(
     extractor,
     solem_dt,
     Xc[test, :],
@@ -60,7 +60,7 @@ extracted_rules = RuleExtraction.modalextractrules(
 )
 
 @test_throws MethodError InTreesRuleExtractor(invalid=true)
-@test_throws ErrorException RuleExtraction.modalextractrules(
+@test_throws ErrorException RuleExtraction.extractrules(
     extractor,
     solem_dt,
     Xc[test, :],
@@ -73,15 +73,15 @@ extracted_rules = RuleExtraction.modalextractrules(
 # ---------------------------------------------------------------------------- #
 extractor = LumenRuleExtractor()
 
-extracted_rules = RuleExtraction.modalextractrules(extractor, solem_dt);
-extracted_rules = RuleExtraction.modalextractrules(
+extracted_rules = RuleExtraction.extractrules(extractor, solem_dt);
+extracted_rules = RuleExtraction.extractrules(
     extractor,
     solem_dt;
     minimization_scheme = :mitespresso,
 );
 
-extracted_rules = RuleExtraction.modalextractrules(extractor, solem_rf);
-extracted_rules = RuleExtraction.modalextractrules(
+extracted_rules = RuleExtraction.extractrules(extractor, solem_rf);
+extracted_rules = RuleExtraction.extractrules(
     extractor,
     solem_rf;
     minimization_scheme = :mitespresso,
@@ -93,8 +93,8 @@ extracted_rules = RuleExtraction.modalextractrules(
 extractor=BATreesRuleExtractor()
 
 extracted_rules =
-    RuleExtraction.modalextractrules(extractor, solem_rf; dataset_name = "Sole_Analysis")
-extracted_rules = RuleExtraction.modalextractrules(
+    RuleExtraction.extractrules(extractor, solem_rf; dataset_name = "Sole_Analysis")
+extracted_rules = RuleExtraction.extractrules(
     extractor,
     solem_rf;
     dataset_name = "Sole_Analysis",
@@ -107,7 +107,7 @@ extracted_rules = RuleExtraction.modalextractrules(
     extractor=RULECOSIPLUSRuleExtractor()
 
     extracted_rules =
-        RuleExtraction.modalextractrules(extractor, solem_rf, Xc[test, :], yc[test])
+        RuleExtraction.extractrules(extractor, solem_rf, Xc[test, :], yc[test])
 
 # ---------------------------------------------------------------------------- #
 #                           refne rules extraction                             #
@@ -116,11 +116,11 @@ extractor=REFNERuleExtractor()
 
 Xmin = map(minimum, eachcol(Xc[test, :]))
 Xmax = map(maximum, eachcol(Xc[test, :]))
-extracted_rules = RuleExtraction.modalextractrules(extractor, solem_rf, Xmin, Xmax; L = 2)
+extracted_rules = RuleExtraction.extractrules(extractor, solem_rf, Xmin, Xmax; L = 2)
 
 # ---------------------------------------------------------------------------- #
 #                          trepan rules extraction                             #
 # ---------------------------------------------------------------------------- #
 extractor=TREPANRuleExtractor()
 
-extracted_rules = RuleExtraction.modalextractrules(extractor, solem_rf, Xc[test, :])
+extracted_rules = RuleExtraction.extractrules(extractor, solem_rf, Xc[test, :])

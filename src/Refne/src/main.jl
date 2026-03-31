@@ -60,6 +60,7 @@ The algorithm works by:
 ```julia
 model = load_decision_tree_model()
 refne(model, Xmin, Xmax)
+```
 
 See also
 [`AbstractModel`](@ref),

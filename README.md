@@ -30,7 +30,7 @@
 - Support for surrogate model generation and knowledge distillation
 
 ### Unified Interface
-All algorithms are accessible through a consistent API via the `SolePostHoc.modalextractrules` function, enabling seamless comparison between different extraction methods.
+All algorithms are accessible through a consistent API via the `SolePostHoc.extractrules` function, enabling seamless comparison between different extraction methods.
 
 ## Usage
 
@@ -47,8 +47,8 @@ extracted_rules = intrees(model, X_test, y_test)
 extractor_lumen = LumenRuleExtractor()
 extractor_intrees = IntreesRuleExtractor()
 
-decision_set_lumen = modalextractrules(extractor_lumen, model)
-decision_set_intrees = modalextractrules(extractor_intrees, model, X_test, y_test)
+decision_set_lumen = extractrules(extractor_lumen, model)
+decision_set_intrees = extractrules(extractor_intrees, model, X_test, y_test)
 ```
 
 The unified interface converts outputs into `DecisionSet` objects—vectors of propositional logical rules in Disjunctive Normal Form (DNF), with one rule per class label.
@@ -62,7 +62,7 @@ rf_model = train_random_forest(X_train, y_train)
 
 # Extract interpretable rules using LUMEN
 extractor = LumenRuleExtractor()
-interpretable_rules = modalextractrules(extractor, rf_model)
+interpretable_rules = extractrules(extractor, rf_model)
 
 # The result is a DecisionSet with logical rules explaining the model's decisions
 ```

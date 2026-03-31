@@ -27,31 +27,31 @@ using SoleModels: bestguess, evaluaterule
 # using Statistics: cor
 
 using SoleModels: RuleExtractor
-import SoleModels: isexact, modalextractrules
+import SoleModels: isexact, extractrules
 
 function _get_rule_extractor_docstring(ruleextractorname::String, method)
     return """Extract rules from a symbolic model using [`$(string(method))`](ref).""" *
            "\n\n" *
-           """See also [`modalextractrules`](@ref), [`RuleExtractor`](@ref)."""
+           """See also [`extractrules`](@ref), [`RuleExtractor`](@ref)."""
 end
 
 export convert_classif_rules, refne_classification_rules
 include("shared_utils.jl")
 
 
-# ---------------------------------------------------------------------------- #
-#                                    utils                                     #
-# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------------------- #
+#                                    utils                                                 #
+# ---------------------------------------------------------------------------------------- #
 featurenames(s::AbstractModel) = s.info.featurenames
 
-# ---------------------------------------------------------------------------- #
-#                                  InTrees                                     #
-# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------------------- #
+#                                  InTrees                                                 #
+# ---------------------------------------------------------------------------------------- #
 export InTreesRuleExtractor
 export intrees
 include("intrees/intrees.jl")
 
-function modalextractrules(extractor::InTreesRuleExtractor, args...)::DecisionSet
+function extractrules(extractor::InTreesRuleExtractor, args...)::DecisionSet
     dl = intrees(extractor, args...)
     ll = listrules(dl, use_shortforms=false)
     return if get_dns(extractor)
@@ -70,15 +70,15 @@ export lumen, Lumen
 export LumenRuleExtractor
 
 using SoleModels: RuleExtractor
-import SoleModels: isexact, modalextractrules
+import SoleModels: isexact, extractrules
 
-include("lumen/main.jl")
+include("Lumen/main.jl")
 @reexport using .Lumen
 
-"""$(_get_rule_extractor_docstring("LumenRuleExtractor", lumen))"""
+"""$(_get_rule_extractor_docstring("LumenRuleExtractor", Lumen))"""
 struct LumenRuleExtractor <: RuleExtractor end
 
-function modalextractrules(::LumenRuleExtractor, m, args...; kwargs...)
+function extractrules(::LumenRuleExtractor, m, args...; kwargs...)
     ds = lumen(m, args...; kwargs...)
     return ds
 end
@@ -97,7 +97,7 @@ include("BA-Trees/src/main.jl")
 """$(_get_rule_extractor_docstring("BATreesRuleExtractor", batrees))"""
 struct BATreesRuleExtractor <: RuleExtractor end
 
-function modalextractrules(::BATreesRuleExtractor, m, args...; kwargs...)
+function extractrules(::BATreesRuleExtractor, m, args...; kwargs...)
     dsbatrees = batrees(m, dsOutput = true, args...; kwargs...)
     return dsbatrees
 end
@@ -115,9 +115,9 @@ include("Refne/src/apiREFNESole.jl")
 """$(_get_rule_extractor_docstring("REFNERuleExtractor", REFNE))"""
 struct REFNERuleExtractor <: RuleExtractor end
 
-function modalextractrules(::REFNERuleExtractor, m, args...; kwargs...)
+function extractrules(::REFNERuleExtractor, m, args...; kwargs...)
     dl = refne(m, args...; kwargs...)
-    ds = convertApi(dl)
+    ds = make_decisionset(dl)
     return ds
 end
 
@@ -134,9 +134,9 @@ include("Trepan/src/main.jl")
 """$(_get_rule_extractor_docstring("TREPANRuleExtractor", TREPAN))"""
 struct TREPANRuleExtractor <: RuleExtractor end
 
-function modalextractrules(::TREPANRuleExtractor, m, args...; kwargs...)
+function extractrules(::TREPANRuleExtractor, m, args...; kwargs...)
     dl = trepan(m, args...; kwargs...)
-    ds = convertApi(dl)
+    ds = make_decisionset(dl)
     return ds
 end
 
@@ -153,7 +153,7 @@ include("RuleCosiplus/src/apiRuleCosi.jl")
 """$(_get_rule_extractor_docstring("RULECOSIPLUSRuleExtractor", RULECOSIPLUS))"""
 struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
 
-function modalextractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
+function extractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
     dl = rulecosiplus(m, args...; kwargs...) # decision list
     ll = listrules(dl, use_shortforms = false) # decision list to list of rules
     rules_obj = convert_classif_rules(dl, ll)

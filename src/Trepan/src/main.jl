@@ -35,7 +35,7 @@ function trepan(
     seed = 42,
 )
 
-    Xdf, Xm = X isa DataFrame ? (X, Matrix(X)) : (DataFrame(X, :auto), X)
+    Xdf, Xm = X isa AbstractDataFrame ? (X, Matrix(X)) : (DataFrame(X, :auto), X)
 
     y_pred = SoleModels.apply(f, SoleData.scalarlogiset(Xdf; allow_propositional = true))
 
