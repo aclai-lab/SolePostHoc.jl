@@ -22,6 +22,7 @@
 - **TREPAN**;
 - **REFNE**;
 - **BATrees**.
+- **RuleCosi+**.
 
 ### Model Analysis Capabilities
 - Rule extraction from decision trees, random forests, and black-box models
