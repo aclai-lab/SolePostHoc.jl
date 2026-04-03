@@ -14,11 +14,6 @@ pipeline execution) lives in `utils.jl`, `parts.jl`, and `pipeline.jl`.
 - `with_vector`      – functional updater for the bitvector
 - `with_forest`      – functional updater for the forest
 """
-module types
-
-using SoleModels
-
-export GeneticForest, vector, original_forest, with_vector, with_forest
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -100,5 +95,3 @@ replaced. The bitvector is preserved unchanged.
 """
 with_forest(gf::GeneticForest, new_forest::DecisionEnsemble) =
     GeneticForest(gf.vector, new_forest)
-
-end  # module types

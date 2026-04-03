@@ -14,16 +14,19 @@ Orchestrates the pipeline stages selected via `parts_to_run`:
 - `types.jl`  – `GeneticForest` struct and accessors
 - `parts.jl`  – `first_part`, `second_part`, `third_part`, `core`
 """
-module orca
+module Orca
 
-include("types.jl")
-include("parts.jl")
-
-using .types
-using .parts
 using SoleModels
+using SoleLogics
+using StatsBase: mode
+using Evolutionary
+using DataFrames
 
 export compression
+
+include("types.jl")
+include("utils.jl")
+include("parts.jl")
 
 
 """
@@ -48,6 +51,17 @@ Run the compression pipeline on the inserted forest.
 - `[:depth_alphabet]`   – pruning + alphabet  (all trees kept, no selection)
 - `[:full_dimensional]` – full pipeline 
 """
+
+const PARTS_MAP = Dict(
+    :size             => [1],
+    :depth            => [2],
+    :alphabet         => [3],
+    :size_depth       => [1, 2],
+    :size_alphabet    => [1, 3],
+    :depth_alphabet   => [2, 3],
+    :full_dimensional => [1, 2, 3]
+)
+
 function compression(
         original_f::DecisionEnsemble,
         mode::Symbol,
@@ -57,18 +71,10 @@ function compression(
         n_generations::Int        = 100,
         penalty_weight::Float64   = 0.3)
 
-        parts_map = Dict(
-        :size             => [1],
-        :depth            => [2],
-        :alphabet         => [3],
-        :size_depth       => [1, 2],
-        :size_alphabet    => [1, 3],
-        :depth_alphabet   => [2, 3],
-        :full_dimensional => [1, 2, 3])
 
     # ── Validate parts_to_run ─────────────────────────────────────────────────
-    if !haskey(parts_map, mode)
-        error("Error: please use one of the following symbol: ", join(keys(parts_map), ", "))
+    if !haskey(PARTS_MAP, mode)
+        error("Error: please use one of the following symbol: ", join(keys(PARTS_MAP), ", "))
     end  
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -84,7 +90,7 @@ function compression(
     #   higher → prefer compression over accuracy
     #   lower  → prefer accuracy over compression
     # ─────────────────────────────────────────────────────────────────────────
-    parts_to_run = parts_map[mode]
+    parts_to_run = PARTS_MAP[mode]
 
 
     n_trees = length(original_f.models)
@@ -135,4 +141,4 @@ function compression(
 
 end  # compression
 
-end  # module orca
+end  # module Orca

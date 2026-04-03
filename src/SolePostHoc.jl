@@ -17,6 +17,6 @@ include("rule-extraction.jl")
 @reexport using .RuleExtraction
 
 include("orca/orca.jl")
-@reexport using .orca
+@reexport using .Orca
 
 end
