@@ -14,6 +14,8 @@ include("config.jl")
 
 export lumen, LumenConfig, LumenResult
 
+const Float = Union{Float32,Float64}
+
 # ---------------------------------------------------------------------------- #
 #                   initial minimization algorithms setup                      #
 # ---------------------------------------------------------------------------- #
@@ -318,7 +320,7 @@ Filter `atoms` to only those whose feature name matches `feat`.
 ) = filter(a -> SM.featurename(get_feature(a)) == feat, atoms)
 
 """
-    _truths_by_thresholds(thresholds::Vector{Float64}) -> Vector{BitVector}
+    _truths_by_thresholds(thresholds::Vector{Float}) -> Vector{BitVector}
 
 Build a lookup table mapping each "threshold region" to the truth-value assignment
 it implies for the `length(thresholds)` binary conditions.
@@ -328,21 +330,21 @@ encodes, for each condition `j`, whether `value < thresholds[j]` is true in that
 region using a Gray-code–inspired bit pattern.
 
 # Arguments
-- `thresholds::Vector{Float64}`: Sorted threshold values.
+- `thresholds::Vector{<:Float}`: Sorted threshold values.
 
 # Returns
 - `Vector{BitVector}` of length `n + 1`, one entry per ordinal region.
 
 ---
 
-    _truths_by_thresholds(thresholds::Vector{Vector{Float64}}) -> Vector{Vector{BitVector}}
+    _truths_by_thresholds(thresholds::Vector{Vector{<:Float}}) -> Vector{Vector{BitVector}}
 
 Broadcast version: applies `_truths_by_thresholds` element-wise to a vector of
 threshold vectors (one per feature).
 
 ---
 
-    _truths_by_thresholds(value::Float64, thresholds::Vector{Float64}) -> BitVector
+    _truths_by_thresholds(value::Float, thresholds::Vector{<:Float}) -> BitVector
 
 Return the truth-value assignment for a single concrete `value` against `thresholds`.
 
@@ -352,14 +354,14 @@ is not found in `thresholds`.
 ---
 
     _truths_by_thresholds(
-        values::Tuple{Vararg{Float64}},
-        thresholds::Vector{Vector{Float64}}
+        values::Tuple{Vararg{<:Float}},
+        thresholds::Vector{Vector{<:Float}}
     ) -> Vector{BitVector}
 
 Broadcast version: element-wise application for a tuple of values paired with a
 vector of per-feature threshold vectors.
 """
-function _truths_by_thresholds(thresholds::Vector{Float64})
+function _truths_by_thresholds(thresholds::Vector{<:Float})
     ntruths = length(thresholds)
     truths = Vector{BitVector}(undef, ntruths + 1)
 
@@ -374,10 +376,10 @@ function _truths_by_thresholds(thresholds::Vector{Float64})
     return truths
 end
 
-@inline _truths_by_thresholds(thresholds::Vector{Vector{Float64}}) =
+@inline _truths_by_thresholds(thresholds::Vector{T}) where {T<:Vector{<:Float}}=
     _truths_by_thresholds.(thresholds)
 
-function _truths_by_thresholds(value::Float64, thresholds::Vector{Float64})
+function _truths_by_thresholds(value::Float, thresholds::Vector{<:Float})
     isnan(value) && return BitVector()
 
     idx = findfirst(==(value), thresholds)
@@ -387,12 +389,12 @@ function _truths_by_thresholds(value::Float64, thresholds::Vector{Float64})
 end
 
 @inline _truths_by_thresholds(
-    values::Tuple{Vararg{Float64}},
-    thresholds::Vector{Vector{Float64}}
-) = _truths_by_thresholds.(values, thresholds)
+    values::Tuple{Vararg{<:Float}},
+    thresholds::Vector{T}
+) where {T<:Vector{<:Float}}= _truths_by_thresholds.(values, thresholds)
 
 """
-    _thrs_with_prevfloat(thresholds::Vector{Float64}) -> Vector{Float64}
+    _thrs_with_prevfloat(thresholds::Vector{<:Float}) -> Vector{Floa<:Floatt64}
 
 Append `prevfloat(last(thresholds))` to `thresholds`, producing a vector of
 length `n + 1`.
@@ -404,15 +406,15 @@ Returns `[NaN]` for an empty input vector.
 
 ---
 
-    _thrs_with_prevfloat(thresholds::Vector{Vector{Float64}}) -> Vector{Vector{Float64}}
+    _thrs_with_prevfloat(thresholds::Vector{Vector{<:Float}}) -> Vector{Vector{Float64}}
 
 Broadcast version: applies `_thrs_with_prevfloat` element-wise.
 """
-function _thrs_with_prevfloat(thresholds::Vector{Float64})
-    isempty(thresholds) && return [NaN]
+function _thrs_with_prevfloat(thresholds::Vector{T}) where T<:Float
+    isempty(thresholds) && return T[T(NaN)]
     
     nthrs = length(thresholds)
-    result = Vector{Float64}(undef, nthrs + 1)
+    result = Vector{T}(undef, nthrs + 1)
     @inbounds for i = 1:nthrs
         result[i] = thresholds[i]
     end
@@ -420,7 +422,7 @@ function _thrs_with_prevfloat(thresholds::Vector{Float64})
     return result
 end
 
-@inline  _thrs_with_prevfloat(thresholds::Vector{Vector{Float64}}) =
+@inline _thrs_with_prevfloat(thresholds::Vector{T}) where {T<:Vector{<:Float}} =
     _thrs_with_prevfloat.(thresholds)
 
 # ---------------------------------------------------------------------------- #
@@ -463,7 +465,7 @@ end
 """
     generate_disjunct(
         truths::Vector{BitVector},
-        thresholds::Vector{Vector{Float64}},
+        thresholds::Vector{Vector{<:Float}},
         features::Vector{Symbol}
     ) -> Vector{SL.Atom}
 
@@ -475,7 +477,7 @@ threshold for which it is true (`≥`), and pushes the corresponding atoms.
 
 # Arguments
 - `truths::Vector{BitVector}`: Per-feature truth assignments over the sorted thresholds.
-- `thresholds::Vector{Vector{Float64}}`: Per-feature sorted threshold vectors.
+- `thresholds::Vector{Vector{<:Float}}`: Per-feature sorted threshold vectors.
 - `features::Vector{Symbol}`: Feature names aligned with `thresholds`.
 
 # Returns
@@ -483,9 +485,9 @@ threshold for which it is true (`≥`), and pushes the corresponding atoms.
 """
 function generate_disjunct(
     truths::Vector{BitVector},
-    thresholds::Vector{Vector{Float64}},
+    thresholds::Vector{T},
     features::Vector{Symbol}
-)
+) where {T<:Vector{<:Float}}
     disjuncts = Vector{SL.Atom}()
 
     @inbounds for i in eachindex(thresholds)
@@ -520,7 +522,7 @@ minimize per-class DNF formulas.
   truth-value assignments (one per input combination that the model assigns to
   that class). Each assignment is a `Vector{BitVector}` – one `BitVector` per
   feature.
-- `thresholds::Vector{Vector{Float64}}`: Per-feature sorted threshold vectors
+- `thresholds::Vector{Vector{<:Float}}`: Per-feature sorted threshold vectors
   derived from the model's alphabet.
 - `features::Vector{<:SM.Label}`: Ordered feature names aligned with `thresholds`.
 - `classnames::Vector{<:SM.Label}`: Unique class labels in the model.
@@ -544,18 +546,18 @@ The high-level constructor:
 
 See also: [`lumen`](@ref), [`LumenConfig`](@ref), [`get_atoms`](@ref)
 """
-struct ExtractRulesData
+struct ExtractRulesData{T<:Vector{<:Float}}
     grp_truths::Vector{Vector{Vector{BitVector}}}
-    thresholds::Vector{Vector{Float64}}
+    thresholds::Vector{T}
     features::Vector{<:SM.Label}
-    classnames::Vector{<:SM.Label}
+    classnames::AbstractVector{<:SM.Label}
 
     ExtractRulesData(
         grp_truths::Vector{Vector{Vector{BitVector}}},
-        thresholds::Vector{Vector{Float64}},
+        thresholds::Vector{T},
         features::Vector{<:SM.Label},
-        classnames::Vector{<:SM.Label}
-    ) = new(grp_truths, thresholds, features, classnames)
+        classnames::AbstractVector{<:SM.Label}
+    ) where {T<:Vector{<:Float}} = new{T}(grp_truths, thresholds, features, classnames)
 
     function ExtractRulesData(extractor::LumenConfig, model::SM.AbstractModel)
 
@@ -652,12 +654,13 @@ struct ExtractRulesData
         # Descending order matters because the binary encoding used by
         # _truths_by_thresholds expects thresholds from largest to smallest.
         # -------------------------------------------------------------------- #
-        thresholds = Vector{Vector{Float64}}(undef, length(featurenames))
+        type = get_float_type(extractor)
+        thresholds = Vector{Vector{type}}(undef, length(featurenames))
 
         @inbounds for i in eachindex(featurenames)
             idx = findfirst(f -> f == featurenames[i], features)
             thresholds[i] = isnothing(idx) ? 
-                Float64[] :
+                type[] :
                 sort!(get_threshold.(
                     _atoms_for_feature(atoms, features[idx])), rev=true
                 )
@@ -745,7 +748,7 @@ struct ExtractRulesData
         # `features` (atom-extraction ordering) to guarantee alignment with
         # `thresholds`, which was built over `featurenames`.
         # -------------------------------------------------------------------- #
-        return new(grp_truths, thresholds, featurenames, classnames)
+        return new{eltype(thresholds)}(grp_truths, thresholds, featurenames, classnames)
     end
 end
 
@@ -781,8 +784,12 @@ Return the per-feature threshold vectors stored in `e`.
 When `prev_float=true` the augmented form produced by [`_thrs_with_prevfloat`](@ref)
 is returned instead of the raw thresholds.
 """
-function get_thresholds(e::ExtractRulesData; prev_float::Bool=false)
-    thresholds = e.thresholds
+function get_thresholds(
+    e::ExtractRulesData;
+    prev_float::Bool=false,
+    float_type::Type=Float64
+)
+    thresholds = [float_type.(t) for t in e.thresholds]
     return prev_float ? _thrs_with_prevfloat(thresholds) : thresholds
 end
 
@@ -865,7 +872,7 @@ Derive atoms for the `i`-th class.
 
     get_atoms(
         truths::Vector{Vector{BitVector}},
-        thresholds::Vector{Vector{Float64}},
+        thresholds::Vector{Vector{<:Float}},
         features::Vector{Symbol}
     ) -> Vector{Vector{SL.Atom}}
 
@@ -873,8 +880,12 @@ Low-level worker: given a flat list of truth assignments, thresholds, and featur
 names, parallelise the call to [`generate_disjunct`](@ref) over all assignments
 and return the resulting atom vectors.
 """
-function get_atoms(e::ExtractRulesData; grouped::Bool=false)
-    thresholds = get_thresholds(e, prev_float=true)
+function get_atoms(
+    e::ExtractRulesData;
+    grouped::Bool=false,
+    float_type::Type=Float64
+)
+    thresholds = get_thresholds(e; prev_float=true, float_type)
     features = get_features(e)
 
     return if grouped
@@ -885,14 +896,14 @@ function get_atoms(e::ExtractRulesData; grouped::Bool=false)
     end
 end
 
-function get_atoms(e::ExtractRulesData, c::SM.Label)
+function get_atoms(e::ExtractRulesData, c::SM.Label; float_type::Type=Float64)
     i = findfirst(g -> get_classname(g) == c, get_grouped_truths(e))
     isnothing(i) ? nothing : get_atoms(e, i)
 end
 
-function get_atoms(e::ExtractRulesData, i::Int)
+function get_atoms(e::ExtractRulesData, i::Int; float_type::Type=Float64)
     truths = get_truths(e, i)
-    thresholds = get_thresholds(e, prev_float=false)
+    thresholds = get_thresholds(e; prev_float=false, float_type)
     features = get_features(e)
 
     get_atoms(truths, thresholds, features)
@@ -900,9 +911,9 @@ end
 
 function get_atoms(
     truths::Vector{Vector{BitVector}},
-    thresholds::Vector{Vector{Float64}},
+    thresholds::Vector{T},
     features::Vector{Symbol}
-)
+) where {T<:Vector{<:Float}}
     conjuncts = Vector{Vector{SL.Atom}}(undef, length(truths))
 
     Threads.@threads for i in eachindex(truths)
@@ -1178,6 +1189,7 @@ function lumen(
     config::LumenConfig,
     model::SM.AbstractModel
 )
+    float_type = get_float_type(config)
     # handle special test modes -> TODO
     # if !isnothing(config.testott) || !isnothing(config.alphabetcontroll)
     #     return handle_test_modes(model, config)
@@ -1199,7 +1211,7 @@ function lumen(
         }}}(undef, nclasses)
 
     Threads.@threads for i in 1:nclasses
-        atoms = get_atoms(extractrulesdata, i)
+        atoms = get_atoms(extractrulesdata, i; float_type)
         formulas[i] = isempty(atoms) ?
             [] :
             run_minimization(
