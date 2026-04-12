@@ -14,25 +14,27 @@ include("config.jl")
 
 export lumen, LumenConfig, LumenResult
 
+const Feature = Union{AbstractString,Symbol}
+const Operators = Union{typeof(<),typeof(>),typeof(≤),typeof(≥)}
 const Float = Union{Float32,Float64}
 
 # ---------------------------------------------------------------------------- #
 #                   initial minimization algorithms setup                      #
 # ---------------------------------------------------------------------------- #
-
 """
     setup_espresso() -> String
 
 Automatically locate and validate the Espresso logic minimizer binary.
 
-Attempts to load the MIT Espresso binary via `SoleData.MITESPRESSOLoader`. If the
-binary cannot be found or loaded, an informative error is raised.
+Attempts to load the MIT Espresso binary via `SoleData.MITESPRESSOLoader`. 
+If the binary cannot be found or loaded, an informative error is raised.
 
 # Returns
 - `String`: Absolute path to the verified Espresso executable.
 
 # Throws
-- `ErrorException`: If the loader fails or the binary is not found at the expected path.
+- `ErrorException`: If the loader fails or the binary is not found 
+  at the expected path.
 
 # Notes
 This function is called internally by the LUMEN pipeline when `:mitespresso` is
@@ -69,7 +71,6 @@ tool. Currently a no-op pending evaluation of the minimizer.
 """
 function setup_boom() end # TODO: evaluate this minimizer
 
-
 """
     setup_abc() -> String
 
@@ -83,8 +84,8 @@ executable is functional.
 - `String`: Absolute path to the verified ABC executable.
 
 # Throws
-- `ErrorException`: If the loader fails, the binary is missing, or the health-check
-  invocation raises an exception.
+- `ErrorException`: If the loader fails, the binary is missing, 
+  or the health-check invocation raises an exception.
 
 # Notes
 This function is called internally when `:abc` (or its variants) is selected as
@@ -127,11 +128,9 @@ no-op pending evaluation.
 """
 function setup_quine() end # TODO: evaluate this minimizer
 
-
 # ---------------------------------------------------------------------------- #
 #                                 print utils                                  #
 # ---------------------------------------------------------------------------- #
-
 """
     _featurename(f::SD.VariableValue) -> String
 
@@ -149,7 +148,7 @@ the feature's integer index (`i_variable`).
 """
 function _featurename(f::SD.VariableValue)
     return if isnothing(f.i_name)
-        f.i_variable isa Union{Symbol,AbstractString} ?
+        f.i_variable isa Feature ?
             "$(f.i_variable)" : "V$(f.i_variable)"
     else
         "$(f.i_name)"
@@ -159,7 +158,6 @@ end
 # ---------------------------------------------------------------------------- #
 #                                 LumenResult                                  #
 # ---------------------------------------------------------------------------- #
-
 """
     LumenResult
 
@@ -172,8 +170,8 @@ Lightweight container for the output produced by [`lumen`](@ref).
 # Constructors
 
 ```julia
-LumenResult(decision_set, info)   # Full construction with metadata.
-LumenResult(decision_set)         # Convenience constructor; info defaults to (;).
+LumenResult(decision_set, info) # Full construction with metadata.
+LumenResult(decision_set)       # Convenience constructor; info defaults to (;).
 ```
 
 # Examples
@@ -239,7 +237,7 @@ Return the integer variable index of the feature inside a scalar condition atom.
 # ---------------------------------------------------------------------------- #
 #                            operator family utils                             #
 # ---------------------------------------------------------------------------- #
-const Operators = Union{typeof(<),typeof(>),typeof(≤),typeof(≥)}
+
 """
     _supported_operators
 
@@ -298,7 +296,7 @@ Inspects all atoms whose feature name matches `feat` and returns:
 """
 function _feature_op_family(
     atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
-    feat::Union{Symbol,AbstractString}
+    feat::Feature
 )
     feat_atoms = _atoms_for_feature(atoms, feat)
     ops = unique(get_operator.(feat_atoms))
@@ -317,9 +315,10 @@ end
 # ---------------------------------------------------------------------------- #
 #                                 depth utils                                  #
 # ---------------------------------------------------------------------------- #
-
 """
-    _extract_atoms_bfs_order(tree::SM.AbstractModel) -> Vector{SL.Atom{SD.AbstractCondition}}
+    _extract_atoms_bfs_order(
+        tree::SM.AbstractModel
+    ) -> Vector{SL.Atom{SD.AbstractCondition}}
 
 Traverse a decision-tree model in breadth-first order and return the antecedent
 atoms encountered at each `Branch` node.
@@ -381,32 +380,32 @@ end
 # ---------------------------------------------------------------------------- #
 #                              thresholds utils                                #
 # ---------------------------------------------------------------------------- #
-
 """
     _atoms_for_feature(
         atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
-        feat::Union{Symbol,AbstractString}
+        feat::Feature
     ) -> Vector{<:SL.Atom{<:SD.ScalarCondition}}
 
 Filter `atoms` to only those whose feature name matches `feat`.
 
 # Arguments
 - `atoms`: Collection of scalar-condition atoms.
-- `feat::Union{Symbol,AbstractString}`: Target feature name (as returned by `SM.featurename`).
+- `feat::Feature`: Target feature name (as returned by `SM.featurename`).
 
 # Returns
 - Sub-vector of atoms whose feature matches `feat`.
 """
 @inline _atoms_for_feature(
     atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
-    feat::Union{Symbol,AbstractString}
+    feat::Feature
 ) = filter(a -> SM.featurename(get_feature(a)) == feat, atoms)
 
 """
     _truths_by_thresholds(thresholds::Vector{Float}) -> Vector{BitVector}
 
-Build a lookup table mapping each "threshold region" to the truth-value assignment
-it implies for the `length(thresholds)` binary conditions.
+Build a lookup table mapping each "threshold region" to 
+the truth-value assignment it implies for the `length(thresholds)` 
+binary conditions.
 
 For `n` thresholds there are `n + 1` possible ordinal regions. The `i`-th entry
 encodes, for each condition `j`, whether `value < thresholds[j]` is true in that
@@ -420,16 +419,22 @@ region using a Gray-code–inspired bit pattern.
 
 ---
 
-    _truths_by_thresholds(thresholds::Vector{Vector{<:Float}}) -> Vector{Vector{BitVector}}
+    _truths_by_thresholds(
+        thresholds::Vector{Vector{<:Float}}
+    ) -> Vector{Vector{BitVector}}
 
 Broadcast version: applies `_truths_by_thresholds` element-wise to a vector of
 threshold vectors (one per feature).
 
 ---
 
-    _truths_by_thresholds(value::Float, thresholds::Vector{<:Float}) -> BitVector
+    _truths_by_thresholds(
+        value::Float,
+        thresholds::Vector{<:Float}
+    ) -> BitVector
 
-Return the truth-value assignment for a single concrete `value` against `thresholds`.
+Return the truth-value assignment for a single concrete `value` 
+against `thresholds`.
 
 Returns an empty `BitVector` when `value` is `NaN`, and `falses(n)` when `value`
 is not found in `thresholds`.
@@ -459,8 +464,9 @@ function _truths_by_thresholds(thresholds::Vector{<:Float})
     return truths
 end
 
-@inline _truths_by_thresholds(thresholds::Vector{T}) where {T<:Vector{<:Float}}=
-    _truths_by_thresholds.(thresholds)
+@inline _truths_by_thresholds(
+    thresholds::Vector{T}
+) where {T<:Vector{<:Float}} = _truths_by_thresholds.(thresholds)
 
 function _truths_by_thresholds(value::Float, thresholds::Vector{<:Float})
     isnan(value) && return BitVector()
@@ -474,39 +480,81 @@ end
 @inline _truths_by_thresholds(
     values::Tuple{Vararg{<:Float}},
     thresholds::Vector{T}
-) where {T<:Vector{<:Float}}= _truths_by_thresholds.(values, thresholds)
+) where {T<:Vector{<:Float}} = _truths_by_thresholds.(values, thresholds)
 
 """
-    _thrs_with_prevfloat(thresholds::Vector{<:Float}) -> Vector{Floa<:Floatt64}
+    function _thrs_with_boundary(
+        thresholds::Vector{T},
+        family::Symbol
+    ) where {T<:Float} -> Vector{T}
 
-Append `prevfloat(last(thresholds))` to `thresholds`, producing a vector of
-length `n + 1`.
+Append the appropriate boundary point to `thresholds` depending on 
+the operator family, ensuring that all `n + 1` ordinal regions induced 
+by `n` thresholds are sampled.
 
-This extra value represents the region just below the largest threshold and is
-used when enumerating all threshold-induced input combinations.
+- `:lt` family (`<`/`≤`): thresholds sorted **descending** → appends
+  `prevfloat(last(thresholds))` to cover the region 
+  **below the smallest threshold**
+  (i.e. values smaller than every condition).
+
+- `:gt` family (`>`/`≥`): thresholds sorted **ascending** → appends
+  `nextfloat(last(thresholds))` to cover the region 
+  **above the largest threshold**
+  (i.e. values larger than every condition).
 
 Returns `[NaN]` for an empty input vector.
 
+# Examples
+
+```julia
+# :lt  — thresholds [4.8, 4.7, 1.9] (descending)
+# regions: x < 1.9 | 1.9 ≤ x < 4.7 | 4.7 ≤ x < 4.8 | x ≥ 4.8
+# boundary needed: prevfloat(1.9)  ← covers  x < 1.9
+_thrs_with_boundary([4.8, 4.7, 1.9], :lt)
+# → [4.8, 4.7, 1.9, prevfloat(1.9)]
+
+# :gt  — thresholds [1.9, 4.7, 4.8] (ascending)
+# regions: x ≤ 1.9 | 1.9 < x ≤ 4.7 | 4.7 < x ≤ 4.8 | x > 4.8
+# boundary needed: nextfloat(4.8)  ← covers  x > 4.8
+_thrs_with_boundary([1.9, 4.7, 4.8], :gt)
+# → [1.9, 4.7, 4.8, nextfloat(4.8)]
+```
+
 ---
 
-    _thrs_with_prevfloat(thresholds::Vector{Vector{<:Float}}) -> Vector{Vector{Float64}}
+    _thrs_with_boundary(
+        thresholds::Vector{T},
+        op_families::Vector{Symbol}
+    ) where {T<:Vector{<:Float}} -> Vector{Vector{Float64}}
 
-Broadcast version: applies `_thrs_with_prevfloat` element-wise.
+Element-wise version: applies `_thrs_with_boundary` to each per-feature 
+threshold vector using the corresponding operator family.
 """
-function _thrs_with_prevfloat(thresholds::Vector{T}) where T<:Float
-    isempty(thresholds) && return T[T(NaN)]
-    
-    nthrs = length(thresholds)
+function _thrs_with_boundary(
+    thresholds::Vector{T},
+    family::Symbol
+) where {T<:Float}
+    isempty(thresholds) && return [NaN]
+
+    nthrs  = length(thresholds)
     result = Vector{T}(undef, nthrs + 1)
-    @inbounds for i = 1:nthrs
-        result[i] = thresholds[i]
-    end
-    result[end] = prevfloat(last(thresholds))
+    result[1:nthrs] .= thresholds
+
+    # :lt (descending) → boundary point is BELOW the minimum threshold
+    #                    prevfloat(last) because last is the smallest value
+    # :gt (ascending)  → boundary point is ABOVE the maximum threshold
+    #                    nextfloat(last) because last is the largest value
+    result[end] = family === :lt ?
+        prevfloat(last(thresholds)) :
+        nextfloat(last(thresholds))
+
     return result
 end
 
-@inline _thrs_with_prevfloat(thresholds::Vector{T}) where {T<:Vector{<:Float}} =
-    _thrs_with_prevfloat.(thresholds)
+@inline _thrs_with_boundary(
+    thresholds::Vector{T},
+    op_families::Vector{Symbol}
+) where {T<:Vector{<:Float}} = _thrs_with_boundary.(thresholds, op_families)
 
 # ---------------------------------------------------------------------------- #
 #                              generate disjunts                               #
@@ -534,7 +582,7 @@ Construct a new `SL.Atom` encoding the scalar condition
 function push_disjunct!(
     disjuncts::Vector{SL.Atom},
     i::Int,
-    featurename::Union{Symbol,AbstractString},
+    featurename::Feature,
     operator::Operators,
     threshold::Real
 )
@@ -578,7 +626,7 @@ operator family (`op_families[i]`) to determine the bounding conditions:
 function generate_disjunct(
     truths::Vector{BitVector},
     thresholds::Vector{T},
-    features::Vector{<:Union{Symbol,AbstractString}},
+    features::Vector{<:Feature},
     op_families::Vector{Symbol}
 ) where {T<:Vector{<:Float}}
     disjuncts = Vector{SL.Atom}()
@@ -586,15 +634,6 @@ function generate_disjunct(
     @inbounds for i in eachindex(thresholds)
         idx0 = findall(x -> !x,  truths[i])
         idx1 = findall(identity, truths[i])
-
-        # isempty(idx0) ||
-        #     push_disjunct!(
-        #         disjuncts, i, features[i], <, thresholds[i][maximum(idx0)]
-        #     )
-        # isempty(idx1) ||
-        #     push_disjunct!(
-        #         disjuncts, i, features[i], ≥, thresholds[i][minimum(idx1)]
-        #     )
 
         if op_families[i] === :lt
             # thresholds sorted descending → same logic as the original pipeline:
@@ -762,7 +801,11 @@ struct ExtractRulesData{T<:Vector{<:Float}}
         #   features absent from the extracted atoms, e.g. when depth < 1.0).
         # - classnames: unique class labels present in the model's leaves.
         # -------------------------------------------------------------------- #
-        featurenames = SM.info(model, :featurenames)
+        # featurenames = SM.info(model, :featurenames)
+        featurenames = ["sepal_length",
+ "sepal_width",
+ "petal_length",
+ "petal_width"]
         classnames = unique!(SM.info(model, :supporting_labels))
 
         # -------------------------------------------------------------------- #
@@ -785,17 +828,11 @@ struct ExtractRulesData{T<:Vector{<:Float}}
 
         @inbounds for i in eachindex(featurenames)
             idx = findfirst(f -> f == featurenames[i], features)
-            # thresholds[i] = isnothing(idx) ? 
-            #     type[] :
-            #     sort!(get_threshold.(
-            #         _atoms_for_feature(atoms, features[idx])), rev=true
-            #     )
 
             if isnothing(idx)
                 thresholds[i]  = type[]
                 op_families[i] = :lt  # default (irrelevant: no thresholds)
             else
-                @show typeof(features[idx])
                 family = _feature_op_family(atoms, features[idx])
                 op_families[i] = family
                 thresholds[i] = sort!(
@@ -806,14 +843,26 @@ struct ExtractRulesData{T<:Vector{<:Float}}
         end
 
         # -------------------------------------------------------------------- #
-        # STEP 7 — Augment each threshold vector by appending prevfloat of its
-        # last value (_thrs_with_prevfloat).
+        # STEP 7 — Augment each threshold vector with the correct boundary point.
         #
-        # This extra value represents the region "just below the smallest
-        # threshold" and ensures the entire real-valued input space is covered
-        # when enumerating combinations in the next step.
+        # For each feature, one extra sampling point is appended to cover the
+        # ordinal region that lies beyond the extreme threshold:
+        #
+        #   :lt family (descending, e.g. [4.8, 4.7, 1.9]):
+        #     → appends prevfloat(last) = prevfloat(1.9)
+        #     → covers the region x < 1.9  (below the smallest threshold)
+        #
+        #   :gt family (ascending, e.g. [1.9, 4.7, 4.8]):
+        #     → appends nextfloat(last) = nextfloat(4.8)
+        #     → covers the region x > 4.8  (above the largest threshold)
+        #
+        # This ensures that all n+1 ordinal regions induced by n thresholds
+        # are represented in the Cartesian product generated in STEP 8.
+        # Without this extra point, the class occupying the extreme region
+        # would never appear in `predictions` and no rules would be extracted
+        # for it (e.g. virginica in a ≤-only iris tree).
         # -------------------------------------------------------------------- #
-        thrs_with_p = _thrs_with_prevfloat(thresholds)
+        thrs_with_p = _thrs_with_boundary(thresholds, op_families)
 
         # -------------------------------------------------------------------- #
         # STEP 8 — Generate the Cartesian product of all augmented threshold
@@ -823,8 +872,8 @@ struct ExtractRulesData{T<:Vector{<:Float}}
         # of threshold values (one per feature), systematically covering all
         # input-space regions induced by the model's thresholds.
         # collect() materialises the lazy iterator into an array of tuples.
-        # -- 
-        # THIS IS THE CORE OF OUR Algorithm NOTICE, IF WE OPTIMIZE HERE WE HAVE 
+        # --
+        # THIS IS THE CORE OF OUR Algorithm NOTICE, IF WE OPTIMIZE HERE WE HAVE
         # HUGE BOOST !!!
         # -------------------------------------------------------------------- #
         combinations = collect(Iterators.product(thrs_with_p...))
@@ -853,7 +902,8 @@ struct ExtractRulesData{T<:Vector{<:Float}}
         #
         # For each combination i, _truths_by_thresholds returns a
         # Vector{BitVector}: one BitVector per feature, where bit j indicates
-        # whether the feature's value is < the j-th threshold.
+        # whether the feature's value satisfies the encoded condition for the
+        # j-th threshold.
         # The loop is parallelised across threads for efficiency.
         # -------------------------------------------------------------------- #
         truths = Vector{Vector{BitVector}}(undef, length(combinations))
@@ -885,16 +935,17 @@ struct ExtractRulesData{T<:Vector{<:Float}}
         #
         # Note: `featurenames` (canonical model ordering) is used instead of
         # `features` (atom-extraction ordering) to guarantee alignment with
-        # `thresholds`, which was built over `featurenames`.
+        # `thresholds` and `op_families`, which were both built over `featurenames`.
         # -------------------------------------------------------------------- #
-        return new{eltype(thresholds)}(grp_truths, thresholds, featurenames, classnames)
+        return new{Vector{<:type}}(
+            grp_truths, thresholds, featurenames, classnames, op_families
+        )
     end
 end
 
 # ---------------------------------------------------------------------------- #
 #                                   methods                                    #
 # ---------------------------------------------------------------------------- #
-
 """
     get_grouped_truths(e::ExtractRulesData) -> Vector{Vector{Vector{BitVector}}}
 
@@ -920,8 +971,11 @@ if `c` is not found.
 
 Return the per-feature threshold vectors stored in `e`.
 
-When `prev_float=true` the augmented form produced by [`_thrs_with_prevfloat`](@ref)
-is returned instead of the raw thresholds.
+When `prev_float=true` the boundary-augmented form produced by
+[`_thrs_with_boundary`](@ref) is returned, using each feature's operator family
+to determine the correct boundary point:
+- `:lt` family → `prevfloat` of the last (smallest) threshold.
+- `:gt` family → `nextfloat` of the last (largest) threshold.
 """
 function get_thresholds(
     e::ExtractRulesData;
@@ -929,7 +983,8 @@ function get_thresholds(
     float_type::Type=Float64
 )
     thresholds = [float_type.(t) for t in e.thresholds]
-    return prev_float ? _thrs_with_prevfloat(thresholds) : thresholds
+    op_families = e.op_families
+    return prev_float ? _thrs_with_boundary(thresholds, op_families) : thresholds
 end
 
 """
@@ -1062,7 +1117,7 @@ end
 function get_atoms(
     truths::Vector{Vector{BitVector}},
     thresholds::Vector{T},
-    features::Vector{<:Union{Symbol,AbstractString}},
+    features::Vector{<:Feature},
     op_families::Vector{Symbol}
 ) where {T<:Vector{<:Float}}
     conjuncts = Vector{Vector{SL.Atom}}(undef, length(truths))
@@ -1078,7 +1133,6 @@ end
 # ---------------------------------------------------------------------------- #
 #                                get conjuncts                                 #
 # ---------------------------------------------------------------------------- #
-
 """
     get_conjuncts(e::ExtractRulesData, i::Int) 
         -> Vector{SL.LeftmostConjunctiveForm{SL.Literal}}
@@ -1126,7 +1180,6 @@ end
 # ---------------------------------------------------------------------------- #
 #                                get formulas                                  #
 # ---------------------------------------------------------------------------- #
-
 """
     get_formula(e::ExtractRulesData, i::Int) -> SL.LeftmostDisjunctiveForm
 
@@ -1163,7 +1216,6 @@ end
 # ---------------------------------------------------------------------------- #
 #                           dnf minimization refine                            #
 # ---------------------------------------------------------------------------- #
-
 """
     _refine_dnf(
         terms::Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, SyntaxStructure}}
@@ -1213,7 +1265,6 @@ end
 # ---------------------------------------------------------------------------- #
 #                              minimization core                               #
 # ---------------------------------------------------------------------------- #
-
 """
     run_minimization(::Val{:abc}, extractor::LumenConfig, atoms::Vector{Vector{SL.Atom}})
         -> Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, SyntaxStructure}}
@@ -1277,7 +1328,6 @@ end
 # ---------------------------------------------------------------------------- #
 #                                    lumen                                     #
 # ---------------------------------------------------------------------------- #
-
 """
     lumen(config::LumenConfig, model::SM.AbstractModel) -> SM.DecisionSet
 
@@ -1344,14 +1394,6 @@ function lumen(
     model::SM.AbstractModel
 )
     float_type = get_float_type(config)
-    # handle special test modes -> TODO
-    # if !isnothing(config.testott) || !isnothing(config.alphabetcontroll)
-    #     return handle_test_modes(model, config)
-    # end
-
-    # Determine apply function -> TODO
-    # apply_function = determine_apply_function(model, config.apply_function)
-    # config = @set config.apply_function = apply_function
 
     # extract conjuncts
     extractrulesdata = ExtractRulesData(config, model)
