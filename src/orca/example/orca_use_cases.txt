@@ -1,0 +1,38 @@
+=================================================
+      ORCA ALGORITHM - USE CASE COMPARISON       
+=================================================
+
+Dataset: 500 samples, 10 features
+Original forest:
+ - Number of trees: 50
+ - Baseline accuracy: 49.0%
+
+-------------------------------------------------
+MODE: size
+ - Number of trees: 11 (Reduction: 78.0%)
+ - Accuracy: 67.0% (Variation: +18.0%)
+-------------------------------------------------
+MODE: depth
+ - Number of trees: 50 (Reduction: 0.0%)
+ - Accuracy: 49.0% (Variation: +0.0%)
+-------------------------------------------------
+MODE: alphabet
+ - Number of trees: 50 (Reduction: 0.0%)
+ - Accuracy: 55.0% (Variation: +6.0%)
+-------------------------------------------------
+MODE: size_depth
+ - Number of trees: 15 (Reduction: 70.0%)
+ - Accuracy: 63.0% (Variation: +14.0%)
+-------------------------------------------------
+MODE: size_alphabet
+ - Number of trees: 20 (Reduction: 60.0%)
+ - Accuracy: 67.0% (Variation: +18.0%)
+-------------------------------------------------
+MODE: depth_alphabet
+ - Number of trees: 50 (Reduction: 0.0%)
+ - Accuracy: 55.0% (Variation: +6.0%)
+-------------------------------------------------
+MODE: full_dimensional
+ - Number of trees: 17 (Reduction: 66.0%)
+ - Accuracy: 65.0% (Variation: +16.0%)
+-------------------------------------------------
