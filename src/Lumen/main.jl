@@ -147,9 +147,14 @@ the feature's integer index (`i_variable`).
 # Returns
 - `String`: Either `"[<name>]"` or `"V<index>"`.
 """
-_featurename(f::SD.VariableValue) = isnothing(f.i_name) ?
-    "V$(f.i_variable)" :
-    "[$(f.i_name)]"
+function _featurename(f::SD.VariableValue)
+    return if isnothing(f.i_name)
+        f.i_variable isa Union{Symbol,AbstractString} ?
+            "$(f.i_variable)" : "V$(f.i_variable)"
+    else
+        "$(f.i_name)"
+    end
+end
 
 # ---------------------------------------------------------------------------- #
 #                                 LumenResult                                  #
@@ -232,6 +237,84 @@ Return the integer variable index of the feature inside a scalar condition atom.
     atom.value.metacond.feature.i_variable
 
 # ---------------------------------------------------------------------------- #
+#                            operator family utils                             #
+# ---------------------------------------------------------------------------- #
+const Operators = Union{typeof(<),typeof(>),typeof(≤),typeof(≥)}
+"""
+    _supported_operators
+
+The set of scalar comparison operators that LUMEN currently supports.
+
+Supported:
+- `<`  and its negation `≥`  (strictly-less family)
+- `>`  and its negation `≤`  (strictly-greater family)
+
+All four operators are accepted when extracting atoms from a model; however,
+within a single feature all atoms must belong to the same family (either
+`<`/`≥` or `>`/`≤`), because the threshold encoding assumes a consistent
+ordering direction.
+"""
+const _supported_operators = ((<), (≥), (>), (≤))
+
+"""
+    _is_lt_family(op) -> Bool
+
+Return `true` when `op` belongs to the strictly-less family (`<` or `≤`).
+
+The `<`/`≥` family encodes conditions as `value < threshold` and sorts
+thresholds in **descending** order (largest first) so that the Gray-code
+bit pattern in [`_truths_by_thresholds`](@ref) is consistent.
+
+See also: [`_is_gt_family`](@ref)
+"""
+@inline _is_lt_family(op) = op === (<) || op === (≤)
+
+"""
+    _is_gt_family(op) -> Bool
+
+Return `true` when `op` belongs to the strictly-greater family (`>` or `≥`).
+
+The `>`/`≤` family encodes conditions as `value > threshold` and sorts
+thresholds in **ascending** order (smallest first) so that the Gray-code
+bit pattern in [`_truths_by_thresholds`](@ref) is consistent with the
+reversed ordering direction.
+
+See also: [`_is_lt_family`](@ref)
+"""
+@inline _is_gt_family(op) = op === (>) || op === (≥)
+
+"""
+    _feature_op_family(atoms, feat) -> Symbol
+
+Determine the operator family used by the atoms belonging to `feat`.
+
+Inspects all atoms whose feature name matches `feat` and returns:
+- `:lt` if every operator in that group belongs to the `<`/`≤` family.
+- `:gt` if every operator in that group belongs to the `>`/`≥` family.
+
+# Throws
+- `ArgumentError`: If the feature's atoms mix both families, which would make
+  the threshold encoding ambiguous.
+"""
+function _feature_op_family(
+    atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
+    feat::Union{Symbol,AbstractString}
+)
+    feat_atoms = _atoms_for_feature(atoms, feat)
+    ops = unique(get_operator.(feat_atoms))
+
+    has_lt = any(_is_lt_family, ops)
+    has_gt = any(_is_gt_family, ops)
+
+    (has_lt && has_gt) && throw(ArgumentError(
+        "Feature '$feat' mixes '<'/'≤' and '>'/'≥' operators. " *
+        "Each feature must use operators from a single comparison family."
+    ))
+
+    return has_lt ? :lt : :gt
+end
+
+# ---------------------------------------------------------------------------- #
 #                                 depth utils                                  #
 # ---------------------------------------------------------------------------- #
 
@@ -290,7 +373,7 @@ function _take_first_percentage(
     depth::Float64
 )
     n_total = length(atoms)
-    n_to_take = Int(ceil(n_total * depth))
+    n_to_take = ceil(Int, n_total * depth)
 
     return atoms[1:min(n_to_take, n_total)]
 end
@@ -302,21 +385,21 @@ end
 """
     _atoms_for_feature(
         atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
-        feat::Symbol
+        feat::Union{Symbol,AbstractString}
     ) -> Vector{<:SL.Atom{<:SD.ScalarCondition}}
 
 Filter `atoms` to only those whose feature name matches `feat`.
 
 # Arguments
 - `atoms`: Collection of scalar-condition atoms.
-- `feat::Symbol`: Target feature name (as returned by `SM.featurename`).
+- `feat::Union{Symbol,AbstractString}`: Target feature name (as returned by `SM.featurename`).
 
 # Returns
 - Sub-vector of atoms whose feature matches `feat`.
 """
 @inline _atoms_for_feature(
     atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
-    feat::Symbol
+    feat::Union{Symbol,AbstractString}
 ) = filter(a -> SM.featurename(get_feature(a)) == feat, atoms)
 
 """
@@ -451,8 +534,8 @@ Construct a new `SL.Atom` encoding the scalar condition
 function push_disjunct!(
     disjuncts::Vector{SL.Atom},
     i::Int,
-    featurename::Symbol,
-    operator::Union{typeof(<),typeof(≥)},
+    featurename::Union{Symbol,AbstractString},
+    operator::Operators,
     threshold::Real
 )
     feature = SD.VariableValue(i, featurename)
@@ -465,20 +548,29 @@ end
 """
     generate_disjunct(
         truths::Vector{BitVector},
-        thresholds::Vector{Vector{<:Float}},
-        features::Vector{Symbol}
+        thresholds::Vector{Vector{Float64}},
+        features::Vector{Symbol},
+        op_families::Vector{Symbol}
     ) -> Vector{SL.Atom}
 
 Derive the tightest bounding atoms for a single truth-value assignment.
 
-For each feature `i`, the function inspects `truths[i]` to determine the
-maximal threshold for which the condition is false (`<`) and the minimal
-threshold for which it is true (`≥`), and pushes the corresponding atoms.
+For each feature `i` the function inspects `truths[i]` and the feature's
+operator family (`op_families[i]`) to determine the bounding conditions:
+
+- `:lt` family (`<`/`≥`): thresholds are sorted **descending**.
+  - `idx0` (false bits) → emit `value < max_threshold_where_false`
+  - `idx1` (true bits)  → emit `value ≥ min_threshold_where_true`
+
+- `:gt` family (`>`/`≤`): thresholds are sorted **ascending**.
+  - `idx0` (false bits) → emit `value ≤ min_threshold_where_false`
+  - `idx1` (true bits)  → emit `value > max_threshold_where_true`
 
 # Arguments
 - `truths::Vector{BitVector}`: Per-feature truth assignments over the sorted thresholds.
-- `thresholds::Vector{Vector{<:Float}}`: Per-feature sorted threshold vectors.
+- `thresholds::Vector{Vector{Float64}}`: Per-feature sorted threshold vectors.
 - `features::Vector{Symbol}`: Feature names aligned with `thresholds`.
+- `op_families::Vector{Symbol}`: Per-feature operator family (`:lt` or `:gt`).
 
 # Returns
 - `Vector{SL.Atom}`: Atoms encoding the implied scalar conditions.
@@ -486,7 +578,8 @@ threshold for which it is true (`≥`), and pushes the corresponding atoms.
 function generate_disjunct(
     truths::Vector{BitVector},
     thresholds::Vector{T},
-    features::Vector{Symbol}
+    features::Vector{<:Union{Symbol,AbstractString}},
+    op_families::Vector{Symbol}
 ) where {T<:Vector{<:Float}}
     disjuncts = Vector{SL.Atom}()
 
@@ -494,14 +587,39 @@ function generate_disjunct(
         idx0 = findall(x -> !x,  truths[i])
         idx1 = findall(identity, truths[i])
 
-        isempty(idx0) ||
-            push_disjunct!(
-                disjuncts, i, features[i], <, thresholds[i][maximum(idx0)]
-            )
-        isempty(idx1) ||
-            push_disjunct!(
-                disjuncts, i, features[i], ≥, thresholds[i][minimum(idx1)]
-            )
+        # isempty(idx0) ||
+        #     push_disjunct!(
+        #         disjuncts, i, features[i], <, thresholds[i][maximum(idx0)]
+        #     )
+        # isempty(idx1) ||
+        #     push_disjunct!(
+        #         disjuncts, i, features[i], ≥, thresholds[i][minimum(idx1)]
+        #     )
+
+        if op_families[i] === :lt
+            # thresholds sorted descending → same logic as the original pipeline:
+            # false bits (idx0) → upper bound via <
+            # true  bits (idx1) → lower bound via ≥
+            isempty(idx0) ||
+                push_disjunct!(
+                    disjuncts, i, features[i], <, thresholds[i][maximum(idx0)]
+                )
+            isempty(idx1) ||
+                push_disjunct!(
+                    disjuncts, i, features[i], ≥, thresholds[i][minimum(idx1)]
+                )
+        else  # :gt family — thresholds sorted ascending
+            # false bits (idx0) → upper bound via ≤ (value is NOT > any of these)
+            # true  bits (idx1) → lower bound via >  (value IS > all of these)
+            isempty(idx0) ||
+                push_disjunct!(
+                    disjuncts, i, features[i], ≤, thresholds[i][minimum(idx0)]
+                )
+            isempty(idx1) ||
+                push_disjunct!(
+                    disjuncts, i, features[i], >, thresholds[i][maximum(idx1)]
+                )
+        end
     end
 
     return disjuncts
@@ -510,7 +628,6 @@ end
 # ---------------------------------------------------------------------------- #
 #                          extract rules data struct                           #
 # ---------------------------------------------------------------------------- #
-
 """
     ExtractRulesData
 
@@ -522,16 +639,18 @@ minimize per-class DNF formulas.
   truth-value assignments (one per input combination that the model assigns to
   that class). Each assignment is a `Vector{BitVector}` – one `BitVector` per
   feature.
-- `thresholds::Vector{Vector{<:Float}}`: Per-feature sorted threshold vectors
+- `thresholds::Vector{Vector{Float64}}`: Per-feature sorted threshold vectors
   derived from the model's alphabet.
 - `features::Vector{<:SM.Label}`: Ordered feature names aligned with `thresholds`.
 - `classnames::Vector{<:SM.Label}`: Unique class labels in the model.
+- `op_families::Vector{Symbol}`: Per-feature operator family (`:lt` or `:gt`),
+  used by [`generate_disjunct`](@ref) to emit the correct comparison operators.
 
 # Constructors
 
 ```julia
 # Low-level constructor: supply all fields directly.
-ExtractRulesData(grp_truths, thresholds, features, classnames)
+ExtractRulesData(grp_truths, thresholds, features, classnames, op_families)
 
 # High-level constructor: derive everything from a LumenConfig and a model.
 ExtractRulesData(extractor::LumenConfig, model::SM.AbstractModel)
@@ -551,13 +670,16 @@ struct ExtractRulesData{T<:Vector{<:Float}}
     thresholds::Vector{T}
     features::Vector{<:SM.Label}
     classnames::AbstractVector{<:SM.Label}
+    op_families::Vector{Symbol}
 
     ExtractRulesData(
         grp_truths::Vector{Vector{Vector{BitVector}}},
         thresholds::Vector{T},
         features::Vector{<:SM.Label},
-        classnames::AbstractVector{<:SM.Label}
-    ) where {T<:Vector{<:Float}} = new{T}(grp_truths, thresholds, features, classnames)
+        classnames::AbstractVector{<:SM.Label},
+        op_families::Vector{Symbol}
+    ) where {T<:Vector{<:Float}} =
+        new{T}(grp_truths, thresholds, features, classnames, op_families)
 
     function ExtractRulesData(extractor::LumenConfig, model::SM.AbstractModel)
 
@@ -601,21 +723,24 @@ struct ExtractRulesData{T<:Vector{<:Float}}
 
         # -------------------------------------------------------------------- #
         # STEP 3 — Validate that every operator present in the extracted atoms
-        # is `<`. # TODO WANT EXPAND LOGIC 
+        # belongs to the supported set: `<`, `≥`, `>`, `≤`.
         #
-        # Collects distinct operators other than `<`; if any are found, throws
-        # an ArgumentError describing the unsupported operators.
-        # This ensures the rest of the pipeline, which assumes only `<`, does
-        # not receive unexpected input.
+        # Mixed `<`/`≤` vs `>`/`≥` operators are permitted across different
+        # features, but each individual feature must use operators from a single
+        # comparison family (enforced later in _feature_op_family when building
+        # per-feature thresholds).
         # -------------------------------------------------------------------- #
-        isempty(unique(op for op in get_operator.(atoms) if op != (<))) ||
-            throw(ArgumentError(
-                "Only '<' operator is currently supported. " *
+        let unsupported = unique(
+                op for op in get_operator.(atoms)
+                if op ∉ _supported_operators
+            )
+            isempty(unsupported) || throw(ArgumentError(
+                "Only '<', '≥', '>', '≤' operators are currently supported. " *
                 "Found unsupported operators: $(unsupported). " *
                 "This limitation may be addressed in future versions. " *
-                "Consider preprocessing your model to use only '<' conditions.",
-            ),
-        )
+                "Consider preprocessing your model to use only supported conditions.",
+            ))
+        end
 
         # -------------------------------------------------------------------- #
         # STEP 4 — Derive the names of the features present in the extracted atoms.
@@ -627,7 +752,7 @@ struct ExtractRulesData{T<:Vector{<:Float}}
         # `features` therefore contains the names of only the features actually
         # referenced by the atoms (a subset of the model's full feature set).
         # -------------------------------------------------------------------- #
-        features = SM.featurename.(unique!(get_feature.(atoms))) # TODO: if we dont have featurename ?  
+        features = SD.featurename.(unique!(get_feature.(atoms))) # TODO: if we dont have featurename ? 
 
         # -------------------------------------------------------------------- #
         # STEP 5 — Retrieve the canonical feature name list and class labels
@@ -656,14 +781,28 @@ struct ExtractRulesData{T<:Vector{<:Float}}
         # -------------------------------------------------------------------- #
         type = get_float_type(extractor)
         thresholds = Vector{Vector{type}}(undef, length(featurenames))
+        op_families = Vector{Symbol}(undef, length(featurenames))
 
         @inbounds for i in eachindex(featurenames)
             idx = findfirst(f -> f == featurenames[i], features)
-            thresholds[i] = isnothing(idx) ? 
-                type[] :
-                sort!(get_threshold.(
-                    _atoms_for_feature(atoms, features[idx])), rev=true
+            # thresholds[i] = isnothing(idx) ? 
+            #     type[] :
+            #     sort!(get_threshold.(
+            #         _atoms_for_feature(atoms, features[idx])), rev=true
+            #     )
+
+            if isnothing(idx)
+                thresholds[i]  = type[]
+                op_families[i] = :lt  # default (irrelevant: no thresholds)
+            else
+                @show typeof(features[idx])
+                family = _feature_op_family(atoms, features[idx])
+                op_families[i] = family
+                thresholds[i] = sort!(
+                    get_threshold.(_atoms_for_feature(atoms, features[idx]));
+                    rev=(family === :lt)  # descending for :lt, ascending for :gt
                 )
+            end
         end
 
         # -------------------------------------------------------------------- #
@@ -807,6 +946,14 @@ Return the unique class-label vector stored in `e`.
 """
 @inline get_classnames(e::ExtractRulesData) = e.classnames
 
+"""
+    get_op_families(e::ExtractRulesData) -> Vector{Symbol}
+
+Return the per-feature operator family vector stored in `e`.
+Each entry is either `:lt` (for `<`/`≥` models) or `:gt` (for `>`/`≤` models).
+"""
+@inline get_op_families(e::ExtractRulesData) = e.op_families
+
 function get_grouped_truths(e::ExtractRulesData, c::SM.Label)
     i = findfirst(g -> get_classnames(g) == c, e.grp_truths)
     isnothing(i) ? nothing : get_grouped_truths(e, i)
@@ -846,7 +993,6 @@ Return all truth assignments for class `i` (alias for `get_truths(e, i)`).
 # ---------------------------------------------------------------------------- #
 #                                  get atoms                                   #
 # ---------------------------------------------------------------------------- #
-
 """
     get_atoms(e::ExtractRulesData; grouped::Bool=false) -> Union{Vector{Vector{Vector{SL.Atom}}}, Vector{Vector{SL.Atom}}}
 
@@ -872,13 +1018,14 @@ Derive atoms for the `i`-th class.
 
     get_atoms(
         truths::Vector{Vector{BitVector}},
-        thresholds::Vector{Vector{<:Float}},
-        features::Vector{Symbol}
+        thresholds::Vector{Vector{Float64}},
+        features::Vector{Symbol},
+        op_families::Vector{Symbol}
     ) -> Vector{Vector{SL.Atom}}
 
-Low-level worker: given a flat list of truth assignments, thresholds, and feature
-names, parallelise the call to [`generate_disjunct`](@ref) over all assignments
-and return the resulting atom vectors.
+Low-level worker: given a flat list of truth assignments, thresholds, feature
+names, and per-feature operator families, parallelise the call to
+[`generate_disjunct`](@ref) over all assignments and return the resulting atom vectors.
 """
 function get_atoms(
     e::ExtractRulesData;
@@ -887,12 +1034,14 @@ function get_atoms(
 )
     thresholds = get_thresholds(e; prev_float=true, float_type)
     features = get_features(e)
+    op_families = get_op_families(e)
 
     return if grouped
         truths = vcat(get_truths(e)...)
-        get_atoms(truths, thresholds, features)
+        get_atoms(truths, thresholds, features, op_families)
     else
-        [get_atoms(truths, thresholds, features) for truths in get_truths(e)]
+        [get_atoms(truths, thresholds, features, op_families)
+         for truths in get_truths(e)]
     end
 end
 
@@ -905,19 +1054,22 @@ function get_atoms(e::ExtractRulesData, i::Int; float_type::Type=Float64)
     truths = get_truths(e, i)
     thresholds = get_thresholds(e; prev_float=false, float_type)
     features = get_features(e)
+    op_families = get_op_families(e)
 
-    get_atoms(truths, thresholds, features)
+    get_atoms(truths, thresholds, features, op_families)
 end
 
 function get_atoms(
     truths::Vector{Vector{BitVector}},
     thresholds::Vector{T},
-    features::Vector{Symbol}
+    features::Vector{<:Union{Symbol,AbstractString}},
+    op_families::Vector{Symbol}
 ) where {T<:Vector{<:Float}}
     conjuncts = Vector{Vector{SL.Atom}}(undef, length(truths))
 
     Threads.@threads for i in eachindex(truths)
-        conjuncts[i] = generate_disjunct(truths[i], thresholds, features)
+        conjuncts[i] =
+            generate_disjunct(truths[i], thresholds, features, op_families)
     end
 
     return conjuncts
@@ -928,7 +1080,8 @@ end
 # ---------------------------------------------------------------------------- #
 
 """
-    get_conjuncts(e::ExtractRulesData, i::Int) -> Vector{SL.LeftmostConjunctiveForm{SL.Literal}}
+    get_conjuncts(e::ExtractRulesData, i::Int) 
+        -> Vector{SL.LeftmostConjunctiveForm{SL.Literal}}
 
 Build a conjunctive form for each input combination assigned to class `i`.
 
@@ -943,16 +1096,18 @@ Build conjunctive forms for class `c`, or `nothing` if the class is not found.
 
 ---
 
-    get_conjuncts(a::Vector{Vector{SL.Atom}}) -> Vector{SL.LeftmostConjunctiveForm{SL.Literal}}
+    get_conjuncts(a::Vector{Vector{SL.Atom}}) 
+        -> Vector{SL.LeftmostConjunctiveForm{SL.Literal}}
 
 Map `get_conjuncts` over every atom vector in `a`.
 
 ---
 
-    get_conjuncts(a::Vector{SL.Atom}) -> Union{⊤, SL.LeftmostConjunctiveForm{SL.Literal}}
+    get_conjuncts(a::Vector{SL.Atom}) 
+        -> Union{⊤, SL.LeftmostConjunctiveForm{SL.Literal}}
 
-Wrap a single atom vector in a `LeftmostConjunctiveForm`. Returns `⊤` (tautology)
-for an empty vector.
+Wrap a single atom vector in a `LeftmostConjunctiveForm`.
+Returns `⊤` (tautology) for an empty vector.
 """
 function get_conjuncts(e::ExtractRulesData, i::Int)
     atoms = get_atoms(e, i)
@@ -966,8 +1121,7 @@ end
 
 @inline  get_conjuncts(a::Vector{Vector{SL.Atom}}) = get_conjuncts.(a)
 @inline  get_conjuncts(a::Vector{SL.Atom}) = isempty(a) ?
-    ⊤ :
-    SL.LeftmostConjunctiveForm{SL.Literal}(SL.Literal.(a))
+    ⊤ : SL.LeftmostConjunctiveForm{SL.Literal}(SL.Literal.(a))
 
 # ---------------------------------------------------------------------------- #
 #                                get formulas                                  #
