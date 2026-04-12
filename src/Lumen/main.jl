@@ -615,7 +615,8 @@ operator family (`op_families[i]`) to determine the bounding conditions:
   - `idx1` (true bits)  → emit `value > max_threshold_where_true`
 
 # Arguments
-- `truths::Vector{BitVector}`: Per-feature truth assignments over the sorted thresholds.
+- `truths::Vector{BitVector}`: Per-feature truth assignments over 
+  the sorted thresholds.
 - `thresholds::Vector{Vector{Float64}}`: Per-feature sorted threshold vectors.
 - `features::Vector{Symbol}`: Feature names aligned with `thresholds`.
 - `op_families::Vector{Symbol}`: Per-feature operator family (`:lt` or `:gt`).
@@ -636,7 +637,8 @@ function generate_disjunct(
         idx1 = findall(identity, truths[i])
 
         if op_families[i] === :lt
-            # thresholds sorted descending → same logic as the original pipeline:
+            # thresholds sorted descending → same logic 
+            # as the original pipeline:
             # false bits (idx0) → upper bound via <
             # true  bits (idx1) → lower bound via ≥
             isempty(idx0) ||
@@ -648,8 +650,10 @@ function generate_disjunct(
                     disjuncts, i, features[i], ≥, thresholds[i][minimum(idx1)]
                 )
         else  # :gt family — thresholds sorted ascending
-            # false bits (idx0) → upper bound via ≤ (value is NOT > any of these)
-            # true  bits (idx1) → lower bound via >  (value IS > all of these)
+            # false bits (idx0) → upper bound via ≤ 
+            # (value is NOT > any of these)
+            # true  bits (idx1) → lower bound via >  
+            # (value IS > all of these)
             isempty(idx0) ||
                 push_disjunct!(
                     disjuncts, i, features[i], ≤, thresholds[i][minimum(idx0)]
@@ -680,7 +684,8 @@ minimize per-class DNF formulas.
   feature.
 - `thresholds::Vector{Vector{Float64}}`: Per-feature sorted threshold vectors
   derived from the model's alphabet.
-- `features::Vector{<:SM.Label}`: Ordered feature names aligned with `thresholds`.
+- `features::Vector{<:SM.Label}`: Ordered feature names 
+  aligned with `thresholds`.
 - `classnames::Vector{<:SM.Label}`: Unique class labels in the model.
 - `op_families::Vector{Symbol}`: Per-feature operator family (`:lt` or `:gt`),
   used by [`generate_disjunct`](@ref) to emit the correct comparison operators.
@@ -737,11 +742,14 @@ struct ExtractRulesData{T<:Vector{<:Float}}
         #
         #   depth < 1.0 → partial extraction by depth
         #       - Iterates over every tree in the model (SM.models).
-        #       - For each tree, visits nodes in BFS order (_extract_atoms_bfs_order),
+        #       - For each tree, visits nodes in BFS order 
+        #         (_extract_atoms_bfs_order),
         #         yielding atoms ordered from root to leaves.
         #       - Retains only the first `depth`% of BFS atoms for that tree
-        #         (_take_first_percentage), simulating a cut at a relative depth.
-        #       - Concatenates all atoms collected across trees (mapreduce + vcat).
+        #         (_take_first_percentage), 
+        #         simulating a cut at a relative depth.
+        #       - Concatenates all atoms collected across trees 
+        #         (mapreduce + vcat).
         #
         #   depth == 1.0 → full extraction
         #       - Directly retrieves the alphabet of the entire model
@@ -777,21 +785,25 @@ struct ExtractRulesData{T<:Vector{<:Float}}
                 "Only '<', '≥', '>', '≤' operators are currently supported. " *
                 "Found unsupported operators: $(unsupported). " *
                 "This limitation may be addressed in future versions. " *
-                "Consider preprocessing your model to use only supported conditions.",
+                "Consider preprocessing your model " *
+                "to use only supported conditions.",
             ))
         end
 
         # -------------------------------------------------------------------- #
-        # STEP 4 — Derive the names of the features present in the extracted atoms.
+        # STEP 4 — Derive the names of the features present in the 
+        #          extracted atoms.
         #
         # - get_feature.(atoms)  → feature object for each atom.
         # - unique!              → removes duplicate feature objects in-place.
-        # - SM.featurename.      → converts each feature object to its symbolic name.
+        # - SM.featurename.      → converts each feature object to its 
+        #                          symbolic name.
         #
         # `features` therefore contains the names of only the features actually
         # referenced by the atoms (a subset of the model's full feature set).
         # -------------------------------------------------------------------- #
-        features = SD.featurename.(unique!(get_feature.(atoms))) # TODO: if we dont have featurename ? 
+        features = SD.featurename.(unique!(get_feature.(atoms))) 
+        # TODO: if we dont have featurename ? 
 
         # -------------------------------------------------------------------- #
         # STEP 5 — Retrieve the canonical feature name list and class labels
@@ -801,11 +813,7 @@ struct ExtractRulesData{T<:Vector{<:Float}}
         #   features absent from the extracted atoms, e.g. when depth < 1.0).
         # - classnames: unique class labels present in the model's leaves.
         # -------------------------------------------------------------------- #
-        # featurenames = SM.info(model, :featurenames)
-        featurenames = ["sepal_length",
- "sepal_width",
- "petal_length",
- "petal_width"]
+        featurenames = SM.info(model, :featurenames)
         classnames = unique!(SM.info(model, :supporting_labels))
 
         # -------------------------------------------------------------------- #
@@ -816,8 +824,10 @@ struct ExtractRulesData{T<:Vector{<:Float}}
         #   - Look up its name in `features` (the extracted atoms).
         #   - If not found (idx == nothing): the feature does not appear in the
         #     extracted atoms → assign an empty threshold vector [].
-        #   - If found: filter atoms belonging to that feature (_atoms_for_feature),
-        #     extract their threshold values (get_threshold.), and sort descending.
+        #   - If found: filter atoms belonging to that feature 
+        #     (_atoms_for_feature),
+        #     extract their threshold values (get_threshold.), 
+        #     and sort descending.
         #
         # Descending order matters because the binary encoding used by
         # _truths_by_thresholds expects thresholds from largest to smallest.
@@ -843,7 +853,8 @@ struct ExtractRulesData{T<:Vector{<:Float}}
         end
 
         # -------------------------------------------------------------------- #
-        # STEP 7 — Augment each threshold vector with the correct boundary point.
+        # STEP 7 — Augment each threshold vector with 
+        #          the correct boundary point.
         #
         # For each feature, one extra sampling point is appended to cover the
         # ordinal region that lies beyond the extreme threshold:
@@ -917,7 +928,8 @@ struct ExtractRulesData{T<:Vector{<:Float}}
         # For each class i in classnames:
         #   - findall locates the indices of combinations to which the model
         #     assigned that class.
-        #   - grp_truths[i] collects only the truth assignments at those indices.
+        #   - grp_truths[i] collects only the truth assignments 
+        #                   at those indices.
         #
         # Result: grp_truths[i] = list of truth assignments for class i, each
         # representing one row of the truth table that leads to class i.
@@ -935,7 +947,8 @@ struct ExtractRulesData{T<:Vector{<:Float}}
         #
         # Note: `featurenames` (canonical model ordering) is used instead of
         # `features` (atom-extraction ordering) to guarantee alignment with
-        # `thresholds` and `op_families`, which were both built over `featurenames`.
+        # `thresholds` and `op_families`, 
+        # which were both built over `featurenames`.
         # -------------------------------------------------------------------- #
         return new{Vector{<:type}}(
             grp_truths, thresholds, featurenames, classnames, op_families
@@ -959,7 +972,8 @@ Return the truth assignments for the `i`-th class.
 
 ---
 
-    get_grouped_truths(e::ExtractRulesData, c::SM.Label) -> Union{Vector{Vector{BitVector}}, Nothing}
+    get_grouped_truths(e::ExtractRulesData, c::SM.Label) 
+        -> Union{Vector{Vector{BitVector}}, Nothing}
 
 Return the truth assignments for the class whose label equals `c`, or `nothing`
 if `c` is not found.
@@ -984,7 +998,8 @@ function get_thresholds(
 )
     thresholds = [float_type.(t) for t in e.thresholds]
     op_families = e.op_families
-    return prev_float ? _thrs_with_boundary(thresholds, op_families) : thresholds
+    return prev_float ?
+        _thrs_with_boundary(thresholds, op_families) : thresholds
 end
 
 """
@@ -1042,24 +1057,28 @@ Return the `j`-th truth assignment for class `i`.
 
 Return all truth assignments for class `i` (alias for `get_truths(e, i)`).
 """
-@inline get_truth(e::ExtractRulesData, i::Int, j::Int) = get_grouped_truths(e, i)[j]
-@inline get_truth(e::ExtractRulesData, i::Int) = get_truths(e)[i]
+@inline get_truth(e::ExtractRulesData, i::Int, j::Int) =
+    get_grouped_truths(e, i)[j]
+@inline get_truth(e::ExtractRulesData, i::Int) =
+    get_truths(e)[i]
 
 # ---------------------------------------------------------------------------- #
 #                                  get atoms                                   #
 # ---------------------------------------------------------------------------- #
 """
-    get_atoms(e::ExtractRulesData; grouped::Bool=false) -> Union{Vector{Vector{Vector{SL.Atom}}}, Vector{Vector{SL.Atom}}}
+    get_atoms(e::ExtractRulesData; grouped::Bool=false) 
+        -> Union{Vector{Vector{Vector{SL.Atom}}}, Vector{Vector{SL.Atom}}}
 
 Derive bounding atoms for all classes stored in `e`.
 
 When `grouped=false` (default) returns one `Vector{Vector{SL.Atom}}` per class.
-When `grouped=true` all class truth assignments are pooled before deriving atoms,
-returning a single `Vector{Vector{SL.Atom}}`.
+When `grouped=true` all class truth assignments are pooled before deriving 
+atoms, returning a single `Vector{Vector{SL.Atom}}`.
 
 ---
 
-    get_atoms(e::ExtractRulesData, c::SM.Label) -> Union{Vector{Vector{SL.Atom}}, Nothing}
+    get_atoms(e::ExtractRulesData, c::SM.Label) 
+        -> Union{Vector{Vector{SL.Atom}}, Nothing}
 
 Derive atoms for the class labelled `c`, or `nothing` if not found.
 
@@ -1080,7 +1099,8 @@ Derive atoms for the `i`-th class.
 
 Low-level worker: given a flat list of truth assignments, thresholds, feature
 names, and per-feature operator families, parallelise the call to
-[`generate_disjunct`](@ref) over all assignments and return the resulting atom vectors.
+[`generate_disjunct`](@ref) over all assignments and return the resulting 
+atom vectors.
 """
 function get_atoms(
     e::ExtractRulesData;
@@ -1188,7 +1208,8 @@ disjunction.
 
 ---
 
-    get_formula(e::ExtractRulesData, c::SM.Label) -> Union{SL.LeftmostDisjunctiveForm, Nothing}
+    get_formula(e::ExtractRulesData, c::SM.Label) 
+        -> Union{SL.LeftmostDisjunctiveForm, Nothing}
 
 Build the DNF formula for class `c`, or `nothing` if the class is not found.
 
@@ -1218,7 +1239,8 @@ end
 # ---------------------------------------------------------------------------- #
 """
     _refine_dnf(
-        terms::Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, SyntaxStructure}}
+        terms::Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, 
+                SyntaxStructure}}
     ) -> Vector{...}
 
 Remove DNF terms that are strictly dominated by another term in the same formula.
@@ -1237,7 +1259,8 @@ The function:
 - `terms`: Non-empty vector of conjunctive terms forming a DNF formula.
 
 # Returns
-- Pruned vector of terms; never empty (returns `terms` if pruning would empty it).
+- Pruned vector of terms; never empty 
+  (returns `terms` if pruning would empty it).
 
 # Notes
 Requires at least two terms to perform any pruning; single-term inputs are
@@ -1266,8 +1289,11 @@ end
 #                              minimization core                               #
 # ---------------------------------------------------------------------------- #
 """
-    run_minimization(::Val{:abc}, extractor::LumenConfig, atoms::Vector{Vector{SL.Atom}})
-        -> Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, SyntaxStructure}}
+    run_minimization(
+        ::Val{:abc}, 
+        extractor::LumenConfig, 
+        atoms::Vector{Vector{SL.Atom}}
+    ) -> Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, SyntaxStructure}}
 
 Minimize the DNF formula encoded by `atoms` using the ABC framework.
 
@@ -1296,8 +1322,11 @@ function run_minimization(
 end
 
 """
-    run_minimization(::Val{:mitespresso}, extractor::LumenConfig, atoms::Vector{Vector{SL.Atom}})
-        -> Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, SyntaxStructure}}
+    run_minimization(
+        ::Val{:mitespresso}, 
+        extractor::LumenConfig, 
+        atoms::Vector{Vector{SL.Atom}}
+    ) -> Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, SyntaxStructure}}
 
 Minimize the DNF formula encoded by `atoms` using the MIT Espresso minimizer.
 
@@ -1305,7 +1334,8 @@ Delegates to `SD.espresso_minimize` with the binary path from `extractor`, then
 applies [`_refine_dnf`](@ref) to remove dominated terms.
 
 # Arguments
-- `extractor::LumenConfig`: Provides the Espresso binary path and depth parameter.
+- `extractor::LumenConfig`: Provides the Espresso binary path 
+  and depth parameter.
 - `atoms::Vector{Vector{SL.Atom}}`: Per-combination atom lists.
 
 # Returns
@@ -1344,7 +1374,8 @@ encoded in `config`.
 4. Wrap the minimized formulas in `SM.Rule` objects and return a `DecisionSet`.
 
 # Arguments
-- `config::LumenConfig`: Algorithm configuration (minimization scheme, depth, etc.).
+- `config::LumenConfig`: Algorithm configuration 
+  (minimization scheme, depth, etc.).
 - `model::SM.AbstractModel`: A single decision-tree model.
 
 # Returns
@@ -1387,7 +1418,8 @@ ds = lumen(config, my_tree)
 results = lumen(config, [tree1, tree2, tree3])
 ```
 
-See also: [`LumenConfig`](@ref), [`LumenResult`](@ref), [`ExtractRulesData`](@ref)
+See also: [`LumenConfig`](@ref), [`LumenResult`](@ref), 
+[`ExtractRulesData`](@ref)
 """
 function lumen(
     config::LumenConfig,
