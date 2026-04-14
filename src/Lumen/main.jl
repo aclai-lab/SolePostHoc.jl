@@ -187,7 +187,7 @@ See also: [`setup_espresso`](@ref), [`lumen`](@ref)
 function setup_abc() 
     # auto setup ABC binary if not specified
     abcbinary = try
-        ensure_abc_binary(; force_rebuild = force_rebuild_abc) 
+        ensure_abc_binary() 
     catch e
         error("Failed to setup ABC binary: $e")
     end
