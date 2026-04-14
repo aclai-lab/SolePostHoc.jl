@@ -142,7 +142,7 @@ end
 
 #===========================================================================================
                                         RULECOSIPLUS
-===========================================================================================#
+===========================================================================================
 export RULECOSIPLUSRuleExtractor
 
 include("RuleCosiplus/src/main.jl")
@@ -160,5 +160,5 @@ function extractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
     dsrulecosiplus = DecisionSet(rules_obj)
     return dsrulecosiplus
 end
-
+=#
 end

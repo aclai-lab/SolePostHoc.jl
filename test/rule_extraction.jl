@@ -104,11 +104,11 @@ extracted_rules = RuleExtraction.extractrules(
 # ---------------------------------------------------------------------------- #
 #                         rulecosi rules extraction                            #
 # ---------------------------------------------------------------------------- #
-    extractor=RULECOSIPLUSRuleExtractor()
-
-    extracted_rules =
-        RuleExtraction.extractrules(extractor, solem_rf, Xc[test, :], yc[test])
-
+#    extractor=RULECOSIPLUSRuleExtractor()
+#
+#    extracted_rules =
+#        RuleExtraction.extractrules(extractor, solem_rf, Xc[test, :], yc[test])
+#
 # ---------------------------------------------------------------------------- #
 #                           refne rules extraction                             #
 # ---------------------------------------------------------------------------- #
