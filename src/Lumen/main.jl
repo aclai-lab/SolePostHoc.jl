@@ -19,157 +19,39 @@ export lumen, LumenConfig, LumenResult
 #                   initial minimization algorithms setup                      #
 # ---------------------------------------------------------------------------- #
 
-# Centralised descriptor for every supported external minimizer binary.
-const _BINARY_SPECS = (
-    espresso = (
-        name        = "MIT Espresso",
-        url         = "https://github.com/jackhack96/logic-synthesis/releases/" *
-                      "download/0.3.5/espresso-src.tar.gz",
-        prefix      = "espresso_build_",
-        tarname     = "espresso.tar.gz",
-        strip       = true,   # --strip-components=1
-        subdir      = nothing,
-        binary_name = "espresso",
-        docs_url    = "https://github.com/jackhack96/logic-synthesis",
-    ),
-    abc = (
-        name        = "ABC",
-        url         = "https://github.com/berkeley-abc/abc/archive/refs/" *
-                      "heads/master.tar.gz",
-        prefix      = "abc_build_",
-        tarname     = "abc-master.tar.gz",
-        strip       = false,
-        subdir      = "abc-master",   # subdirectory created after extraction
-        binary_name = "abc",
-        docs_url    = "https://github.com/berkeley-abc/abc",
-    ),
-)
-
 """
-    _ensure_binary(spec; force_rebuild=false) -> String
+    setup_espresso() -> String
 
-Generic helper that downloads, compiles, and installs an external minimizer
-binary into the module directory.
+Automatically locate and validate the Espresso logic minimizer binary.
 
-`spec` is one of the named tuples stored in `_BINARY_SPECS` and carries all
-tool-specific information (URL, tarball name, extraction flags, …).
-If the binary already exists and `force_rebuild=false` the existing path is
-returned immediately.
+Attempts to load the MIT Espresso binary via `SoleData.MITESPRESSOLoader`. If the
+binary cannot be found or loaded, an informative error is raised.
 
 # Returns
-- `String`: Absolute path to the installed executable.
+- `String`: Absolute path to the verified Espresso executable.
 
 # Throws
-- `ErrorException`: If download, extraction, or compilation fails, or if
-  required system tools (`tar`, `make`) are not available.
-"""
-function _ensure_binary(spec; force_rebuild=false)
-    binary_path = joinpath(@__DIR__, spec.binary_name)
+- `ErrorException`: If the loader fails or the binary is not found at the expected path.
 
-    if isfile(binary_path) && !force_rebuild
-        @info "$(spec.name) binary already exists at: $binary_path " *
-              "(skipping download/compilation)"
-        return binary_path
-    end
-
-    @info "Setting up $(spec.name) binary..."
-    tmp = mktempdir(; prefix=spec.prefix)
-
-    try
-        # ── download ──────────────────────────────────────────────────────── #
-        tarfile = joinpath(tmp, spec.tarname)
-        @info "Downloading $(spec.name) source code..."
-        Downloads.download(spec.url, tarfile)
-
-        # ── extract ───────────────────────────────────────────────────────── #
-        success(`which tar`) ||
-            error("System tar command not found. Please install tar utilities.")
-
-        extract_dir = joinpath(tmp, "src")
-        mkdir(extract_dir)
-        @info "Extracting $(spec.name) source code..."
-
-        tar_flags = spec.strip ?
-            `-xzf $tarfile -C $extract_dir --strip-components=1` :
-            `-xzf $tarfile -C $extract_dir`
-        run(`tar $tar_flags`)
-
-        # ── compile ───────────────────────────────────────────────────────── #
-        success(`which make`) ||
-            error("make command not found. " *
-                  "Please install build tools (make, gcc, etc.).")
-
-        build_dir = isnothing(spec.subdir) ?
-            extract_dir :
-            joinpath(extract_dir, spec.subdir)
-
-        isdir(build_dir) ||
-            error("Failed to locate $(spec.name) source directory: $build_dir")
-
-        @info "Compiling $(spec.name)..."
-        cd(build_dir) do
-            run(`make`)
-        end
-
-        compiled = joinpath(build_dir, spec.binary_name)
-        isfile(compiled) ||
-            error("$(spec.name) compilation completed but binary not found")
-
-        cp(compiled, binary_path; force=true)
-        chmod(binary_path, 0o755)
-        @info "$(spec.name) compiled successfully at: $binary_path"
-
-        return binary_path
-
-    catch e
-        @error "Failed to download/compile $(spec.name): $e. " *
-               "Consider downloading it manually from $(spec.docs_url)"
-        rethrow(e)
-    finally
-        try
-            rm(tmp; recursive=true, force=true)
-        catch cleanup_err
-            @warn "Failed to cleanup temporary directory: $cleanup_err"
-        end
-    end
-end
-
-"""
-    setup_espresso(; force_rebuild=false) -> String
-
-Locate or install the MIT Espresso binary and return its path.
-
-On first call (or when `force_rebuild=true`) downloads and compiles Espresso
-from source. Subsequent calls reuse the cached binary.
+# Notes
+This function is called internally by the LUMEN pipeline when `:mitespresso` is
+selected as the minimization scheme.
 
 See also: [`setup_abc`](@ref), [`lumen`](@ref)
 """
-function setup_espresso(; force_rebuild=false)
-    binary = _ensure_binary(_BINARY_SPECS.espresso; force_rebuild)
-    isfile(binary) || error("espresso binary not found at $binary")
-    return binary
-end
-
-"""
-    setup_abc(; force_rebuild=false) -> String
-
-Locate or install the ABC logic synthesis binary and return its path.
-
-On first call (or when `force_rebuild=true`) downloads and compiles ABC from
-source. After installation a basic health-check (`abc -h`) verifies the
-executable is functional.
-
-See also: [`setup_espresso`](@ref), [`lumen`](@ref)
-"""
-function setup_abc(; force_rebuild=false)
-    binary = _ensure_binary(_BINARY_SPECS.abc; force_rebuild)
-    isfile(binary) || error("ABC binary not found at $binary")
-    try
-        run(`$binary -h`; wait=false)
+function setup_espresso()
+    # auto setup espresso binary if not specified
+    espressobinary = try
+        joinpath(SD.load(SD.MITESPRESSOLoader()), "espresso")
     catch e
-        error("ABC binary is not working properly: $e")
+        error("Failed to setup espresso binary: $e")
     end
-    return binary
+
+    # verify that binary exists and is executable
+    isfile(espressobinary) ||
+        error("espresso binary not found at $espressobinary")
+
+    return espressobinary
 end
 
 """
@@ -186,6 +68,143 @@ tool. Currently a no-op pending evaluation of the minimizer.
 """
 function setup_boom() end # TODO: evaluate this minimizer
 
+function ensure_abc_binary(; force_rebuild=false)
+    # Path to ABC binary directly in src/ directory
+    abc_binary = joinpath(@__DIR__, "abc")
+
+    # Return existing binary if found and not forcing rebuild
+    if isfile(abc_binary) && !force_rebuild
+        @info "ABC binary already exists at: $abc_binary (skipping download/compilation)"
+        return abc_binary
+    end
+
+    @info "Setting up ABC binary..."
+
+    # Create unique temporary directory to avoid conflicts
+    abc_temp_dir = mktempdir(; prefix="abc_build_")
+
+    # ABC repository URL (compressed tarball)
+    abc_url = "https://github.com/berkeley-abc/abc/archive/refs/heads/master.tar.gz"
+
+    try
+        # Download the source code
+        @info "Downloading ABC source code..."
+        tarfile = joinpath(abc_temp_dir, "abc-master.tar.gz")
+        Downloads.download(abc_url, tarfile)
+
+        # Create subdirectory for extraction to avoid conflicts
+        extract_dir = joinpath(abc_temp_dir, "extract")
+        mkdir(extract_dir)
+
+        # Extract the compressed tarball using system tar command
+        # This handles .tar.gz decompression automatically
+        @info "Extracting ABC source code..."
+        if success(`which tar`)
+            # Use system tar command (handles gzip compression)
+            run(`tar -xzf $tarfile -C $extract_dir`)
+        else
+            error("System tar command not found. Please install tar utilities.")
+        end
+
+        # Path to extracted source code
+        abc_source_dir = joinpath(extract_dir, "abc-master")
+
+        if !isdir(abc_source_dir)
+            error("Failed to extract ABC source code - directory not found")
+        end
+
+        # Compile ABC
+        @info "Compiling ABC... This may take a few minutes."
+
+        # Change to source directory for compilation
+        old_dir = pwd()
+        cd(abc_source_dir)
+
+        try
+            # Verify make is available
+            if !success(`which make`)
+                error(
+                    "make command not found. Please install build tools (make, gcc, etc.)"
+                )
+            end
+
+            # Compile with make
+            run(`make`)
+
+            # Copy compiled binary to final location
+            compiled_binary = joinpath(abc_source_dir, "abc")
+            if isfile(compiled_binary)
+                cp(compiled_binary, abc_binary; force=true)
+                # Make executable
+                chmod(abc_binary, 0o755)
+                @info "ABC compiled successfully at: $abc_binary"
+            else
+                error("ABC compilation completed but binary not found")
+            end
+
+        finally
+            # Always restore original directory
+            cd(old_dir)
+        end
+
+        return abc_binary
+
+    catch e
+        @error "Failed to download/compile ABC: $e. Consider downloading ABC manually from https://github.com/berkeley-abc/abc"
+        rethrow(e)
+    finally
+        # Always cleanup temporary directory
+        try
+            rm(abc_temp_dir; recursive=true, force=true)
+        catch cleanup_error
+            @warn "Failed to cleanup temporary directory: $cleanup_error"
+        end
+    end
+end
+
+"""
+    setup_abc() -> String
+
+Automatically locate, validate, and smoke-test the ABC logic synthesis binary.
+
+Attempts to load the ABC binary via `SoleData.ABCLoader`. After locating the
+binary it performs a basic health-check by running `abc -h` to ensure the
+executable is functional.
+
+# Returns
+- `String`: Absolute path to the verified ABC executable.
+
+# Throws
+- `ErrorException`: If the loader fails, the binary is missing, or the health-check
+  invocation raises an exception.
+
+# Notes
+This function is called internally when `:abc` (or its variants) is selected as
+the minimization scheme.
+
+See also: [`setup_espresso`](@ref), [`lumen`](@ref)
+"""
+function setup_abc() 
+    # auto setup ABC binary if not specified
+    abcbinary = try
+        ensure_abc_binary(; force_rebuild = force_rebuild_abc) 
+    catch e
+        error("Failed to setup ABC binary: $e")
+    end
+
+    # verify that binary exists and is executable
+    isfile(abcbinary) || error("ABC binary not found at $abcbinary")
+
+    # test that ABC binary is working
+    try
+        run(`$abcbinary -h`; wait=false)
+    catch e
+        error("ABC binary are not working properly: $e")
+    end
+
+    return abcbinary
+end
+
 """
     setup_quine() -> Nothing
 
@@ -199,6 +218,7 @@ no-op pending evaluation.
 - TODO: evaluate and implement this minimizer.
 """
 function setup_quine() end # TODO: evaluate this minimizer
+
 
 # ---------------------------------------------------------------------------- #
 #                                 print utils                                  #
@@ -484,7 +504,7 @@ Broadcast version: applies `_thrs_with_prevfloat` element-wise.
 """
 function _thrs_with_prevfloat(thresholds::Vector{Float64})
     isempty(thresholds) && return [NaN]
-
+    
     nthrs = length(thresholds)
     result = Vector{Float64}(undef, nthrs + 1)
     @inbounds for i = 1:nthrs
@@ -494,7 +514,7 @@ function _thrs_with_prevfloat(thresholds::Vector{Float64})
     return result
 end
 
-@inline _thrs_with_prevfloat(thresholds::Vector{Vector{Float64}}) =
+@inline  _thrs_with_prevfloat(thresholds::Vector{Vector{Float64}}) =
     _thrs_with_prevfloat.(thresholds)
 
 # ---------------------------------------------------------------------------- #
@@ -673,7 +693,7 @@ struct ExtractRulesData
 
         # -------------------------------------------------------------------- #
         # STEP 3 — Validate that every operator present in the extracted atoms
-        # is `<`. # TODO WANT EXPAND LOGIC
+        # is `<`. # TODO WANT EXPAND LOGIC 
         #
         # Collects distinct operators other than `<`; if any are found, throws
         # an ArgumentError describing the unsupported operators.
@@ -699,7 +719,7 @@ struct ExtractRulesData
         # `features` therefore contains the names of only the features actually
         # referenced by the atoms (a subset of the model's full feature set).
         # -------------------------------------------------------------------- #
-        features = SM.featurename.(unique!(get_feature.(atoms))) # TODO: if we dont have featurename ?
+        features = SM.featurename.(unique!(get_feature.(atoms))) # TODO: if we dont have featurename ?  
 
         # -------------------------------------------------------------------- #
         # STEP 5 — Retrieve the canonical feature name list and class labels
@@ -730,7 +750,7 @@ struct ExtractRulesData
 
         @inbounds for i in eachindex(featurenames)
             idx = findfirst(f -> f == featurenames[i], features)
-            thresholds[i] = isnothing(idx) ?
+            thresholds[i] = isnothing(idx) ? 
                 Float64[] :
                 sort!(get_threshold.(
                     _atoms_for_feature(atoms, features[idx])), rev=true
@@ -755,8 +775,8 @@ struct ExtractRulesData
         # of threshold values (one per feature), systematically covering all
         # input-space regions induced by the model's thresholds.
         # collect() materialises the lazy iterator into an array of tuples.
-        # --
-        # THIS IS THE CORE OF OUR Algorithm NOTICE, IF WE OPTIMIZE HERE WE HAVE
+        # -- 
+        # THIS IS THE CORE OF OUR Algorithm NOTICE, IF WE OPTIMIZE HERE WE HAVE 
         # HUGE BOOST !!!
         # -------------------------------------------------------------------- #
         combinations = collect(Iterators.product(thrs_with_p...))
@@ -1027,8 +1047,8 @@ function get_conjuncts(e::ExtractRulesData, c::SM.Label)
     isnothing(i) ? nothing : get_conjuncts(e, i)
 end
 
-@inline get_conjuncts(a::Vector{Vector{SL.Atom}}) = get_conjuncts.(a)
-@inline get_conjuncts(a::Vector{SL.Atom}) = isempty(a) ?
+@inline  get_conjuncts(a::Vector{Vector{SL.Atom}}) = get_conjuncts.(a)
+@inline  get_conjuncts(a::Vector{SL.Atom}) = isempty(a) ?
     ⊤ :
     SL.LeftmostConjunctiveForm{SL.Literal}(SL.Literal.(a))
 
@@ -1102,7 +1122,7 @@ returned immediately.
 """
 function _refine_dnf(
     terms::Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, SyntaxStructure}}
-)
+)  
     length(terms) ≤ 1 && return terms
 
     all_bounds = map(term -> SD.extract_term_bounds(term; silent=true), terms)
@@ -1184,69 +1204,6 @@ function run_minimization(
 end
 
 # ---------------------------------------------------------------------------- #
-#                            binary installation utils                         #
-# ---------------------------------------------------------------------------- #
-
-"""
-    cleanup_temp_build_dirs(prefix::String="")
-
-Clean up any leftover temporary build directories matching the given prefix.
-Useful for maintenance and debugging.
-
-# Arguments
-- `prefix::String`: Directory name prefix to match. If empty, cleans both
-  `abc_build_*` and `espresso_build_*` directories.
-"""
-function cleanup_temp_build_dirs(prefix::String="")
-    prefixes = isempty(prefix) ?
-        ["abc_build_", "espresso_build_"] :
-        [prefix]
-
-    for p in prefixes
-        pattern = Regex(p * "\\w+")
-        for item in readdir(tempdir())
-            if occursin(pattern, item)
-                full_path = joinpath(tempdir(), item)
-                if isdir(full_path)
-                    try
-                        rm(full_path; recursive=true, force=true)
-                        @info "Cleaned up leftover temp directory: $full_path"
-                    catch e
-                        @warn "Could not clean $full_path: $e"
-                    end
-                end
-            end
-        end
-    end
-end
-
-"""
-    clean_binary_installation(binary::Symbol)
-
-Remove a compiled binary from the module directory, forcing a fresh build on
-next use.
-
-# Arguments
-- `binary::Symbol`: Either `:abc` or `:espresso`.
-
-# Examples
-```julia
-clean_binary_installation(:abc)       # removes @__DIR__/abc
-clean_binary_installation(:espresso)  # removes @__DIR__/espresso
-```
-"""
-function clean_binary_installation(binary::Symbol)
-    name = string(binary)
-    path = joinpath(@__DIR__, name)
-    if isfile(path)
-        rm(path; force=true)
-        @info "Binary removed: $path"
-    else
-        @info "No binary found to remove at: $path"
-    end
-end
-
-# ---------------------------------------------------------------------------- #
 #                                    lumen                                     #
 # ---------------------------------------------------------------------------- #
 
@@ -1258,17 +1215,12 @@ Core single-model entry point for the LUMEN algorithm.
 Extracts a minimized [`DecisionSet`](@ref) from `model` using the parameters
 encoded in `config`.
 
-If `config` does not carry a pre-resolved binary path (i.e. `get_binary(config)`
-returns `nothing`), the appropriate binary is located or compiled automatically
-via [`setup_abc`](@ref) or [`setup_espresso`](@ref) before the pipeline runs.
-
 # Pipeline
-1. Resolve the minimizer binary (download/compile if necessary).
-2. Build [`ExtractRulesData`](@ref) from `config` and `model` (atom extraction,
+1. Build [`ExtractRulesData`](@ref) from `config` and `model` (atom extraction,
    truth-table enumeration, per-class grouping).
-3. For each class, call [`run_minimization`](@ref) on the derived atom vectors.
-4. Filter out classes for which no formula could be produced.
-5. Wrap the minimized formulas in `SM.Rule` objects and return a `DecisionSet`.
+2. For each class, call [`run_minimization`](@ref) on the derived atom vectors.
+3. Filter out classes for which no formula could be produced.
+4. Wrap the minimized formulas in `SM.Rule` objects and return a `DecisionSet`.
 
 # Arguments
 - `config::LumenConfig`: Algorithm configuration (minimization scheme, depth, etc.).
@@ -1300,7 +1252,7 @@ arguments and maps over the vector.
 
 # Examples
 ```julia
-# Single model with default settings (binary auto-downloaded on first use)
+# Single model with default settings
 ds = lumen(my_tree)
 
 # Single model with custom minimization scheme
@@ -1312,38 +1264,22 @@ ds = lumen(config, my_tree)
 
 # Batch processing
 results = lumen(config, [tree1, tree2, tree3])
-
-# Force recompilation of the ABC binary
-ds = lumen(my_tree; minimization_scheme=:abc, force_rebuild_binary=true)
 ```
 
-See also: [`LumenConfig`](@ref), [`LumenResult`](@ref), [`ExtractRulesData`](@ref),
-[`setup_abc`](@ref), [`setup_espresso`](@ref)
+See also: [`LumenConfig`](@ref), [`LumenResult`](@ref), [`ExtractRulesData`](@ref)
 """
 function lumen(
     config::LumenConfig,
-    model::SM.AbstractModel;
-    force_rebuild_binary::Bool=false
+    model::SM.AbstractModel
 )
-    # -------------------------------------------------------------------- #
-    # Resolve binary path: if none is stored in config, auto-install the
-    # appropriate minimizer binary and update config before continuing.
-    # -------------------------------------------------------------------- #
-    config = if isnothing(get_binary(config))
-        scheme = get_minimization_scheme(config)
-        resolved_binary = if scheme in (:abc, :abc_fast, :abc_balanced, :abc_thorough)
-            setup_abc(; force_rebuild=force_rebuild_binary)
-        elseif scheme == :mitespresso
-            setup_espresso(; force_rebuild=force_rebuild_binary)
-        else
-            nothing  # scheme handles its own binary (e.g. :quine)
-        end
-        isnothing(resolved_binary) ?
-            config :
-            LumenConfig(config; binary=resolved_binary)
-    else
-        config
-    end
+    # handle special test modes -> TODO
+    # if !isnothing(config.testott) || !isnothing(config.alphabetcontroll)
+    #     return handle_test_modes(model, config)
+    # end
+
+    # Determine apply function -> TODO
+    # apply_function = determine_apply_function(model, config.apply_function)
+    # config = @set config.apply_function = apply_function
 
     # extract conjuncts
     extractrulesdata = ExtractRulesData(config, model)
@@ -1376,11 +1312,10 @@ end
 
 function lumen(
     config::LumenConfig,
-    model::Vector{SM.AbstractModel};
-    kwargs...
+    model::Vector{SM.AbstractModel}
 )
     ds = map(model) do m
-        lumen(config, m; kwargs...)
+        lumen(config, m)
     end
 
     return LumenResult(ds)
@@ -1391,7 +1326,7 @@ function lumen(
     args...;
     kwargs...
 )
-    lumen(LumenConfig(; kwargs...), model; kwargs...)
+    lumen(LumenConfig(; kwargs...), model)
 end
 
 function lumen(
