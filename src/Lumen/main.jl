@@ -19,93 +19,117 @@ export lumen, LumenConfig, LumenResult
 #                   initial minimization algorithms setup                      #
 # ---------------------------------------------------------------------------- #
 
+# Centralised descriptor for every supported external minimizer binary.
+const _BINARY_SPECS = (
+    espresso = (
+        name        = "MIT Espresso",
+        url         = "https://github.com/jackhack96/logic-synthesis/releases/" *
+                      "download/0.3.5/espresso-src.tar.gz",
+        prefix      = "espresso_build_",
+        tarname     = "espresso.tar.gz",
+        strip       = true,   # --strip-components=1
+        subdir      = nothing,
+        binary_name = "espresso",
+        docs_url    = "https://github.com/jackhack96/logic-synthesis",
+    ),
+    abc = (
+        name        = "ABC",
+        url         = "https://github.com/berkeley-abc/abc/archive/refs/" *
+                      "heads/master.tar.gz",
+        prefix      = "abc_build_",
+        tarname     = "abc-master.tar.gz",
+        strip       = false,
+        subdir      = "abc-master",   # subdirectory created after extraction
+        binary_name = "abc",
+        docs_url    = "https://github.com/berkeley-abc/abc",
+    ),
+)
+
 """
-    _ensure_espresso_binary(; force_rebuild=false) -> String
+    _ensure_binary(spec; force_rebuild=false) -> String
 
-Download, compile and install the MIT Espresso binary into the module directory.
+Generic helper that downloads, compiles, and installs an external minimizer
+binary into the module directory.
 
-If the binary already exists at the expected path and `force_rebuild=false`, the
-function returns the existing path immediately without re-downloading.
-
-# Keyword Arguments
-- `force_rebuild::Bool`: If `true`, forces re-download and recompilation even
-  when a binary already exists. Defaults to `false`.
+`spec` is one of the named tuples stored in `_BINARY_SPECS` and carries all
+tool-specific information (URL, tarball name, extraction flags, …).
+If the binary already exists and `force_rebuild=false` the existing path is
+returned immediately.
 
 # Returns
-- `String`: Absolute path to the installed Espresso executable.
+- `String`: Absolute path to the installed executable.
 
 # Throws
-- `ErrorException`: If download, extraction, or compilation fails.
-
-# Notes
-The binary is placed next to this source file (`@__DIR__/espresso`). The source
-tarball is downloaded from the jackhack96/logic-synthesis GitHub releases page.
-A temporary build directory is created and cleaned up automatically.
-
-See also: [`setup_espresso`](@ref), [`_ensure_abc_binary`](@ref)
+- `ErrorException`: If download, extraction, or compilation fails, or if
+  required system tools (`tar`, `make`) are not available.
 """
-function _ensure_espresso_binary(; force_rebuild=false)
-    espresso_binary = joinpath(@__DIR__, "espresso")
+function _ensure_binary(spec; force_rebuild=false)
+    binary_path = joinpath(@__DIR__, spec.binary_name)
 
-    if isfile(espresso_binary) && !force_rebuild
-        @info "Espresso binary already exists at: $espresso_binary (skipping download/compilation)"
-        return espresso_binary
+    if isfile(binary_path) && !force_rebuild
+        @info "$(spec.name) binary already exists at: $binary_path " *
+              "(skipping download/compilation)"
+        return binary_path
     end
 
-    @info "Setting up MIT Espresso binary..."
-    tmp = mktempdir(; prefix="espresso_build_")
-
-    espresso_url =
-        "https://github.com/jackhack96/logic-synthesis/releases/download/" *
-        "0.3.5/espresso-src.tar.gz"
+    @info "Setting up $(spec.name) binary..."
+    tmp = mktempdir(; prefix=spec.prefix)
 
     try
-        tarfile = joinpath(tmp, "espresso.tar.gz")
-        @info "Downloading MIT Espresso source code..."
-        Downloads.download(espresso_url, tarfile)
+        # ── download ──────────────────────────────────────────────────────── #
+        tarfile = joinpath(tmp, spec.tarname)
+        @info "Downloading $(spec.name) source code..."
+        Downloads.download(spec.url, tarfile)
 
-        extract_dir = joinpath(tmp, "src")
-        mkdir(extract_dir)
-
+        # ── extract ───────────────────────────────────────────────────────── #
         success(`which tar`) ||
             error("System tar command not found. Please install tar utilities.")
 
-        @info "Extracting MIT Espresso source code..."
-        run(`tar -xzf $tarfile -C $extract_dir --strip-components=1`)
+        extract_dir = joinpath(tmp, "src")
+        mkdir(extract_dir)
+        @info "Extracting $(spec.name) source code..."
 
-        @info "Compiling MIT Espresso..."
-        old_dir = pwd()
-        cd(extract_dir)
-        try
-            success(`which make`) ||
-                error(
-                    "make command not found. " *
-                    "Please install build tools (make, gcc, etc.)."
-                )
+        tar_flags = spec.strip ?
+            `-xzf $tarfile -C $extract_dir --strip-components=1` :
+            `-xzf $tarfile -C $extract_dir`
+        run(`tar $tar_flags`)
+
+        # ── compile ───────────────────────────────────────────────────────── #
+        success(`which make`) ||
+            error("make command not found. " *
+                  "Please install build tools (make, gcc, etc.).")
+
+        build_dir = isnothing(spec.subdir) ?
+            extract_dir :
+            joinpath(extract_dir, spec.subdir)
+
+        isdir(build_dir) ||
+            error("Failed to locate $(spec.name) source directory: $build_dir")
+
+        @info "Compiling $(spec.name)..."
+        cd(build_dir) do
             run(`make`)
-            compiled = joinpath(extract_dir, "espresso")
-            if isfile(compiled)
-                cp(compiled, espresso_binary; force=true)
-                chmod(espresso_binary, 0o755)
-                @info "Espresso compiled successfully at: $espresso_binary"
-            else
-                error("Espresso compilation completed but binary not found")
-            end
-        finally
-            cd(old_dir)
         end
 
-        return espresso_binary
+        compiled = joinpath(build_dir, spec.binary_name)
+        isfile(compiled) ||
+            error("$(spec.name) compilation completed but binary not found")
+
+        cp(compiled, binary_path; force=true)
+        chmod(binary_path, 0o755)
+        @info "$(spec.name) compiled successfully at: $binary_path"
+
+        return binary_path
+
     catch e
-        @error "Failed to download/compile Espresso: $e. " *
-               "Consider downloading Espresso manually from " *
-               "https://github.com/jackhack96/logic-synthesis"
+        @error "Failed to download/compile $(spec.name): $e. " *
+               "Consider downloading it manually from $(spec.docs_url)"
         rethrow(e)
     finally
         try
             rm(tmp; recursive=true, force=true)
-        catch cleanup_error
-            @warn "Failed to cleanup temporary directory: $cleanup_error"
+        catch cleanup_err
+            @warn "Failed to cleanup temporary directory: $cleanup_err"
         end
     end
 end
@@ -115,26 +139,37 @@ end
 
 Locate or install the MIT Espresso binary and return its path.
 
-On first call (or when `force_rebuild=true`) this function downloads and compiles
-Espresso from source via [`_ensure_espresso_binary`](@ref). Subsequent calls
-reuse the cached binary.
-
-# Keyword Arguments
-- `force_rebuild::Bool`: Force re-download and recompilation. Defaults to `false`.
-
-# Returns
-- `String`: Absolute path to the verified Espresso executable.
-
-# Throws
-- `ErrorException`: If the binary cannot be found after installation.
+On first call (or when `force_rebuild=true`) downloads and compiles Espresso
+from source. Subsequent calls reuse the cached binary.
 
 See also: [`setup_abc`](@ref), [`lumen`](@ref)
 """
 function setup_espresso(; force_rebuild=false)
-    espresso_binary = _ensure_espresso_binary(; force_rebuild)
-    isfile(espresso_binary) ||
-        error("espresso binary not found at $espresso_binary")
-    return espresso_binary
+    binary = _ensure_binary(_BINARY_SPECS.espresso; force_rebuild)
+    isfile(binary) || error("espresso binary not found at $binary")
+    return binary
+end
+
+"""
+    setup_abc(; force_rebuild=false) -> String
+
+Locate or install the ABC logic synthesis binary and return its path.
+
+On first call (or when `force_rebuild=true`) downloads and compiles ABC from
+source. After installation a basic health-check (`abc -h`) verifies the
+executable is functional.
+
+See also: [`setup_espresso`](@ref), [`lumen`](@ref)
+"""
+function setup_abc(; force_rebuild=false)
+    binary = _ensure_binary(_BINARY_SPECS.abc; force_rebuild)
+    isfile(binary) || error("ABC binary not found at $binary")
+    try
+        run(`$binary -h`; wait=false)
+    catch e
+        error("ABC binary is not working properly: $e")
+    end
+    return binary
 end
 
 """
@@ -150,136 +185,6 @@ tool. Currently a no-op pending evaluation of the minimizer.
 - TODO: evaluate and implement this minimizer.
 """
 function setup_boom() end # TODO: evaluate this minimizer
-
-"""
-    _ensure_abc_binary(; force_rebuild=false) -> String
-
-Download, compile and install the ABC logic synthesis binary into the module
-directory.
-
-If the binary already exists at the expected path and `force_rebuild=false`, the
-function returns the existing path immediately without re-downloading.
-
-The ABC source is fetched from the official Berkeley-ABC GitHub repository
-(`berkeley-abc/abc`). A temporary build directory is created and cleaned up
-automatically regardless of success or failure.
-
-# Keyword Arguments
-- `force_rebuild::Bool`: If `true`, forces re-download and recompilation even
-  when a binary already exists. Defaults to `false`.
-
-# Returns
-- `String`: Absolute path to the installed ABC executable.
-
-# Throws
-- `ErrorException`: If download, extraction, or compilation fails, or if
-  required system tools (`tar`, `make`) are not available.
-
-# Notes
-The binary is placed next to this source file (`@__DIR__/abc`).
-
-See also: [`setup_abc`](@ref), [`_ensure_espresso_binary`](@ref)
-"""
-function _ensure_abc_binary(; force_rebuild=false)
-    abc_binary = joinpath(@__DIR__, "abc")
-
-    if isfile(abc_binary) && !force_rebuild
-        @info "ABC binary already exists at: $abc_binary (skipping download/compilation)"
-        return abc_binary
-    end
-
-    @info "Setting up ABC binary..."
-    tmp = mktempdir(; prefix="abc_build_")
-    abc_url =
-        "https://github.com/berkeley-abc/abc/archive/refs/heads/master.tar.gz"
-
-    try
-        tarfile = joinpath(tmp, "abc-master.tar.gz")
-        @info "Downloading ABC source code..."
-        Downloads.download(abc_url, tarfile)
-
-        extract_dir = joinpath(tmp, "extract")
-        mkdir(extract_dir)
-
-        success(`which tar`) ||
-            error("System tar command not found. Please install tar utilities.")
-
-        @info "Extracting ABC source code..."
-        run(`tar -xzf $tarfile -C $extract_dir`)
-
-        abc_source_dir = joinpath(extract_dir, "abc-master")
-        isdir(abc_source_dir) ||
-            error("Failed to extract ABC source code – directory not found")
-
-        @info "Compiling ABC... This may take a few minutes."
-        old_dir = pwd()
-        cd(abc_source_dir)
-        try
-            success(`which make`) ||
-                error(
-                    "make command not found. " *
-                    "Please install build tools (make, gcc, etc.)."
-                )
-            run(`make`)
-            compiled = joinpath(abc_source_dir, "abc")
-            if isfile(compiled)
-                cp(compiled, abc_binary; force=true)
-                chmod(abc_binary, 0o755)
-                @info "ABC compiled successfully at: $abc_binary"
-            else
-                error("ABC compilation completed but binary not found")
-            end
-        finally
-            cd(old_dir)
-        end
-
-        return abc_binary
-    catch e
-        @error "Failed to download/compile ABC: $e. " *
-               "Consider downloading ABC manually from " *
-               "https://github.com/berkeley-abc/abc"
-        rethrow(e)
-    finally
-        try
-            rm(tmp; recursive=true, force=true)
-        catch cleanup_error
-            @warn "Failed to cleanup temporary directory: $cleanup_error"
-        end
-    end
-end
-
-"""
-    setup_abc(; force_rebuild=false) -> String
-
-Locate or install the ABC logic synthesis binary and return its path.
-
-On first call (or when `force_rebuild=true`) this function downloads and compiles
-ABC from source via [`_ensure_abc_binary`](@ref). After locating the binary it
-performs a basic health-check by running `abc -h` to ensure the executable is
-functional.
-
-# Keyword Arguments
-- `force_rebuild::Bool`: Force re-download and recompilation. Defaults to `false`.
-
-# Returns
-- `String`: Absolute path to the verified ABC executable.
-
-# Throws
-- `ErrorException`: If the binary is missing after installation or if the
-  health-check invocation raises an exception.
-
-See also: [`setup_espresso`](@ref), [`lumen`](@ref)
-"""
-function setup_abc(; force_rebuild=false)
-    abc_binary = _ensure_abc_binary(; force_rebuild)
-    isfile(abc_binary) || error("ABC binary not found at $abc_binary")
-    try
-        run(`$abc_binary -h`; wait=false)
-    catch e
-        error("ABC binary is not working properly: $e")
-    end
-    return abc_binary
-end
 
 """
     setup_quine() -> Nothing
@@ -1426,10 +1331,10 @@ function lumen(
     # -------------------------------------------------------------------- #
     config = if isnothing(get_binary(config))
         scheme = get_minimization_scheme(config)
-        resolved_binary = if scheme == :mitespresso
-            setup_espresso(; force_rebuild=force_rebuild_binary)
-        elseif scheme in (:abc, :abc_fast, :abc_balanced, :abc_thorough)
+        resolved_binary = if scheme in (:abc, :abc_fast, :abc_balanced, :abc_thorough)
             setup_abc(; force_rebuild=force_rebuild_binary)
+        elseif scheme == :mitespresso
+            setup_espresso(; force_rebuild=force_rebuild_binary)
         else
             nothing  # scheme handles its own binary (e.g. :quine)
         end
