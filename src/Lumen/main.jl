@@ -1167,7 +1167,7 @@ function run_minimization(
 )
     minimized_formula =
         SD.abc_minimize(
-            atoms, get_binary(extractor); fast=1, depth=get_depth(extractor)
+            atoms; fast=1, depth=get_depth(extractor)
         )
 
     return _refine_dnf(minimized_formula)
