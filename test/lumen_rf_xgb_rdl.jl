@@ -20,9 +20,20 @@ Xc = DataFrame(Xc)
 
 iris = DT.load_dataset(Xc, yc)
 
-function model_wrapper(X, y, w; featurenames, rng, iteration, kwargs...)
-    irepstar(X, y; featurenames, max_k=1, rng)
-end
+a=SX.solexplorer(
+    iris,
+    model=SX.RandomForestClassifier(n_trees=50,),
+    # extractor=SX.LumenRuleExtractor(minimization_scheme=:abc),
+    # extractor=SX.LumenRuleExtractor(),
+)
+@show a.sole
+
+b=SX.solexplorer(
+    iris,
+    model=SX.RandomDecisionListClassifier(num_models=50,),
+    # extractor=SX.LumenRuleExtractor(minimization_scheme=:abc),
+    # extractor=SX.LumenRuleExtractor(),
+)
 
 # natopsloader = SX.NatopsLoader()
 # Xts, yts = SX.load(natopsloader)
@@ -39,14 +50,15 @@ end
 #         )
 #     )
 # )
+
 # ---------------------------------------------------------------------------- #
 #                                random forest                                 #
 # ---------------------------------------------------------------------------- #
-@btime SX.solexplorer(
+@btime a=SX.solexplorer(
     iris,
     model=SX.RandomForestClassifier(n_trees=50,),
     # extractor=SX.LumenRuleExtractor(minimization_scheme=:abc),
-    extractor=SX.LumenRuleExtractor(),
+    # extractor=SX.LumenRuleExtractor(),
     seed=42
 )
 #   210.685 s (727569802 allocations: 403.57 GiB)
@@ -118,6 +130,15 @@ end
 # ---------------------------------------------------------------------------- #
 #                       random decision list ensemble                          #
 # ---------------------------------------------------------------------------- #
+SX.solexplorer(
+    iris,
+    model=SX.RandomDecisionListClassifier(num_models=50,),
+    # extractor=SX.LumenRuleExtractor(minimization_scheme=:abc),
+    # extractor=SX.LumenRuleExtractor(),
+    seed=42
+)
+
+
 rng = Xoshiro(42)
 Xc, yc = @load_iris
 Xc = DataFrame(Xc)
