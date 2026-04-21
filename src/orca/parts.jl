@@ -81,6 +81,12 @@ function first_part(n_trees, original_f, original_vec, active_parts=[1,2,3])
     # corresponding tree should be included (1) or excluded (0) from the new forest
     presence_mask = original_vec[_segment(1, n_trees, active_parts)]
 
+    if !any(presence_mask)
+        # Edge case: if all the bits are false then the first tree is forcefully
+        # set to true to avoid having an empty forest.
+        presence_mask[1] = true
+    end
+
     # Keep only the models (SoleTrees) whose presence bit is 1
     remaining_trees = original_f.models[presence_mask]
 
