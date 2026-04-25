@@ -1059,7 +1059,8 @@ end
 
 function truths_by_groups(e::ExtractRulesData, i::Int)
     idxs = findall(==(e.classnames[i]), e.predictions)
-    [get_truths(e, i) for i in idxs]
+    truths = [get_truths(e, i) for i in idxs]
+    return isempty(truths) ? Vector{BitVector}[] : truths
 end
 
 # ---------------------------------------------------------------------------- #
