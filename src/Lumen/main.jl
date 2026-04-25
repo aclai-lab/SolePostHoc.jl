@@ -130,7 +130,6 @@ function setup_quine() end # TODO: evaluate this minimizer
 # ---------------------------------------------------------------------------- #
 #                                 print utils                                  #
 # ---------------------------------------------------------------------------- #
-
 """
     _featurename(f::SD.VariableValue) -> String
 
@@ -373,7 +372,6 @@ end
 # ---------------------------------------------------------------------------- #
 #                                 depth utils                                  #
 # ---------------------------------------------------------------------------- #
-
 """
     _extract_atoms_bfs_order(tree::SM.AbstractModel)
         -> Vector{SL.Atom{SD.AbstractCondition}}
@@ -432,7 +430,7 @@ function _take_first_percentage(
     n_total = length(atoms)
     n_to_take = Int(ceil(n_total * depth))
 
-    return atoms[1:min(n_to_take, n_total)]
+    return @view atoms[1:min(n_to_take, n_total)]
 end
 
 # ---------------------------------------------------------------------------- #
@@ -769,24 +767,29 @@ The high-level constructor:
 
 See also: [`lumen`](@ref), [`LumenConfig`](@ref), [`get_atoms`](@ref)
 """
-struct ExtractRulesData{T<:Vector{<:Float}}
-    grp_truths::Vector{Vector{Vector{BitVector}}}
+struct ExtractRulesData{T<:Vector{<:Float},F<:SM.Label,L<:SM.Label}
+    # grp_truths::Vector{Vector{Vector{BitVector}}}
+    predictions::Vector{L}
+    combinations::Array{<:NTuple}
     thresholds::Vector{T}
-    features::Vector{<:SM.Label}
-    classnames::AbstractVector{<:SM.Label}
+    featurenames::Vector{F}
+    classnames::AbstractVector{L}
     op_families::Vector{Symbol}
 
     ExtractRulesData(
-        grp_truths::Vector{Vector{Vector{BitVector}}},
+        # grp_truths::Vector{Vector{Vector{BitVector}}},
+        predictions::Vector{L},
+        combinations::Array{<:NTuple},
         thresholds::Vector{T},
-        features::Vector{<:SM.Label},
-        classnames::AbstractVector{<:SM.Label},
+        featurenames::Vector{F},
+        classnames::AbstractVector{L},
         op_families::Vector{Symbol}
-    ) where {T<:Vector{<:Float}} =
-        new{T}(grp_truths, thresholds, features, classnames, op_families)
+    ) where {T<:Vector{<:Float},F<:SM.Label,L<:SM.Label} =
+        new{T,F,L}(
+            predictions, combinations, thresholds, featurenames, classnames, op_families
+        )
 
     function ExtractRulesData(extractor::LumenConfig, model::SM.AbstractModel)
-
         # -------------------------------------------------------------------- #
         # STEP 1 — Read the depth parameter from the configuration.
         # `depth ∈ (0, 1]`: if < 1.0, only atoms from the upper levels of the
@@ -969,57 +972,20 @@ struct ExtractRulesData{T<:Vector{<:Float}}
         # -------------------------------------------------------------------- #
         predictions = get_apply_function(extractor)(
             model,
-            scalarlogiset(
-                DataFrame(combinations, featurenames), allow_propositional=true
-            );
+            PropositionalLogiset(DataFrame(combinations, featurenames));
             suppress_parity_warning=true
         )
 
         # -------------------------------------------------------------------- #
-        # STEP 10 — Convert each combination of float values into its
-        # corresponding Boolean truth assignment over the thresholds.
-        #
-        # For each combination i, _truths_by_thresholds returns a
-        # Vector{BitVector}: one BitVector per feature, where bit j indicates
-        # whether the feature's value satisfies the encoded condition for the
-        # j-th threshold.
-        # The loop is parallelised across threads for efficiency.
-        # -------------------------------------------------------------------- #
-        truths = Vector{Vector{BitVector}}(undef, length(combinations))
-        Threads.@threads for i in eachindex(combinations)
-            truths[i] = _truths_by_thresholds(combinations[i], thresholds)
-        end
-
-        # -------------------------------------------------------------------- #
-        # STEP 11 — Group truth assignments by predicted class.
-        #
-        # For each class i in classnames:
-        #   - findall locates the indices of combinations to which the model
-        #     assigned that class.
-        #   - grp_truths[i] collects only
-        #     the truth assignments at those indices.
-        #
-        # Result: grp_truths[i] = list of truth assignments for class i, each
-        # representing one row of the truth table that leads to class i.
-        # The loop is parallelised across threads.
-        # -------------------------------------------------------------------- #
-        grp_truths =
-            Vector{Vector{Vector{BitVector}}}(undef, length(classnames))
-        Threads.@threads for i in eachindex(classnames)
-            indices = findall(==(classnames[i]), predictions)
-            grp_truths[i] = truths[indices]
-        end
-
-        # -------------------------------------------------------------------- #
-        # STEP 12 — Construct and return the instance with all computed data.
+        # STEP 10 — Construct and return the instance with all computed data.
         #
         # Note: `featurenames` (canonical model ordering) is used instead of
         # `features` (atom-extraction ordering) to guarantee alignment with
         # `thresholds` and `op_families`,
         # which were both built over `featurenames`.
         # -------------------------------------------------------------------- #
-        return new{Vector{<:type}}(
-            grp_truths, thresholds, featurenames, classnames, op_families
+        return new{Vector{<:type},eltype(featurenames),eltype(classnames)}(
+            predictions, combinations, thresholds, featurenames, classnames, op_families
         )
     end
 end
@@ -1027,26 +993,35 @@ end
 # ---------------------------------------------------------------------------- #
 #                                   methods                                    #
 # ---------------------------------------------------------------------------- #
-"""
-    get_grouped_truths(e::ExtractRulesData) -> Vector{Vector{Vector{BitVector}}}
+# """
+#     get_grouped_truths(e::ExtractRulesData) -> Vector{Vector{Vector{BitVector}}}
 
-Return the full per-class grouped truth assignments stored in `e`.
+# Return the full per-class grouped truth assignments stored in `e`.
 
----
+# ---
 
-    get_grouped_truths(e::ExtractRulesData, i::Int) -> Vector{Vector{BitVector}}
+#     get_grouped_truths(e::ExtractRulesData, i::Int) -> Vector{Vector{BitVector}}
 
-Return the truth assignments for the `i`-th class.
+# Return the truth assignments for the `i`-th class.
 
----
+# ---
 
-    get_grouped_truths(e::ExtractRulesData, c::SM.Label)
-        -> Union{Vector{Vector{BitVector}}, Nothing}
+#     get_grouped_truths(e::ExtractRulesData, c::SM.Label)
+#         -> Union{Vector{Vector{BitVector}}, Nothing}
 
-Return the truth assignments for the class whose label equals `c`, or `nothing`
-if `c` is not found.
-"""
-@inline get_grouped_truths(e::ExtractRulesData) = e.grp_truths
+# Return the truth assignments for the class whose label equals `c`, or `nothing`
+# if `c` is not found.
+# """
+# @inline get_grouped_truths(e::ExtractRulesData) = e.grp_truths
+
+# function truths_by_thresholds(t::TableTruths, i::Int)
+#     _truths_by_thresholds(t.combinations[i], t.thresholds)
+# end
+
+# function truths_by_groups(t::TableTruths, i::Int)
+#     indices = findall(==(t.classnames[i]), t.predictions)
+#     [truths_by_thresholds(t, i) for i in indicies]
+# end
 
 """
     get_thresholds(
@@ -1076,11 +1051,11 @@ function get_thresholds(
 end
 
 """
-    get_features(e::ExtractRulesData) -> Vector{<:SM.Label}
+    get_featurenames(e::ExtractRulesData) -> Vector{<:SM.Label}
 
 Return the ordered feature-name vector stored in `e`.
 """
-@inline get_features(e::ExtractRulesData) = e.features
+@inline get_featurenames(e::ExtractRulesData) = e.featurenames
 
 """
     get_classnames(e::ExtractRulesData) -> Vector{<:SM.Label}
@@ -1097,12 +1072,12 @@ Each entry is either `:lt` (for `<`/`≥` models) or `:gt` (for `>`/`≤` models
 """
 @inline get_op_families(e::ExtractRulesData) = e.op_families
 
-function get_grouped_truths(e::ExtractRulesData, c::SM.Label)
-    i = findfirst(g -> get_classnames(g) == c, e.grp_truths)
-    isnothing(i) ? nothing : get_grouped_truths(e, i)
-end
+# function get_grouped_truths(e::ExtractRulesData, c::SM.Label)
+#     i = findfirst(g -> get_classnames(g) == c, e.grp_truths)
+#     isnothing(i) ? nothing : get_grouped_truths(e, i)
+# end
 
-@inline get_grouped_truths(e::ExtractRulesData, i::Int) = e.grp_truths[i]
+# @inline get_grouped_truths(e::ExtractRulesData, i::Int) = e.grp_truths[i]
 
 """
     get_truths(e::ExtractRulesData) -> Vector{Vector{Vector{BitVector}}}
@@ -1115,24 +1090,31 @@ Return all per-class truth-assignment lists.
 
 Return the truth-assignment list for class `i`.
 """
-@inline get_truths(e::ExtractRulesData) =
-    [get_truths(e, i) for i in eachindex(get_classnames(e))]
-@inline get_truths(e::ExtractRulesData, i::Int) = get_grouped_truths(e, i)
+# @inline get_truths(e::ExtractRulesData) =
+#     [get_truths(e, i) for i in eachindex(get_classnames(e))]
+@inline function get_truths(e::ExtractRulesData, i::Int)
+    _truths_by_thresholds(e.combinations[i], e.thresholds)
+end
 
-"""
-    get_truth(e::ExtractRulesData, i::Int, j::Int) -> Vector{BitVector}
+function truths_by_groups(e::ExtractRulesData, i::Int)
+    idxs = findall(==(e.classnames[i]), e.predictions)
+    [get_truths(e, i) for i in idxs]
+end
 
-Return the `j`-th truth assignment for class `i`.
+# """
+#     get_truth(e::ExtractRulesData, i::Int, j::Int) -> Vector{BitVector}
 
----
+# Return the `j`-th truth assignment for class `i`.
 
-    get_truth(e::ExtractRulesData, i::Int) -> Vector{Vector{BitVector}}
+# ---
 
-Return all truth assignments for class `i` (alias for `get_truths(e, i)`).
-"""
-@inline get_truth(e::ExtractRulesData, i::Int, j::Int) =
-    get_grouped_truths(e, i)[j]
-@inline get_truth(e::ExtractRulesData, i::Int) = get_truths(e)[i]
+#     get_truth(e::ExtractRulesData, i::Int) -> Vector{Vector{BitVector}}
+
+# Return all truth assignments for class `i` (alias for `get_truths(e, i)`).
+# """
+# @inline get_truth(e::ExtractRulesData, i::Int, j::Int) =
+#     get_grouped_truths(e, i)[j]
+# @inline get_truth(e::ExtractRulesData, i::Int) = get_truths(e)[i]
 
 # ---------------------------------------------------------------------------- #
 #                                  get atoms                                   #
@@ -1199,25 +1181,25 @@ function get_atoms(e::ExtractRulesData, c::SM.Label; float_type::Type=Float64)
 end
 
 function get_atoms(e::ExtractRulesData, i::Int; float_type::Type=Float64)
-    truths      = get_truths(e, i)
-    thresholds  = get_thresholds(e; prev_float=false, float_type)
-    features    = get_features(e)
+    truths = truths_by_groups(e, i)
+    thresholds = get_thresholds(e; prev_float=false, float_type)
+    featurenames = get_featurenames(e)
     op_families = get_op_families(e)
-
-    get_atoms(truths, thresholds, features, op_families)
+    
+    get_atoms(truths, thresholds, featurenames, op_families)
 end
 
 function get_atoms(
     truths::Vector{Vector{BitVector}},
     thresholds::Vector{T},
-    features::Vector{Symbol},
+    featurenames::Vector{Symbol},
     op_families::Vector{Symbol}
 ) where {T<:Vector{<:Float}}
     conjuncts = Vector{Vector{SL.Atom}}(undef, length(truths))
 
     Threads.@threads for i in eachindex(truths)
         conjuncts[i] =
-            generate_disjunct(truths[i], thresholds, features, op_families)
+            generate_disjunct(truths[i], thresholds, featurenames, op_families)
     end
 
     return conjuncts
@@ -1530,8 +1512,8 @@ function lumen(
     end
 
     valid_mask = .!isempty.(formulas)
-    formulas   = formulas[valid_mask]
-    classes    = classes[valid_mask]
+    formulas = formulas[valid_mask]
+    classes = classes[valid_mask]
 
     return SM.DecisionSet(
         SM.Rule.(SL.LeftmostDisjunctiveForm.(formulas), classes)
