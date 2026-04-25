@@ -80,12 +80,6 @@ function first_part(n_trees, original_f, original_vec, active_parts=[1,2,3])
     # Extract the presence-segment bits: each bit indicates whether the
     # corresponding tree should be included (1) or excluded (0) from the new forest
     presence_mask = original_vec[_segment(1, n_trees, active_parts)]
-
-    if !any(presence_mask)
-        # Edge case: if all the bits are false then the first tree is forcefully
-        # set to true to avoid having an empty forest.
-        presence_mask[1] = true
-    end
     
     # Keep only the models (SoleTrees) whose presence bit is 1
     remaining_trees = original_f.models[presence_mask]
@@ -445,6 +439,10 @@ function evaluate_bitvector(bitvec::BitVector, n_trees::Int,
     if 2 in active_parts
         pruned_forest, _target_depth, _depth_mask =
             second_part(n_trees, presence_mask, original_f, bitvec, active_parts)
+
+        if !any(presence_mask .& depth_mask)
+            return 1.0, sum(bitvec)
+        end
     else
         # Stage 2 skipped: build a forest from the kept trees (no pruning)
         kept_indices  = findall(presence_mask)
@@ -455,6 +453,10 @@ function evaluate_bitvector(bitvec::BitVector, n_trees::Int,
     if 3 in active_parts
         final_forest, _alphabet_table, _alphabet_mask =
             third_part(n_trees, presence_mask, pruned_forest, bitvec, active_parts)
+        
+        if !any(presence_mask .& alphabet_mask)
+            return 1.0, sum(bitvec)
+        end
     else
         # Stage 3 skipped: use as-is 
         final_forest = pruned_forest
