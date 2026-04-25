@@ -993,36 +993,6 @@ end
 # ---------------------------------------------------------------------------- #
 #                                   methods                                    #
 # ---------------------------------------------------------------------------- #
-# """
-#     get_grouped_truths(e::ExtractRulesData) -> Vector{Vector{Vector{BitVector}}}
-
-# Return the full per-class grouped truth assignments stored in `e`.
-
-# ---
-
-#     get_grouped_truths(e::ExtractRulesData, i::Int) -> Vector{Vector{BitVector}}
-
-# Return the truth assignments for the `i`-th class.
-
-# ---
-
-#     get_grouped_truths(e::ExtractRulesData, c::SM.Label)
-#         -> Union{Vector{Vector{BitVector}}, Nothing}
-
-# Return the truth assignments for the class whose label equals `c`, or `nothing`
-# if `c` is not found.
-# """
-# @inline get_grouped_truths(e::ExtractRulesData) = e.grp_truths
-
-# function truths_by_thresholds(t::TableTruths, i::Int)
-#     _truths_by_thresholds(t.combinations[i], t.thresholds)
-# end
-
-# function truths_by_groups(t::TableTruths, i::Int)
-#     indices = findall(==(t.classnames[i]), t.predictions)
-#     [truths_by_thresholds(t, i) for i in indicies]
-# end
-
 """
     get_thresholds(
         e::ExtractRulesData;
@@ -1072,13 +1042,6 @@ Each entry is either `:lt` (for `<`/`≥` models) or `:gt` (for `>`/`≤` models
 """
 @inline get_op_families(e::ExtractRulesData) = e.op_families
 
-# function get_grouped_truths(e::ExtractRulesData, c::SM.Label)
-#     i = findfirst(g -> get_classnames(g) == c, e.grp_truths)
-#     isnothing(i) ? nothing : get_grouped_truths(e, i)
-# end
-
-# @inline get_grouped_truths(e::ExtractRulesData, i::Int) = e.grp_truths[i]
-
 """
     get_truths(e::ExtractRulesData) -> Vector{Vector{Vector{BitVector}}}
 
@@ -1090,8 +1053,6 @@ Return all per-class truth-assignment lists.
 
 Return the truth-assignment list for class `i`.
 """
-# @inline get_truths(e::ExtractRulesData) =
-#     [get_truths(e, i) for i in eachindex(get_classnames(e))]
 @inline function get_truths(e::ExtractRulesData, i::Int)
     _truths_by_thresholds(e.combinations[i], e.thresholds)
 end
@@ -1100,21 +1061,6 @@ function truths_by_groups(e::ExtractRulesData, i::Int)
     idxs = findall(==(e.classnames[i]), e.predictions)
     [get_truths(e, i) for i in idxs]
 end
-
-# """
-#     get_truth(e::ExtractRulesData, i::Int, j::Int) -> Vector{BitVector}
-
-# Return the `j`-th truth assignment for class `i`.
-
-# ---
-
-#     get_truth(e::ExtractRulesData, i::Int) -> Vector{Vector{BitVector}}
-
-# Return all truth assignments for class `i` (alias for `get_truths(e, i)`).
-# """
-# @inline get_truth(e::ExtractRulesData, i::Int, j::Int) =
-#     get_grouped_truths(e, i)[j]
-# @inline get_truth(e::ExtractRulesData, i::Int) = get_truths(e)[i]
 
 # ---------------------------------------------------------------------------- #
 #                                  get atoms                                   #
