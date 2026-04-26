@@ -80,7 +80,12 @@ function first_part(n_trees, original_f, original_vec, active_parts=[1,2,3])
     # Extract the presence-segment bits: each bit indicates whether the
     # corresponding tree should be included (1) or excluded (0) from the new forest
     presence_mask = original_vec[_segment(1, n_trees, active_parts)]
-    
+
+    if !any(presence_mask)
+
+        return original_f, presence_mask
+    end
+
     # Keep only the models (SoleTrees) whose presence bit is 1
     remaining_trees = original_f.models[presence_mask]
 
@@ -421,13 +426,15 @@ function evaluate_bitvector(bitvec::BitVector, n_trees::Int,
                              l_val::Vector{String};
                              active_parts::Vector{Int} = [1,2,3])
 
+    max_bits = length(bitvec)
+
     # ── Stage 1: tree selection ───────────────────────────────────────────────
     if 1 in active_parts
         selected_forest, presence_mask = first_part(n_trees, original_f, bitvec, active_parts)
 
         # Edge-case: if no tree was selected the forest is useless → maximum penalty
-        if isempty(selected_forest.models)
-            return 1.0, sum(bitvec)
+        if !any(presence_mask)
+            return 1.0, max_bits
         end
     else
         # Stage 1 skipped: keep all trees
@@ -437,12 +444,13 @@ function evaluate_bitvector(bitvec::BitVector, n_trees::Int,
 
     # ── Stage 2: tree pruning ─────────────────────────────────────────────────
     if 2 in active_parts
-        pruned_forest, _target_depth, _depth_mask =
+        pruned_forest, _target_depth, depth_mask =
             second_part(n_trees, presence_mask, original_f, bitvec, active_parts)
 
         if !any(presence_mask .& depth_mask)
-            return 1.0, sum(bitvec)
+            return 1.0, max_bits
         end
+
     else
         # Stage 2 skipped: build a forest from the kept trees (no pruning)
         kept_indices  = findall(presence_mask)
@@ -451,12 +459,13 @@ function evaluate_bitvector(bitvec::BitVector, n_trees::Int,
 
     # ── Stage 3: alphabet modification ───────────────────────────────────────
     if 3 in active_parts
-        final_forest, _alphabet_table, _alphabet_mask =
+        final_forest, _alphabet_table, alphabet_mask =
             third_part(n_trees, presence_mask, pruned_forest, bitvec, active_parts)
-        
+    
         if !any(presence_mask .& alphabet_mask)
-            return 1.0, sum(bitvec)
+            return 1.0, max_bits
         end
+
     else
         # Stage 3 skipped: use as-is 
         final_forest = pruned_forest
@@ -513,7 +522,12 @@ function core(
         population_size::Int      = 50,
         n_generations::Int        = 100,
         penalty_weight::Float64   = 0.3,
-        active_parts::Vector{Int} = [1,2,3])
+        active_parts::Vector{Int} = [1,2,3],
+        seed::Union{Int, Nothing} = nothing)
+
+    if !isnothing(seed)
+        Random.seed!(seed)
+    end
 
     # The bitvector only contains segments for the active stages
     n_bits = length(active_parts) * n_trees

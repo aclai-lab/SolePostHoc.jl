@@ -42,7 +42,8 @@ Random.seed!(42)
     @testset "Mode: :size (Tree Selection)" begin
         compressed_f = SolePostHoc.Orca.compression(
             original_forest, :size, f_val, l_val;
-            population_size=10, n_generations=5
+            population_size=10, n_generations=5,
+            seed=42 
         )
         
         @test compressed_f isa DecisionEnsemble
@@ -52,7 +53,8 @@ Random.seed!(42)
     @testset "Mode: :depth (Tree Pruning)" begin
         compressed_f = SolePostHoc.Orca.compression(
             original_forest, :depth, f_val, l_val;
-            population_size=10, n_generations=5
+            population_size=10, n_generations=5,
+            seed=42 
         )
         
         @test compressed_f isa DecisionEnsemble
@@ -62,7 +64,8 @@ Random.seed!(42)
     @testset "Mode: :full_dimensional (Full Pipeline)" begin
         compressed_f = SolePostHoc.Orca.compression(
             original_forest, :full_dimensional, f_val, l_val;
-            population_size=10, n_generations=5
+            population_size=10, n_generations=5,
+            seed=42 
         )
         
         @test compressed_f isa DecisionEnsemble
@@ -74,4 +77,32 @@ Random.seed!(42)
             original_forest, :modalita_inesistente, f_val, l_val
         )
     end
+
+    @testset "All-Zero BitVector gets maximum penalty" begin
+        n_bits = n_trees_original * 3
+        zero_vec = BitVector(falses(n_bits))
+        
+        err, bits = SolePostHoc.Orca.evaluate_bitvector(
+            zero_vec, n_trees_original, original_forest, f_val, l_val; 
+            active_parts=[1,2,3]
+        )
+        
+        @test err == 1.0
+        @test bits == n_bits
+    end
+
+    @testset "Small Forest with High Penalty" begin
+        small_forest = DecisionEnsemble(original_forest.models[1:2])
+        
+        best_vec, best_cost = SolePostHoc.Orca.core(
+            2, small_forest, f_val, l_val;
+            population_size=20,
+            n_generations=20,
+            penalty_weight=10.0,
+            seed=42 
+        )
+        
+        @test sum(best_vec) > 0
+    end
+
 end
