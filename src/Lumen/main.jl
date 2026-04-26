@@ -963,8 +963,6 @@ struct ExtractRulesData{T<:Vector{<:Float},F<:SM.Label,L<:SM.Label}
         combinations = Iterators.product(thrs_with_p...)
         # @show IterTools.nth(combinations, 2)
 
-        return model, combinations, featurenames
-
         # -------------------------------------------------------------------- #
         # STEP 9 — Apply the model to all generated combinations.
         #
@@ -1295,7 +1293,6 @@ end
 # ---------------------------------------------------------------------------- #
 #                              minimization core                               #
 # ---------------------------------------------------------------------------- #
-
 """
     run_minimization(
         ::Val{:abc},
@@ -1445,31 +1442,31 @@ function lumen(
 
     # extract conjuncts
     extractrulesdata = ExtractRulesData(config, model)
-    # classes = get_classnames(extractrulesdata)
-    # nclasses = length(classes)
+    classes = get_classnames(extractrulesdata)
+    nclasses = length(classes)
 
-    # formulas =
-    #     Vector{Vector{Union{
-    #         SL.LeftmostConjunctiveForm{SL.Atom{float_type}},
-    #         SyntaxStructure
-    #     }}}(undef, nclasses)
+    formulas =
+        Vector{Vector{Union{
+            SL.LeftmostConjunctiveForm{SL.Atom{float_type}},
+            SyntaxStructure
+        }}}(undef, nclasses)
 
-    # Threads.@threads for i in 1:nclasses
-    #     atoms = get_atoms(extractrulesdata, i; float_type)
-    #     formulas[i] = isempty(atoms) ?
-    #         SL.Atom{SD.AbstractCondition}[] :
-    #         run_minimization(
-    #             Val(get_minimization_scheme(config)), config, atoms
-    #         )
-    # end
+    Threads.@threads for i in 1:nclasses
+        atoms = get_atoms(extractrulesdata, i; float_type)
+        formulas[i] = isempty(atoms) ?
+            SL.Atom{SD.AbstractCondition}[] :
+            run_minimization(
+                Val(get_minimization_scheme(config)), config, atoms
+            )
+    end
 
-    # valid_mask = .!isempty.(formulas)
-    # formulas = formulas[valid_mask]
-    # classes = classes[valid_mask]
+    valid_mask = .!isempty.(formulas)
+    formulas = formulas[valid_mask]
+    classes = classes[valid_mask]
 
-    # return SM.DecisionSet(
-    #     SM.Rule.(SL.LeftmostDisjunctiveForm.(formulas), classes)
-    # )
+    return SM.DecisionSet(
+        SM.Rule.(SL.LeftmostDisjunctiveForm.(formulas), classes)
+    )
 end
 
 function lumen(
@@ -1480,7 +1477,7 @@ function lumen(
         lumen(config, m)
     end
 
-    # return LumenResult(ds)
+    return LumenResult(ds)
 end
 
 function lumen(
@@ -1500,7 +1497,7 @@ function lumen(
         lumen(m, args...; kwargs...)
     end
 
-    # return LumenResult(ds)
+    return LumenResult(ds)
 end
 
 end
