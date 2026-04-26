@@ -7,7 +7,6 @@ const SM = SoleModels
 using SoleData
 const SD = SoleData
 
-using IterTools
 using CategoricalArrays
 using DataFrames
 
@@ -959,9 +958,7 @@ struct ExtractRulesData{T<:Vector{<:Float},F<:SM.Label,L<:SM.Label}
         # THIS IS THE CORE OF OUR Algorithm NOTICE, IF WE OPTIMIZE HERE WE HAVE
         # HUGE BOOST !!!
         # -------------------------------------------------------------------- #
-        # combinations = collect(Iterators.product(thrs_with_p...))
-        combinations = Iterators.product(thrs_with_p...)
-        # @show IterTools.nth(combinations, 2)
+        combinations = collect(Iterators.product(thrs_with_p...))
 
         # -------------------------------------------------------------------- #
         # STEP 9 — Apply the model to all generated combinations.
