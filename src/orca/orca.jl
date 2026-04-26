@@ -21,6 +21,7 @@ using SoleLogics
 using StatsBase: mode
 using Evolutionary
 using DataFrames
+using Random
 
 export compression
 
@@ -69,7 +70,8 @@ function compression(
         l_val::Vector{String};
         population_size::Int      = 50,
         n_generations::Int        = 100,
-        penalty_weight::Float64   = 0.3)
+        penalty_weight::Float64   = 0.3,
+        seed::Union{Int, Nothing} = nothing)
 
 
     # ── Validate parts_to_run ─────────────────────────────────────────────────
@@ -100,7 +102,8 @@ function compression(
         population_size = population_size,
         n_generations   = n_generations,
         penalty_weight  = penalty_weight,
-        active_parts    = parts_to_run
+        active_parts    = parts_to_run,
+        seed            = seed
     )
 
 
