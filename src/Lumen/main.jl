@@ -770,7 +770,7 @@ See also: [`lumen`](@ref), [`LumenConfig`](@ref), [`get_atoms`](@ref)
 struct ExtractRulesData{T<:Vector{<:Float},F<:SM.Label,L<:SM.Label}
     # grp_truths::Vector{Vector{Vector{BitVector}}}
     predictions::Vector{L}
-    combinations::Array{<:NTuple}
+    combinations::Base.Iterators.ProductIterator
     thresholds::Vector{T}
     featurenames::Vector{F}
     classnames::AbstractVector{L}
@@ -779,7 +779,7 @@ struct ExtractRulesData{T<:Vector{<:Float},F<:SM.Label,L<:SM.Label}
     ExtractRulesData(
         # grp_truths::Vector{Vector{Vector{BitVector}}},
         predictions::Vector{L},
-        combinations::Array{<:NTuple},
+        combinations::Base.Iterators.ProductIterator,
         thresholds::Vector{T},
         featurenames::Vector{F},
         classnames::AbstractVector{L},
@@ -958,7 +958,7 @@ struct ExtractRulesData{T<:Vector{<:Float},F<:SM.Label,L<:SM.Label}
         # THIS IS THE CORE OF OUR Algorithm NOTICE, IF WE OPTIMIZE HERE WE HAVE
         # HUGE BOOST !!!
         # -------------------------------------------------------------------- #
-        combinations = collect(Iterators.product(thrs_with_p...))
+        combinations = Iterators.product(thrs_with_p...)
 
         # -------------------------------------------------------------------- #
         # STEP 9 — Apply the model to all generated combinations.
@@ -970,12 +970,13 @@ struct ExtractRulesData{T<:Vector{<:Float},F<:SM.Label,L<:SM.Label}
         #   function (e.g. SoleModels.apply or DT.apply_forest).
         # - `predictions` is a vector of class labels, one per combination.
         # -------------------------------------------------------------------- #
+        @info "entra qui"
         predictions = get_apply_function(extractor)(
             model,
             PropositionalLogiset(DataFrame(combinations, featurenames));
             suppress_parity_warning=true
         )
-
+        @info "è usscito!"
         # -------------------------------------------------------------------- #
         # STEP 10 — Construct and return the instance with all computed data.
         #
