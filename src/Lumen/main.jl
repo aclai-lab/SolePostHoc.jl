@@ -9,6 +9,7 @@ const SD = SoleData
 
 using CategoricalArrays
 using DataFrames
+using IterTools
 
 include("config.jl")
 
@@ -725,6 +726,48 @@ function generate_disjunct(
 end
 
 # ---------------------------------------------------------------------------- #
+#              Lazy column view over Iterators.product(thrs...)                #
+# ---------------------------------------------------------------------------- #
+struct _ProductColumn{T,V<:AbstractVector{<:AbstractVector{T}}} <: AbstractVector{T}
+    levels::V
+    lens::Vector{Int}
+    strides::Vector{Int}
+    j::Int
+    nrows::Int
+end
+
+Base.IndexStyle(::Type{<:_ProductColumn}) = IndexLinear()
+Base.size(c::_ProductColumn) = (c.nrows,)
+Base.axes(c::_ProductColumn) = (Base.OneTo(c.nrows),)
+Base.eltype(::Type{_ProductColumn{T,V}}) where {T,V} = T
+
+@inline function Base.getindex(c::_ProductColumn, i::Int)
+    @boundscheck checkbounds(c, i)
+    idx = ((i - 1) ÷ c.strides[c.j]) % c.lens[c.j] + 1
+    @inbounds return c.levels[c.j][idx]
+end
+
+function _product_columntable(
+    thrs_with_p::Vector{<:AbstractVector{T}},
+    featurenames::Vector{Symbol},
+) where {T}
+    n = length(thrs_with_p)
+    lens = length.(thrs_with_p)
+    strides = ones(Int, n)
+    @inbounds for j in 2:n
+        strides[j] = strides[j - 1] * lens[j - 1]  # first iterator varies fastest
+    end
+    nrows = prod(lens)
+
+    names = Tuple(featurenames)
+    cols = ntuple(j -> _ProductColumn{T,typeof(thrs_with_p)}(
+        thrs_with_p, lens, strides, j, nrows
+    ), n)
+
+    return NamedTuple{names}(cols)
+end
+
+# ---------------------------------------------------------------------------- #
 #                          extract rules data struct                           #
 # ---------------------------------------------------------------------------- #
 """
@@ -767,25 +810,34 @@ The high-level constructor:
 
 See also: [`lumen`](@ref), [`LumenConfig`](@ref), [`get_atoms`](@ref)
 """
-struct ExtractRulesData{T<:Vector{<:Float},F<:SM.Label,L<:SM.Label}
-    # grp_truths::Vector{Vector{Vector{BitVector}}}
-    predictions::Vector{L}
-    combinations::Base.Iterators.ProductIterator
+struct ExtractRulesData{
+        P,
+        C<:Base.Iterators.ProductIterator,
+        T<:Vector{<:Float},
+        F<:SM.Label,
+        L<:SM.Label
+    }
+    predictions::Vector{P}
+    combinations::C
     thresholds::Vector{T}
     featurenames::Vector{F}
     classnames::AbstractVector{L}
     op_families::Vector{Symbol}
 
     ExtractRulesData(
-        # grp_truths::Vector{Vector{Vector{BitVector}}},
-        predictions::Vector{L},
-        combinations::Base.Iterators.ProductIterator,
+        predictions::Vector{P},
+        combinations::C,
         thresholds::Vector{T},
         featurenames::Vector{F},
         classnames::AbstractVector{L},
         op_families::Vector{Symbol}
-    ) where {T<:Vector{<:Float},F<:SM.Label,L<:SM.Label} =
-        new{T,F,L}(
+    ) where {
+        P,
+        C<:Base.Iterators.ProductIterator,
+        T<:Vector{<:Float},
+        F<:SM.Label,
+        L<:SM.Label
+    } = new{P,C,T,F,L}(
             predictions, combinations, thresholds, featurenames, classnames, op_families
         )
 
@@ -970,13 +1022,13 @@ struct ExtractRulesData{T<:Vector{<:Float},F<:SM.Label,L<:SM.Label}
         #   function (e.g. SoleModels.apply or DT.apply_forest).
         # - `predictions` is a vector of class labels, one per combination.
         # -------------------------------------------------------------------- #
-        @info "entra qui"
+        tbl = _product_columntable(thrs_with_p, Symbol.(featurenames))
         predictions = get_apply_function(extractor)(
             model,
-            PropositionalLogiset(DataFrame(combinations, featurenames));
+            PropositionalLogiset(tbl);
             suppress_parity_warning=true
         )
-        @info "è usscito!"
+
         # -------------------------------------------------------------------- #
         # STEP 10 — Construct and return the instance with all computed data.
         #
@@ -985,7 +1037,7 @@ struct ExtractRulesData{T<:Vector{<:Float},F<:SM.Label,L<:SM.Label}
         # `thresholds` and `op_families`,
         # which were both built over `featurenames`.
         # -------------------------------------------------------------------- #
-        return new{Vector{<:type},eltype(featurenames),eltype(classnames)}(
+        return ExtractRulesData(
             predictions, combinations, thresholds, featurenames, classnames, op_families
         )
     end
@@ -1055,7 +1107,7 @@ Return all per-class truth-assignment lists.
 Return the truth-assignment list for class `i`.
 """
 @inline function get_truths(e::ExtractRulesData, i::Int)
-    _truths_by_thresholds(e.combinations[i], e.thresholds)
+    _truths_by_thresholds(IterTools.nth(e.combinations, i), e.thresholds)
 end
 
 function truths_by_groups(e::ExtractRulesData, i::Int)
