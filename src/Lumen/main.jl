@@ -592,7 +592,7 @@ function _thrs_with_boundary(
     thresholds::Vector{T},
     family::Symbol
 ) where {T<:Float}
-    isempty(thresholds) && return [NaN]
+    isempty(thresholds) && return T[NaN]
 
     nthrs  = length(thresholds)
     result = Vector{T}(undef, nthrs + 1)
@@ -1022,35 +1022,15 @@ struct ExtractRulesData{
         #   function (e.g. SoleModels.apply or DT.apply_forest).
         # - `predictions` is a vector of class labels, one per combination.
         # -------------------------------------------------------------------- #
-        @show thrs_with_p
-        gino
         tbl = _product_columntable(thrs_with_p, Symbol.(featurenames))
         d = PropositionalLogiset(tbl)
 
-        ms = SM.models(model)
-        predictions = Vector{Union{<:SM.Label,Vector{<:SM.Label}}}(undef, SM.nmodels(model))
-
-        @info "Getting predictions..."
-        for i in eachindex(ms)
-            predictions[i] = get_apply_function(extractor)(
-                ms[i],
-                d;
-                suppress_parity_warning=true
-            )
-
-            @info "completed batch $i"
-            GC.gc()
-        end
-        @info "Finalizing apply..."
-
-        predictions = SM.__apply_post(model, predictions)
-
-        Threads.@threads for i in eachindex(predictions)
-            predictions[i] = SM.weighted_aggregation(model)(
-                predictions[i];
-                suppress_parity_warning=true
-            )
-        end
+        predictions = get_apply_function(extractor)(
+            model,
+            d;
+            use_multithreads=true,
+            suppress_parity_warning=true
+        )
 
         # -------------------------------------------------------------------- #
         # STEP 10 — Construct and return the instance with all computed data.
@@ -1524,8 +1504,11 @@ function lumen(
             SyntaxStructure
         }}}(undef, nclasses)
 
-    Threads.@threads for i in 1:nclasses
+    # Threads.@threads for i in 1:nclasses
+    for i in 1:nclasses
         atoms = get_atoms(extractrulesdata, i; float_type)
+        @show extractrulesdata
+gino
         formulas[i] = isempty(atoms) ?
             SL.Atom{SD.AbstractCondition}[] :
             run_minimization(
