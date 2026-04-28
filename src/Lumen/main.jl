@@ -1022,12 +1022,35 @@ struct ExtractRulesData{
         #   function (e.g. SoleModels.apply or DT.apply_forest).
         # - `predictions` is a vector of class labels, one per combination.
         # -------------------------------------------------------------------- #
+        @show thrs_with_p
+        gino
         tbl = _product_columntable(thrs_with_p, Symbol.(featurenames))
-        predictions = get_apply_function(extractor)(
-            model,
-            PropositionalLogiset(tbl);
-            suppress_parity_warning=true
-        )
+        d = PropositionalLogiset(tbl)
+
+        ms = SM.models(model)
+        predictions = Vector{Union{<:SM.Label,Vector{<:SM.Label}}}(undef, SM.nmodels(model))
+
+        @info "Getting predictions..."
+        for i in eachindex(ms)
+            predictions[i] = get_apply_function(extractor)(
+                ms[i],
+                d;
+                suppress_parity_warning=true
+            )
+
+            @info "completed batch $i"
+            GC.gc()
+        end
+        @info "Finalizing apply..."
+
+        predictions = SM.__apply_post(model, predictions)
+
+        Threads.@threads for i in eachindex(predictions)
+            predictions[i] = SM.weighted_aggregation(model)(
+                predictions[i];
+                suppress_parity_warning=true
+            )
+        end
 
         # -------------------------------------------------------------------- #
         # STEP 10 — Construct and return the instance with all computed data.
