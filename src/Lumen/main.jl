@@ -817,7 +817,7 @@ struct ExtractRulesData{
         F<:SM.Label,
         L<:SM.Label
     }
-    predictions::Vector{P}
+    predictions::P
     combinations::C
     thresholds::Vector{T}
     featurenames::Vector{F}
@@ -825,7 +825,7 @@ struct ExtractRulesData{
     op_families::Vector{Symbol}
 
     ExtractRulesData(
-        predictions::Vector{P},
+        predictions::P,
         combinations::C,
         thresholds::Vector{T},
         featurenames::Vector{F},
@@ -963,7 +963,7 @@ struct ExtractRulesData{
         @inbounds for i in eachindex(featurenames)
             idx = findfirst(f -> f == featurenames[i], features)
             if isnothing(idx)
-                thresholds[i]  = type[]
+                thresholds[i] = type[]
                 op_families[i] = :lt # default (irrelevant: no thresholds)
             else
                 family = _feature_op_family(atoms, features[idx])
@@ -1507,8 +1507,6 @@ function lumen(
     # Threads.@threads for i in 1:nclasses
     for i in 1:nclasses
         atoms = get_atoms(extractrulesdata, i; float_type)
-        @show extractrulesdata
-gino
         formulas[i] = isempty(atoms) ?
             SL.Atom{SD.AbstractCondition}[] :
             run_minimization(
