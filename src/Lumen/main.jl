@@ -1028,7 +1028,7 @@ struct ExtractRulesData{
         predictions = get_apply_function(extractor)(
             model,
             d;
-            use_multithreads=true,
+            use_multithreads=get_use_multithreads(extractor),
             suppress_parity_warning=true
         )
 
