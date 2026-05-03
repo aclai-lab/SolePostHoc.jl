@@ -151,9 +151,11 @@ Recursively compute the maximum depth of a SoleModels tree.
 - Maximum depth of the tree
 """
 function compute_tree_depth(node, depth::Int = 0)::Int
-    if isa(node, ConstantModel{<:TreeType})
+    # if isa(node, ConstantModel{<:TreeType})
+    if isa(node, ConstantModel)
         return depth
-    elseif isa(node, Branch{<:TreeType})
+    # elseif isa(node, Branch{<:TreeType})
+    elseif isa(node, Branch)
         left_depth = compute_tree_depth(node.posconsequent, depth + 1)
         right_depth = compute_tree_depth(node.negconsequent, depth + 1)
         return max(left_depth, right_depth)
@@ -226,7 +228,8 @@ nodes (Branch) are marked as "IN".
 - Vector of strings representing nodes in BA-Trees format
 """
 function create_tree_node_from_branch(
-    node::Union{Branch,ConstantModel{<:TreeType}},
+    # node::Union{Branch,ConstantModel{<:TreeType}},
+    node::Union{Branch,ConstantModel},
     node_id::Ref{Int},
     depth::Int,
     class_map::Dict{String,Int},
@@ -236,15 +239,18 @@ function create_tree_node_from_branch(
     current_node = node_id[]
     node_id[] += 1
 
-    if isa(node, ConstantModel{<:TreeType})
+    # if isa(node, ConstantModel{<:TreeType})
+    if isa(node, ConstantModel)
         # Leaf node: format = "ID LN -1 -1 -1 -1 depth class"
-        leaf = node::ConstantModel{<:TreeType}
+        # leaf = node::ConstantModel{<:TreeType}
+        leaf = node::ConstantModel
         leaf_class_idx = class_map[leaf.outcome]
         push!(lines, "$current_node LN -1 -1 -1 -1 $depth $leaf_class_idx")
         return lines
     else
         # Internal node: format = "ID IN left_child right_child feature threshold depth -1"
-        branch = node::Branch{<:TreeType}
+        # branch = node::Branch{<:TreeType}
+        branch = node::Branch
         feature_raw = branch.antecedent.value.metacond.feature.i_variable
         threshold = branch.antecedent.value.threshold
 
