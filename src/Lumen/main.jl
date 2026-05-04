@@ -1504,8 +1504,7 @@ function lumen(
             SyntaxStructure
         }}}(undef, nclasses)
 
-    # Threads.@threads for i in 1:nclasses
-    for i in 1:nclasses
+    Threads.@threads for i in 1:nclasses
         atoms = get_atoms(extractrulesdata, i; float_type)
         formulas[i] = isempty(atoms) ?
             SL.Atom{SD.AbstractCondition}[] :
