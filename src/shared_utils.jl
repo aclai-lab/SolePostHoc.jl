@@ -1,19 +1,11 @@
-#===========================================================================================
-                            used by InTrees, Trepan and Refne methods
-===========================================================================================#
-# struct MyRule
-#     formula::Formula   # Here the parsed formula is saved
-#     outcome::String    # Now storing the class label directly as string
-# end
-
 # ---------------------------------------------------------------------------- #
 #                              element to string                               #
 # ---------------------------------------------------------------------------- #
 @inline get_op_str(op) = op == (<) ?
-                         "<" : op == (<=) ?
-                         "≤" : op == (>) ?
-                         ">" : op == (>=) ?
-                         "≥" : string(op)
+                        "<" : op == (<=) ?
+                        "≤" : op == (>) ?
+                        ">" : op == (>=) ?
+                        "≥" : string(op)
 
 function antecedent_to_string(antecedent)
     atoms = antecedent.grandchildren
@@ -81,68 +73,10 @@ function _element_to_string(x::Any)
     end
 end
 
-
 # Function to convert a LeftmostConjunctiveForm to a readable string,
 # using _element_to_string on each element of cf.grandchildren.
 @inline lf_to_string(cf::SoleLogics.LeftmostConjunctiveForm) =
     "(" * join(map(_element_to_string, SoleLogics.grandchildren(cf)), " ∧ ") * ")"
-
-function element_to_string(x)
-    if x isa Atom
-        # Returns a string representing the range as two conditions
-        cond = x.value
-        if cond isa SoleData.RangeScalarCondition
-            i_var = cond.feature.i_variable
-            lower_op = cond.minincluded ? "≥" : ">"
-            upper_op = cond.maxincluded ? "≤" : "<"
-            # Returns a string representing the range as two conditions
-            return "(" *
-                   join(
-                       [
-                           "V$(i_var) $(lower_op) $(cond.minval)",
-                           "V$(i_var) $(upper_op) $(cond.maxval)",
-                       ],
-                       " ∧ ",
-                   ) *
-                   ")"
-        elseif hasproperty(cond, :metacond)
-            # Standard scalar condition
-            i_var = cond.metacond.feature.i_variable
-            op_fun = cond.metacond.test_operator
-            thr = cond.threshold
-            op_str =
-                op_fun === (<) ? "<" :
-                op_fun === (<=) ? "≤" :
-                op_fun === (>) ? ">" : op_fun === (>=) ? "≥" : string(op_fun)
-            return "V$(i_var) $(op_str) $(thr)"
-        else
-            return string(cond)
-        end
-    elseif x isa SyntaxBranch
-        # Process a SyntaxBranch: we convert the token to a string and recursively process
-        # the children
-        t = string(x.token)
-        children_strs = map(element_to_string, x.children)
-        if t == "¬"
-            # For denial we assume only one child
-            return "¬ " * children_strs[1]
-        else
-            # For other operators (e.g. "∧") join the children, enclosing the expression
-            # in parentheses
-            return "(" * join(children_strs, " " * t * " ") * ")"
-        end
-    elseif hasproperty(x, :grandchildren)
-        # If the element has the grandchildren field (e.g. LeftmostConjunctiveForm),
-        # process it with the specific function
-        return leftmost_conjunctive_form_to_string(x)
-    else
-        return string(x)
-    end
-end
-
-function leftmost_conjunctive_form_to_string(cf)
-    return "(" * join(map(element_to_string, cf.grandchildren), " ∧ ") * ")"
-end
 
 # ---------------------------------------------------------------------------- #
 #                                  atom parser                                 #
@@ -167,7 +101,7 @@ end
 # function that, given a vector of ClassificationRule (ll),
 # groups the antecedents by outcome and creates a new Rule for each outcome.
 # the antecedent of the new Rule is obtained by concatenating (with " ∨ ")
-# the strings corresponding to each rule (obtained with _lf_to_string).
+# the strings corresponding to each rule (obtained with lf_to_string).
 function convert_classif_rules(
     ::SoleModels.DecisionList,
     ll::AbstractVector{<:SoleModels.ClassificationRule},
@@ -178,7 +112,7 @@ function convert_classif_rules(
         outcome = rule.consequent.outcome
         antecedent_str =
             hasproperty(rule.antecedent, :grandchildren) ?
-            leftmost_conjunctive_form_to_string(rule.antecedent) : string(rule.antecedent)
+            lf_to_string(rule.antecedent) : string(rule.antecedent)
         push!(get!(grouped, outcome, String[]), antecedent_str)
     end
 
