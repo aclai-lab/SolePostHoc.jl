@@ -151,10 +151,12 @@ function build_sklearnlike_arrays(branch, n_classes::Int, class_to_idx::Dict{Str
     function dfs(b)
         i = length(nodes)
         push!(nodes, SkNode(-1, -1, -2, -2.0, fill(0.0, n_classes)))
-        if b isa ConstantModel{<:TreeType}
+        # if b isa ConstantModel{<:TreeType}
+        if b isa ConstantModel
             cidx = haskey(class_to_idx, b.outcome) ? class_to_idx[b.outcome] : 0
             nodes[i+1].counts[cidx+1] = 10.0
-        elseif b isa Branch{<:TreeType}
+        # elseif b isa Branch{<:TreeType}
+        elseif b isa Branch
             thr = b.antecedent.value.threshold
             fx = b.antecedent.value.metacond.feature.i_variable - 1
             left_i = dfs(b.posconsequent)

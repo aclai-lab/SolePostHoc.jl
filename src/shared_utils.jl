@@ -1,19 +1,11 @@
-#===========================================================================================
-                            used by InTrees, Trepan and Refne methods
-===========================================================================================#
-# struct MyRule
-#     formula::Formula   # Here the parsed formula is saved
-#     outcome::String    # Now storing the class label directly as string
-# end
-
 # ---------------------------------------------------------------------------- #
 #                              element to string                               #
 # ---------------------------------------------------------------------------- #
 @inline get_op_str(op) = op == (<) ?
-                         "<" : op == (<=) ?
-                         "≤" : op == (>) ?
-                         ">" : op == (>=) ?
-                         "≥" : string(op)
+                        "<" : op == (<=) ?
+                        "≤" : op == (>) ?
+                        ">" : op == (>=) ?
+                        "≥" : string(op)
 
 function antecedent_to_string(antecedent)
     atoms = antecedent.grandchildren
@@ -81,7 +73,6 @@ function _element_to_string(x::Any)
     end
 end
 
-
 # Function to convert a LeftmostConjunctiveForm to a readable string,
 # using _element_to_string on each element of cf.grandchildren.
 @inline lf_to_string(cf::SoleLogics.LeftmostConjunctiveForm) =
@@ -110,38 +101,41 @@ end
 # function that, given a vector of ClassificationRule (ll),
 # groups the antecedents by outcome and creates a new Rule for each outcome.
 # the antecedent of the new Rule is obtained by concatenating (with " ∨ ")
-# the strings corresponding to each rule (obtained with _lf_to_string).
+# the strings corresponding to each rule (obtained with lf_to_string).
 function convert_classif_rules(
     ::SoleModels.DecisionList,
     ll::AbstractVector{<:SoleModels.ClassificationRule},
-)::Vector{Rule}
-    # group antecedent strings by outcome
+)
+    # Group antecedent strings by outcome
     grouped = Dict{String,Vector{String}}()
-
     for rule in ll
-        outcome = consequent(rule).outcome
-        antecedent_str = hasproperty(antecedent(rule), :grandchildren) ?
-            lf_to_string(antecedent(rule)) :
-            string(antecedent(rule))
+        outcome = rule.consequent.outcome
+        antecedent_str =
+            hasproperty(rule.antecedent, :grandchildren) ?
+            lf_to_string(rule.antecedent) : string(rule.antecedent)
         push!(get!(grouped, outcome, String[]), antecedent_str)
     end
 
+    # For each outcome, join the strings (each one is a conjunction) with " ∨ "
+    # and create a new Rule parsing the DNF string
     rules = Rule[]
-
     for (outcome, antecedent_list) in grouped
         dnf_string = join(antecedent_list, " ∨ ")
+        #println("DNF per outcome ", outcome, ": ", dnf_string)
 
-        # parsing and apply dnf transformation
-        φ = SoleLogics.parseformula(dnf_string; atom_parser)
-        φ = SoleLogics.dnf(φ)
+        # Parsing DNF string into a formula
+        φ = SoleLogics.parseformula(dnf_string; atom_parser = atom_parser)
 
-        # convert dnf form back to SyntaxBranch representation
-        φ = dnf_to_syntaxbranch(φ)
+        #Apply DNF transformation
+        dnf_result = dnf(φ)
 
-        # create new rule with the SyntaxBranch representation
-        push!(rules, Rule(φ, outcome))
+        # Convert DNF form back to SyntaxBranch representation
+        syntax_branch = dnf_to_syntaxbranch(dnf_result)
+
+        # Create new rule with the SyntaxBranch representation
+        new_rule = Rule(syntax_branch, outcome)
+        push!(rules, new_rule)
     end
-
     return rules
 end
 

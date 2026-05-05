@@ -1,7 +1,6 @@
 # ---------------------------------------------------------------------------- #
 #                                    types                                     #
 # ---------------------------------------------------------------------------- #
-
 """
     AbstractConfig
 
@@ -18,7 +17,6 @@ abstract type AbstractConfig end
 # ---------------------------------------------------------------------------- #
 #                                 Lumen struct                                 #
 # ---------------------------------------------------------------------------- #
-
 """
     LumenConfig <: AbstractConfig
 
@@ -98,6 +96,8 @@ struct LumenConfig <: AbstractConfig
     importance::Vector
     check_opt::Bool
     check_alphabet::Bool
+    use_multithreads::Bool
+    float_type::Type
 
     function LumenConfig(;
         minimization_scheme::Symbol=:abc,
@@ -110,6 +110,8 @@ struct LumenConfig <: AbstractConfig
         importance::Vector=Float64[],
         check_opt::Bool=false,
         check_alphabet::Bool=false,
+        use_multithreads::Bool=true,
+        float_type::Type=Float64
     )
         # validate coverage parameters - must be positive and ≤ 1.0
         # these parameters control the proportion of instances
@@ -157,7 +159,9 @@ struct LumenConfig <: AbstractConfig
             apply_function,
             importance,
             check_opt,
-            check_alphabet
+            check_alphabet,
+            use_multithreads,
+            float_type
         )
     end
 end
@@ -165,7 +169,6 @@ end
 # ---------------------------------------------------------------------------- #
 #                                  methods                                     #
 # ---------------------------------------------------------------------------- #
-
 """
     get_minimization_scheme(r::LumenConfig) -> Symbol
 
@@ -242,3 +245,12 @@ Return `true` if OTT-optimisation validation is enabled in `r`.
 Return `true` if alphabet-analysis diagnostics are enabled in `r`.
 """
 @inline get_check_alphabet(r::LumenConfig) = r.check_alphabet
+
+@inline get_use_multithreads(r::LumenConfig) = r.use_multithreads
+
+"""
+    get_float_type(r::LumenConfig) -> Type
+
+Return the floating-point type stored in `r`.
+"""
+@inline get_float_type(r::LumenConfig) = r.float_type
