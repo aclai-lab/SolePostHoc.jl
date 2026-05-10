@@ -11,6 +11,7 @@ using CategoricalArrays
 using DataFrames
 using IterTools
 
+
 include("config.jl")
 
 export lumen, LumenConfig, LumenResult
@@ -71,6 +72,100 @@ tool. Currently a no-op pending evaluation of the minimizer.
 """
 function setup_boom() end # TODO: evaluate this minimizer
 
+function ensure_abc_binary(; force_rebuild=false)
+    # Path to ABC binary directly in src/ directory
+    abc_binary = joinpath(@__DIR__, "abc")
+
+    # Return existing binary if found and not forcing rebuild
+    if isfile(abc_binary) && !force_rebuild
+        @info "ABC binary already exists at: $abc_binary (skipping download/compilation)"
+        return abc_binary
+    end
+
+    @info "Setting up ABC binary..."
+
+    # Create unique temporary directory to avoid conflicts
+    abc_temp_dir = mktempdir(; prefix="abc_build_")
+
+    # ABC repository URL (compressed tarball)
+    abc_url = "https://github.com/berkeley-abc/abc/archive/refs/heads/master.tar.gz"
+
+    try
+        # Download the source code
+        @info "Downloading ABC source code..."
+        tarfile = joinpath(abc_temp_dir, "abc-master.tar.gz")
+        run(`curl -L -o $tarfile $abc_url`)
+
+        # Create subdirectory for extraction to avoid conflicts
+        extract_dir = joinpath(abc_temp_dir, "extract")
+        mkdir(extract_dir)
+
+        # Extract the compressed tarball using system tar command
+        # This handles .tar.gz decompression automatically
+        @info "Extracting ABC source code..."
+        if success(`which tar`)
+            # Use system tar command (handles gzip compression)
+            run(`tar -xzf $tarfile -C $extract_dir`)
+        else
+            error("System tar command not found. Please install tar utilities.")
+        end
+
+        # Path to extracted source code
+        abc_source_dir = joinpath(extract_dir, "abc-master")
+
+        if !isdir(abc_source_dir)
+            error("Failed to extract ABC source code - directory not found")
+        end
+
+        # Compile ABC
+        @info "Compiling ABC... This may take a few minutes."
+
+        # Change to source directory for compilation
+        old_dir = pwd()
+        cd(abc_source_dir)
+
+        try
+            # Verify make is available
+            if !success(`which make`)
+                error(
+                    "make command not found. Please install build tools (make, gcc, etc.)"
+                )
+            end
+
+            # Compile with make
+            run(`make`)
+
+            # Copy compiled binary to final location
+            compiled_binary = joinpath(abc_source_dir, "abc")
+            if isfile(compiled_binary)
+                cp(compiled_binary, abc_binary; force=true)
+                # Make executable
+                chmod(abc_binary, 0o755)
+                @info "ABC compiled successfully at: $abc_binary"
+            else
+                error("ABC compilation completed but binary not found")
+            end
+
+        finally
+            # Always restore original directory
+            cd(old_dir)
+        end
+
+        return abc_binary
+
+    catch e
+        @error "Failed to download/compile ABC: $e. Consider downloading ABC manually from https://github.com/berkeley-abc/abc"
+        rethrow(e)
+    finally
+        # Always cleanup temporary directory
+        try
+            rm(abc_temp_dir; recursive=true, force=true)
+        catch cleanup_error
+            @warn "Failed to cleanup temporary directory: $cleanup_error"
+        end
+    end
+end
+
 """
     setup_abc() -> String
 
@@ -96,7 +191,7 @@ See also: [`setup_espresso`](@ref), [`lumen`](@ref)
 function setup_abc()
     # auto setup ABC binary if not specified
     abcbinary = try
-        joinpath(SD.load(SD.ABCLoader()), "abc")
+        ensure_abc_binary()
     catch e
         error("Failed to setup ABC binary: $e")
     end
@@ -149,7 +244,7 @@ the feature's integer index (`i_variable`).
 function _featurename(f::SD.VariableValue)
     return if isnothing(f.i_name)
         f.i_variable isa Feature ?
-            "$(f.i_variable)" : "V$(f.i_variable)"
+        "$(f.i_variable)" : "V$(f.i_variable)"
     else
         "$(f.i_name)"
     end
@@ -352,7 +447,7 @@ function _normalize_atom(
     # fast path: already in the canonical family
     op in ((<), (≥)) && return atom
 
-    thr  = get_threshold(atom)
+    thr = get_threshold(atom)
     feat = get_feature(atom)
 
     new_op, new_thr = if op === (>)
@@ -530,8 +625,8 @@ function _truths_by_thresholds(value::Float, thresholds::Vector{<:Float})
 
     idx = findfirst(==(value), thresholds)
     return isnothing(idx) ?
-        falses(length(thresholds)) :
-        _truths_by_thresholds(thresholds)[idx]
+           falses(length(thresholds)) :
+           _truths_by_thresholds(thresholds)[idx]
 end
 
 @inline _truths_by_thresholds(
@@ -594,7 +689,7 @@ function _thrs_with_boundary(
 ) where {T<:Float}
     isempty(thresholds) && return T[NaN]
 
-    nthrs  = length(thresholds)
+    nthrs = length(thresholds)
     result = Vector{T}(undef, nthrs + 1)
     result[1:nthrs] .= thresholds
 
@@ -603,8 +698,8 @@ function _thrs_with_boundary(
     # :gt (ascending)  → boundary point is ABOVE the maximum threshold
     #                    nextfloat(last) because last is the largest value
     result[end] = family === :lt ?
-        prevfloat(last(thresholds)) :
-        nextfloat(last(thresholds))
+                  prevfloat(last(thresholds)) :
+                  nextfloat(last(thresholds))
 
     return result
 end
@@ -690,7 +785,7 @@ function generate_disjunct(
     disjuncts = Vector{SL.Atom}()
 
     @inbounds for i in eachindex(thresholds)
-        idx0 = findall(x -> !x,  truths[i])
+        idx0 = findall(x -> !x, truths[i])
         idx1 = findall(identity, truths[i])
 
         if op_families[i] === :lt
@@ -755,14 +850,14 @@ function _product_columntable(
     lens = length.(thrs_with_p)
     strides = ones(Int, n)
     @inbounds for j in 2:n
-        strides[j] = strides[j - 1] * lens[j - 1]  # first iterator varies fastest
+        strides[j] = strides[j-1] * lens[j-1]  # first iterator varies fastest
     end
     nrows = prod(lens)
 
     names = Tuple(featurenames)
     cols = ntuple(j -> _ProductColumn{T,typeof(thrs_with_p)}(
-        thrs_with_p, lens, strides, j, nrows
-    ), n)
+            thrs_with_p, lens, strides, j, nrows
+        ), n)
 
     return NamedTuple{names}(cols)
 end
@@ -811,12 +906,12 @@ The high-level constructor:
 See also: [`lumen`](@ref), [`LumenConfig`](@ref), [`get_atoms`](@ref)
 """
 struct ExtractRulesData{
-        P,
-        C<:Base.Iterators.ProductIterator,
-        T<:Vector{<:Float},
-        F<:SM.Label,
-        L<:SM.Label
-    }
+    P,
+    C<:Base.Iterators.ProductIterator,
+    T<:Vector{<:Float},
+    F<:SM.Label,
+    L<:SM.Label
+}
     predictions::P
     combinations::C
     thresholds::Vector{T}
@@ -838,8 +933,8 @@ struct ExtractRulesData{
         F<:SM.Label,
         L<:SM.Label
     } = new{P,C,T,F,L}(
-            predictions, combinations, thresholds, featurenames, classnames, op_families
-        )
+        predictions, combinations, thresholds, featurenames, classnames, op_families
+    )
 
     function ExtractRulesData(extractor::LumenConfig, model::SM.AbstractModel)
         # -------------------------------------------------------------------- #
@@ -921,7 +1016,7 @@ struct ExtractRulesData{
         # `features` therefore contains the names of only the features actually
         # referenced by the atoms (a subset of the model's full feature set).
         # -------------------------------------------------------------------- #
-        features = SM.featurename.(unique!(get_feature.(atoms))) 
+        features = SM.featurename.(unique!(get_feature.(atoms)))
         # TODO: if we dont have featurename ?
 
         # -------------------------------------------------------------------- #
@@ -1073,7 +1168,7 @@ function get_thresholds(
     thresholds = [float_type.(t) for t in e.thresholds]
     op_families = e.op_families
     return prev_float ?
-        _thrs_with_boundary(thresholds, op_families) : thresholds
+           _thrs_with_boundary(thresholds, op_families) : thresholds
 end
 
 """
@@ -1165,8 +1260,8 @@ function get_atoms(
     grouped::Bool=false,
     float_type::Type=Float64
 )
-    thresholds  = get_thresholds(e; prev_float=true, float_type)
-    features    = get_features(e)
+    thresholds = get_thresholds(e; prev_float=true, float_type)
+    features = get_features(e)
     op_families = get_op_families(e)
 
     return if grouped
@@ -1188,7 +1283,7 @@ function get_atoms(e::ExtractRulesData, i::Int; float_type::Type=Float64)
     thresholds = get_thresholds(e; prev_float=false, float_type)
     featurenames = get_featurenames(e)
     op_families = get_op_families(e)
-    
+
     get_atoms(truths, thresholds, featurenames, op_families)
 end
 
@@ -1253,7 +1348,7 @@ end
 
 @inline get_conjuncts(a::Vector{Vector{SL.Atom}}) = get_conjuncts.(a)
 @inline get_conjuncts(a::Vector{SL.Atom}) = isempty(a) ?
-    ⊤ : SL.LeftmostConjunctiveForm{SL.Literal}(SL.Literal.(a))
+                                            ⊤ : SL.LeftmostConjunctiveForm{SL.Literal}(SL.Literal.(a))
 
 # ---------------------------------------------------------------------------- #
 #                                get formulas                                  #
@@ -1325,7 +1420,7 @@ Requires at least two terms to perform any pruning; single-term inputs are
 returned immediately.
 """
 function _refine_dnf(
-    terms::Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, SyntaxStructure}}
+    terms::Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom},SyntaxStructure}}
 )
     length(terms) ≤ 1 && return terms
 
@@ -1334,7 +1429,7 @@ function _refine_dnf(
     # find terms not strictly dominated by any other term
     keep_mask = map(enumerate(all_bounds)) do (i, bounds_i)
         !any(j -> i ≠ j && SD.strictly_dominates(
-            all_bounds[j], bounds_i), eachindex(all_bounds))
+                all_bounds[j], bounds_i), eachindex(all_bounds))
     end
 
     kept_terms = terms[keep_mask]
@@ -1507,10 +1602,10 @@ function lumen(
     Threads.@threads for i in 1:nclasses
         atoms = get_atoms(extractrulesdata, i; float_type)
         formulas[i] = isempty(atoms) ?
-            SL.Atom{SD.AbstractCondition}[] :
-            run_minimization(
-                Val(get_minimization_scheme(config)), config, atoms
-            )
+                      SL.Atom{SD.AbstractCondition}[] :
+                      run_minimization(
+            Val(get_minimization_scheme(config)), config, atoms
+        )
     end
 
     valid_mask = .!isempty.(formulas)

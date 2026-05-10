@@ -117,8 +117,8 @@ struct LumenConfig <: AbstractConfig
         # these parameters control the proportion of instances
         # that must be covered by rules
         if vertical ≤ 0.0 || vertical > 1.0 ||
-            horizontal ≤ 0.0 || horizontal > 1.0 ||
-            depth ≤ 0.0 || depth > 1.0
+           horizontal ≤ 0.0 || horizontal > 1.0 ||
+           depth ≤ 0.0 || depth > 1.0
             throw(ArgumentError(
                 "vertical, depth and horizontal parameters must be in range " *
                 "(0.0, 1.0]. Got vertical=$(vertical), depth=$(depth), " *
@@ -137,7 +137,7 @@ struct LumenConfig <: AbstractConfig
             :quine => setup_quine(),
             :quine_naive => setup_quine()
         )
-        
+
         if minimization_scheme ∉ keys(valid_schemes)
             throw(ArgumentError(
                 "minimization_scheme must be one of: " *
