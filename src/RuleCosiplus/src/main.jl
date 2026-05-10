@@ -31,7 +31,7 @@ function __init__()
         PythonCall.pycopy!(rulecosi, pyimport("rulecosi"))
         PythonCall.pycopy!(sklearn, pyimport("sklearn.ensemble"))
     catch e
-        @warn "Failed to import Python dependencies. RuleCOSI+ will not be available." exception=e
+        @warn "Failed to import Python dependencies. RuleCOSI+ will not be available." exception = e
         return
     end
 
@@ -155,7 +155,7 @@ function build_sklearnlike_arrays(branch, n_classes::Int, class_to_idx::Dict{Str
         if b isa ConstantModel
             cidx = haskey(class_to_idx, b.outcome) ? class_to_idx[b.outcome] : 0
             nodes[i+1].counts[cidx+1] = 10.0
-        # elseif b isa Branch{<:TreeType}
+            # elseif b isa Branch{<:TreeType}
         elseif b isa Branch
             thr = b.antecedent.value.threshold
             fx = b.antecedent.value.metacond.feature.i_variable - 1
@@ -200,7 +200,7 @@ function serialize_branch_sklearn(
 )
     n_classes = length(classes)
     cl, cr, ft, th, val, nn = build_sklearnlike_arrays(b, n_classes, class_to_idx)
-    posfeats = ft[ft .>= 0]
+    posfeats = ft[ft.>=0]
     maxfeat = isempty(posfeats) ? 0 : maximum(posfeats)
     n_features = maxfeat + 1
     return Dict(
@@ -305,12 +305,12 @@ function build_rule_list(
 
             φ = SoleLogics.parseformula(
                 cond_str;
-                atom_parser = a -> Atom(
+                atom_parser=a -> Atom(
                     parsecondition(
                         ScalarCondition,
                         a;
-                        featuretype = VariableValue,
-                        featvaltype = Real,
+                        featuretype=VariableValue,
+                        featvaltype=Real,
                     ),
                 ),
             )
@@ -385,18 +385,20 @@ The function performs the following steps:
 3. Serializes the Julia ensemble to a Python-compatible format
 4. Builds an sklearn-compatible model using the serialized ensemble
 5. Applies RuleCOSI+ algorithm with the following default parameters:
-   - `metric="fi"`: Optimization metric for rule combination
-   - `n_estimators=100`: Number of estimators considered
-   - `tree_max_depth=100`: Maximum depth of trees
-   - `conf_threshold=0.25` (α): Confidence threshold for rule filtering
-   - `cov_threshold=0.1` (β): Coverage threshold for rule filtering
+   - `metric="roc_auc"`: Optimization metric for rule combination
+   - `n_estimators=50`: Number of estimators considered
+   - `tree_max_depth=15`: Maximum depth of trees
+   - `conf_threshold=0.0` (α): Confidence threshold for rule filtering
+   - `cov_threshold=0.0` (β): Coverage threshold for rule filtering
+   - `rule_order="conf"`: Sort rules by confidence
+   - `early_stop=0`: Early stopping disabled
    - `verbose=2`: Detailed output during processing
 6. Extracts and converts rules to a decision list format
 
 # Configuration
 The algorithm uses fixed parameters optimized for interpretability:
-- Confidence threshold (α) = 0.25: Rules below this confidence are discarded
-- Coverage threshold (β) = 0.1: Rules covering fewer samples are excluded
+- Confidence threshold (α) = 0.0: No rules discarded by confidence
+- Coverage threshold (β) = 0.0: No rules discarded by coverage
 - Maximum rules = max(20, n_classes × 5): Adaptive limit based on problem complexity
 
 # Example
@@ -416,7 +418,7 @@ decision_list = rulecosiplus(ensemble, X_train, y_train)
 - Requires Python interoperability and the RuleCOSI implementation
 - The resulting decision list provides an interpretable alternative to the original ensemble
 """
-function rulecosiplus(ensemble::Any, X_train::Any, y_train::Any; silent::Bool = true)
+function rulecosiplus(ensemble::Any, X_train::Any, y_train::Any; silent::Bool=true)
 
     # Convert training data to matrix format if needed
     if !isa(X_train, Matrix)
@@ -587,15 +589,17 @@ function rulecosiplus(ensemble::Any, X_train::Any, y_train::Any; silent::Bool = 
         0.95
     =#
     rc = rulecosi.RuleCOSIClassifier(
-        base_ensemble = base_ensemble,
-        metric = "fi",
-        n_estimators = 100,
-        tree_max_depth = 100,
-        conf_threshold = 0.25, # α
-        cov_threshold = 0.1, # β
-        random_state = 3,
-        column_names = column_names,
-        verbose = 2,
+        base_ensemble=base_ensemble,
+        metric="roc_auc",         # Optimizes for ROC AUC (balances sensitivity/specificity)
+        n_estimators=50,          # Higher number of estimators for more rules
+        tree_max_depth=15,        # Deeper trees for more rules
+        conf_threshold=0.0,       # Low confidence threshold
+        cov_threshold=0.0,        # Low coverage threshold
+        rule_order="conf",        # Sort by confidence
+        early_stop=0,             # Disable early stopping
+        random_state=3,
+        column_names=column_names,
+        verbose=2,
     )
 
     @time rc.fit(X_train_matrix, Vector(String.(y_train)))
