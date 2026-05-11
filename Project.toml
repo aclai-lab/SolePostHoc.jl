@@ -45,9 +45,13 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
-[sources]
-SoleData = {rev = "main", url = "https://github.com/aclai-lab/SoleData.jl"}
-SoleModels = {rev = "main", url = "https://github.com/aclai-lab/SoleModels.jl"}
+[sources.SoleData]
+rev = "main"
+url = "https://github.com/aclai-lab/SoleData.jl"
+
+[sources.SoleModels]
+rev = "main"
+url = "https://github.com/aclai-lab/SoleModels.jl"
 
 [compat]
 AbstractTrees = "0.4"
@@ -70,7 +74,7 @@ IterTools = "1"
 JSON = "0.21, 1"
 LinearAlgebra = "1"
 Logging = "1.11"
-MLJ = "0.19.2"
+MLJ = "0.19.2, 0.23"
 MLJDecisionTreeInterface = "0.4"
 ModalDecisionTrees = "0.5.2, 0.5"
 MultivariateStats = "0.10"
