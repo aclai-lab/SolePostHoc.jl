@@ -129,7 +129,7 @@ struct LumenConfig <: AbstractConfig
 
         # validate minimization scheme
         valid_schemes = Dict(
-            :mitespresso => setup_espresso(),
+            # :mitespresso => setup_espresso(),
             :boom => setup_boom(),
             :abc => setup_abc(),
             :abc_balanced => setup_abc(),
