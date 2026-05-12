@@ -26,18 +26,24 @@ export trepan
 function trepan(
     f,
     X;
-    max_depth = -1,
-    n_subfeatures = -1,
-    partial_sampling = 0.5,
-    min_samples_leaf = 5,
-    min_samples_split = 2,
-    min_purity_increase = 0.0,
-    seed = 42,
+    max_depth=-1,
+    n_subfeatures=-1,
+    partial_sampling=0.5,
+    min_samples_leaf=5,
+    min_samples_split=2,
+    min_purity_increase=0.0,
+    seed=42,
+    use_model_featurenames=false,
 )
 
-    Xdf, Xm = X isa AbstractDataFrame ? (X, Matrix(X)) : (DataFrame(X, :auto), X)
+    if use_model_featurenames
+        fnames = string.(SoleModels.featurenames(f))
+        Xdf, Xm = X isa AbstractDataFrame ? (X, Matrix(X)) : (DataFrame(X, fnames), X)
+    else
+        Xdf, Xm = X isa AbstractDataFrame ? (X, Matrix(X)) : (DataFrame(X, :auto), X)
+    end
 
-    y_pred = SoleModels.apply(f, SoleData.scalarlogiset(Xdf; allow_propositional = true))
+    y_pred = SoleModels.apply(f, SoleData.scalarlogiset(Xdf; allow_propositional=true))
 
     n_trees = 1
 
@@ -51,13 +57,12 @@ function trepan(
         min_samples_leaf,
         min_samples_split,
         min_purity_increase;
-        rng = seed,
+        rng=seed,
     )
-
 
     println(model)
 
-    f = solemodel(model) # f = solemodel(model; classlabels = labels)
+    f = solemodel(model)
     println(f)
 
     return f
