@@ -37,7 +37,7 @@ function trepan(
 )
 
     if use_model_featurenames
-        fnames = string.(SoleModels.featurenames(f))
+        fnames = string.(f.info.featurenames)
         Xdf, Xm = X isa AbstractDataFrame ? (X, Matrix(X)) : (DataFrame(X, fnames), X)
     else
         Xdf, Xm = X isa AbstractDataFrame ? (X, Matrix(X)) : (DataFrame(X, :auto), X)

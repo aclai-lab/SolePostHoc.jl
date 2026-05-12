@@ -92,7 +92,7 @@ function refne(
     end
 
     if use_model_featurenames
-        fnames = string.(SoleModels.featurenames(f))
+        fnames = string.(f.info.featurenames)
         y_pred = apply(f, SoleData.scalarlogiset(DataFrame(ddf, fnames); allow_propositional=true))
     else
         y_pred = apply(f, SoleData.scalarlogiset(DataFrame(ddf, :auto); allow_propositional=true))
