@@ -1,7 +1,7 @@
 import DecisionTree as DT
-using  ComplexityMeasures
-using  SoleModels
-using  DataFrames
+using ComplexityMeasures
+using SoleModels
+using DataFrames
 
 # ---------------------------------------------------------------------------- #
 #                                InTrees struct                                #
@@ -51,7 +51,7 @@ struct InTreesRuleExtractor <: RuleExtractor
         n_subfeatures::Int64=2,
         n_trees::Int64=50,
         partial_sampling::Float64=0.7,
-        max_depth::Int64=5,
+        max_depth::Int64=10,
         rng::AbstractRNG=Random.TaskLocalRNG()
     )
         new(
@@ -94,7 +94,7 @@ end
 # ---------------------------------------------------------------------------- #
 #                           Intrees pruning utility                            #
 # ---------------------------------------------------------------------------- #
-function _prune_rule(::Type{<:Atom}, r::Rule{O}, args...; kwargs...) where{O}
+function _prune_rule(::Type{<:Atom}, r::Rule{O}, args...; kwargs...) where {O}
     r = Rule(LeftmostConjunctiveForm([antecedent(r)]), consequent(r), info(r))
     _prune_rule(typeof(antecedent(r)), r, args...; kwargs...,)
 end
@@ -124,7 +124,7 @@ function _prune_rule(
         e_minus_i = SoleModels.rulemetrics(rule, X, y)[:error]
         decay_i = (e_minus_i - e_zero) / max(e_zero, pruning_s)
 
-        if decay_i ≤ pruning_decay_thr 
+        if decay_i ≤ pruning_decay_thr
             # remove the idx-th pair in the vector of decisions
             valid_idxs = setdiff(valid_idxs, idx)
             e_zero = e_minus_i
@@ -140,7 +140,7 @@ function _prune_rule(::Type{<:MultiFormula}, r::Rule{O}, args...; kwargs...) whe
         MultiFormula(i_modality, modant) for (i_modality, modant) in modforms(antecedent(r))
     ]
 
-    return  length(children) < 2 ? r : begin
+    return length(children) < 2 ? r : begin
         r = Rule(LeftmostConjunctiveForm(children), consequent(r), info(r))
         _prune_rule(typeof(antecedent(r)), r, args...; kwargs...,)
     end
@@ -153,7 +153,7 @@ function _prune_ruleset(
     extractor::InTreesRuleExtractor
 )
     pruned = similar(ruleset)
-    
+
     @inbounds Threads.@threads for i in eachindex(ruleset)
         pruned[i] = if ruleset[i].antecedent isa SoleLogics.BooleanTruth
             ruleset[i]  # keep BooleanTruth rules as-is (e.g., from XGBoost)
@@ -165,7 +165,7 @@ function _prune_ruleset(
             )
         end
     end
-    
+
     return pruned
 end
 
@@ -173,10 +173,10 @@ end
 #                                    Cbc                                       #
 # ---------------------------------------------------------------------------- #
 function _select_rules_cbc(ruleset, X, y, extractor)
-    n_rules    = length(ruleset)
-    metrics    = Matrix{Float64}(undef, n_rules, 3)
+    n_rules = length(ruleset)
+    metrics = Matrix{Float64}(undef, n_rules, 3)
     checkmasks = Vector{BitVector}(undef, n_rules)
-    
+
     Threads.@threads for i in eachindex(ruleset)
         eval_result = rulemetrics(ruleset[i], X, y)
         checkmasks[i] = eval_result[:checkmask,]
@@ -184,10 +184,10 @@ function _select_rules_cbc(ruleset, X, y, extractor)
         metrics[i, 2] = eval_result[:error]
         metrics[i, 3] = eval_result[get_rule_complexity_metric(extractor)]
     end
-    
+
     # build random forest for feature importance
     rf = DT.build_forest(
-        y, hcat(checkmasks...), 
+        y, hcat(checkmasks...),
         get_n_subfeatures(extractor),
         get_n_trees(extractor),
         get_partial_sampling(extractor),
@@ -195,26 +195,26 @@ function _select_rules_cbc(ruleset, X, y, extractor)
         rng=get_rng(extractor))
     importance = DT.impurity_importance(rf)
     importances = importance ./ maximum(importance)
-    
+
     # select features with sufficient importance
     selected_idxs = findall(importances .> get_cbc_threshold(extractor))
     isempty(selected_idxs) && return ruleset
-    
+
     # combine metrics with importance and original indices
     combined = hcat(
         metrics[selected_idxs, :],
         importances[selected_idxs],
         selected_idxs
     )
-    
+
     # sort by importance (desc), error (asc), complexity (asc)
-    sorted = sortslices(combined, dims=1, by=x->(-x[4], x[2], x[3]))
-    
+    sorted = sortslices(combined, dims=1, by=x -> (-x[4], x[2], x[3]))
+
     # extract final indices, limiting if max_rules is set
     max_rules = get_max_rules(extractor)
     n_selected = max_rules > 0 ? min(max_rules, size(sorted, 1)) : size(sorted, 1)
     final_idxs = Int64.(sorted[1:n_selected, 5])
-    
+
     return ruleset[final_idxs]
 end
 
@@ -230,7 +230,7 @@ end
 function _compute_rule_metrics(s, X, y, rule_complexity_metric)
     return if _is_true_antecedent(antecedent(s))
         pred_class = _get_pred_class(consequent(s))
-        (coverage = 1.0, error = sum(y .!= pred_class) / length(y), length = 1)
+        (coverage=1.0, error=sum(y .!= pred_class) / length(y), length=1)
     else
         metrics = SoleModels.rulemetrics(s, X, y)
         (coverage=metrics[:coverage], error=metrics[:error], length=metrics[rule_complexity_metric])
@@ -262,7 +262,7 @@ function _select_best_rule(
     min_length = minimum(rules_length[candidates])
     candidates = candidates[rules_length[candidates].==min_length]
     length(candidates) == 1 && return candidates[1]
-    
+
     # random selection
     return rand(rng, candidates)
 end
@@ -277,13 +277,13 @@ function _stel(
     rng::AbstractRNG=Random.TaskLocalRNG()
 )
     rules = Rule[]
-    ruleset = [r..., Rule(SoleModels.bestguess(y; suppress_parity_warning = true))]
+    ruleset = [r..., Rule(SoleModels.bestguess(y; suppress_parity_warning=true))]
 
     # filter rules by minimum coverage
     ruleset = filter(ruleset) do s
         return _is_true_antecedent(antecedent(s)) ?
-            true :
-            SoleModels.rulemetrics(s, X, y)[:coverage] ≥ min_coverage
+               true :
+               SoleModels.rulemetrics(s, X, y)[:coverage] ≥ min_coverage
     end
 
     nrules = length(ruleset)
@@ -323,14 +323,14 @@ function _stel(
 
         # compute remaining instances
         idx_remaining = _is_true_antecedent(antecedent(ruleset[idx_best])) ?
-            Int64[] :
-            findall(.!evaluaterule(ruleset[idx_best], X, y)[:checkmask,])
+                        Int64[] :
+                        findall(.!evaluaterule(ruleset[idx_best], X, y)[:checkmask,])
 
         # exit condition
         if idx_best == length(ruleset)
             return DecisionList(rules[1:(end-1)], consequent(rules[end]))
         elseif length(idx_remaining) == 0
-            return DecisionList(rules, bestguess(y; suppress_parity_warning = true))
+            return DecisionList(rules, bestguess(y; suppress_parity_warning=true))
         end
 
         # update for next iteration
@@ -340,7 +340,7 @@ function _stel(
         end
 
         deleteat!(ruleset, idx_best)
-        ruleset[end] = Rule(bestguess(y; suppress_parity_warning = true))
+        ruleset[end] = Rule(bestguess(y; suppress_parity_warning=true))
     end
     error("Unexpected error.")
 end
@@ -390,8 +390,8 @@ function intrees(
     # Extract rules from model
     listrules_kwargs = (use_shortforms=true, normalize=true)
     set = isensemble(model) ?
-        _starterruleset(model; listrules_kwargs...) :
-        listrules(model; listrules_kwargs...)
+          _starterruleset(model; listrules_kwargs...) :
+          listrules(model; listrules_kwargs...)
 
     # prune rules if enabled
     get_prune_rules(extractor) && (set = _prune_ruleset(set, X, y, extractor))
