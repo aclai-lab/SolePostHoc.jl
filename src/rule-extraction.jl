@@ -47,20 +47,20 @@ featurenames(s::AbstractModel) = s.info.featurenames
 # ---------------------------------------------------------------------------------------- #
 #                                  InTrees                                                 #
 # ---------------------------------------------------------------------------------------- #
-export InTreesRuleExtractor
+#export InTreesRuleExtractor
 export intrees
 include("intrees/intrees.jl")
-
-function extractrules(extractor::InTreesRuleExtractor, args...)::DecisionSet
-    dl = intrees(extractor, args...)
-    ll = listrules(dl, use_shortforms=false)
-    return if get_dns(extractor)
-        rules_obj = convert_classif_rules(dl, ll)
-        DecisionSet(rules_obj)
-    else
-        DecisionSet(ll)
-    end
-end
+#
+#function extractrules(extractor::InTreesRuleExtractor, args...)::DecisionSet
+#    dl = intrees(extractor, args...)
+#    ll = listrules(dl, use_shortforms=false)
+#    return if get_dns(extractor)
+#        rules_obj = convert_classif_rules(dl, ll)
+#        DecisionSet(rules_obj)
+#    else
+#        DecisionSet(ll)
+#    end
+#end
 
 #===========================================================================================
                                         Lumen
@@ -98,7 +98,7 @@ include("BA-Trees/src/main.jl")
 struct BATreesRuleExtractor <: RuleExtractor end
 
 function extractrules(::BATreesRuleExtractor, m, args...; kwargs...)
-    dsbatrees = batrees(m, dsOutput = true, args...; kwargs...)
+    dsbatrees = batrees(m, dsOutput=true, args...; kwargs...)
     return dsbatrees
 end
 
@@ -155,7 +155,7 @@ struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
 
 function extractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
     dl = rulecosiplus(m, args...; kwargs...) # decision list
-    ll = listrules(dl, use_shortforms = false) # decision list to list of rules
+    ll = listrules(dl, use_shortforms=false) # decision list to list of rules
     rules_obj = convert_classif_rules(dl, ll)
     dsrulecosiplus = DecisionSet(rules_obj)
     return dsrulecosiplus
