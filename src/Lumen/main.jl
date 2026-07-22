@@ -11,6 +11,7 @@ using CategoricalArrays
 using DataFrames
 using IterTools
 
+using ABC_jll
 
 include("config.jl")
 
