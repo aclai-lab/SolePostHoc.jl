@@ -283,11 +283,13 @@ presentRules(ruleMetric, colnames(Xc))
 # giving the same results in the same order
 # ---------------------------------------------------------------------------- #
 R"""
-ruleMetric <- pruneRule(ruleMetric,Xc,yc)
-ruleMetric[1:2,]
-ruleMetric <- selectRuleRRF(ruleMetric,Xc,yc)
+set.seed(1)
 
-presentRules(ruleMetric, colnames(Xc))
+pruneRules <- pruneRule(ruleMetric,Xc,yc)
+pruneRules[1:2,]
+selectRules <- selectRuleRRF(pruneRules,Xc,yc)
+
+# presentRules(ruleMetric, colnames(Xc))
 """
 
 # _select_rules_cbc(set, X, y, extractor)
@@ -300,3 +302,20 @@ presentRules(ruleMetric, colnames(Xc))
 # , ▣ ([petal_width] ∈ [1.75,1.85))  ↣  versicolor
 # , ▣ (([petal_length] ∈ [4.95,5.05))) ∧ (([sepal_length] ∈ [-Inf,6.5)))  ↣  virginica
 # ]
+
+R"""
+library("RRF")
+set.seed(1)
+
+ruleI = sapply(pruneRules[,"condition"],rule2Table,Xc,yc)
+coefReg <- 0.95 - 0.01*as.numeric(pruneRules[,"len"])/max(as.numeric(pruneRules[,"len"]))
+rf <- RRF(ruleI,as.factor(yc), flagReg = 1, coefReg=coefReg, mtry = (ncol(ruleI)*1/2) , ntree=50, maxnodes= 10,replace=FALSE) 
+imp <- rf$importance/max(rf$importance)
+feaSet <- which(imp > 0.01)
+ruleSetPrunedRRF <- cbind(pruneRules[feaSet,,drop=FALSE],impRRF=imp[feaSet])
+ix = order(as.numeric(ruleSetPrunedRRF[,"impRRF"]),
+            - as.numeric(ruleSetPrunedRRF[,"err"]),
+            - as.numeric(ruleSetPrunedRRF[,"len"]),
+            decreasing=TRUE)
+ruleSelect <- ruleSetPrunedRRF[ix,,drop=FALSE]
+"""
