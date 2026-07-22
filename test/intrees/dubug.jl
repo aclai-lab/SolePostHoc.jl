@@ -232,3 +232,54 @@ presentRules(exec, c(
 extractor = InTreesRuleExtractor()
 extracted_rules =
     RuleExtraction.extractrules(extractor, solem_rf, Xc, yc)
+
+# set = ClassificationRule{CategoricalArrays.CategoricalValue{String, UInt32}}
+#  [▣ ([petal_length] ∈ [-Inf,2.6))  ↣  setosa !!Checked
+# , ▣ (([petal_length] ∈ [2.6,Inf])) ∧ (([petal_width] ∈ [-Inf,1.75)))  ↣  versicolor !!Checked
+# , ▣ (([petal_length] ∈ [2.6,Inf])) ∧ (([petal_width] ∈ [1.75,Inf]))  ↣  virginica !!Checked
+# , ▣ ([petal_width] ∈ [-Inf,0.8))  ↣  setosa !!Checked
+# , ▣ (([petal_width] ∈ [0.8,1.25))) ∧ (([sepal_width] ∈ [-Inf,2.25)))  ↣  versicolor !!Checked
+# , ▣ (([petal_width] ∈ [1.25,1.75))) ∧ (([sepal_width] ∈ [-Inf,2.25)))  ↣  virginica !!Checked
+# , ▣ (([petal_width] ∈ [0.8,1.65))) ∧ (([sepal_width] ∈ [2.25,Inf]))  ↣  versicolor !!Checked
+# , ▣ (([petal_width] ∈ [1.65,1.75))) ∧ (([sepal_width] ∈ [2.25,Inf])) ∧ (([petal_length] ∈ [-Inf,4.75)))  ↣  virginica !!Checked
+# , ▣ (([petal_width] ∈ [1.65,1.75))) ∧ (([sepal_width] ∈ [2.25,Inf])) ∧ (([petal_length] ∈ [4.75,Inf]))  ↣  versicolor !!Checked
+# , ▣ (([petal_width] ∈ [1.75,Inf])) ∧ (([sepal_length] ∈ [-Inf,6.0))) ∧ (([petal_length] ∈ [-Inf,4.85)))  ↣  versicolor !!Checked
+# , ▣ (([petal_width] ∈ [1.75,Inf])) ∧ (([sepal_length] ∈ [-Inf,6.0))) ∧ (([petal_length] ∈ [4.85,Inf]))  ↣  virginica !!Checked
+# , ▣ (([petal_width] ∈ [1.75,Inf])) ∧ (([sepal_length] ∈ [6.0,Inf]))  ↣  virginica !!Checked
+# ]
+
+# function listrules is validated against R implementation,
+# giving the same results in the same order
+
+R"""
+ruleMetric <- getRuleMetric(exec,Xc,yc)
+ruleMetric[1:2,]
+# pruneRule <- pruneRule(ruleMetric,Xc,yc)
+
+presentRules(ruleMetric, c(
+    "sepal_length",
+    "sepal_width",
+    "petal_length",
+    "petal_width"
+))
+"""
+
+#       pred        
+#  [1,] "setosa"    
+#  [2,] "versicolor"
+#  [3,] "virginica" 
+#  [4,] "setosa"    
+#  [5,] "versicolor"
+#  [6,] "versicolor"
+#  [7,] "versicolor"
+#  [8,] "virginica" 
+#  [9,] "versicolor"
+# [10,] "versicolor"
+# [11,] "virginica" 
+# [12,] "virginica" 
+
+# ATTENTION! predictions are not validated.
+# rule number 6 is "versicolor" in R, while is "virginica" in our intrees.
+# this seems clearly due to a different float format: julia uses Float64 by default,
+# while R uses Float32, let's check it out:
+
