@@ -210,6 +210,8 @@ See also: [`setup_espresso`](@ref), [`lumen`](@ref)
 #     return abcbinary
 # end
 
+function setup_abc() end
+
 """
     setup_quine() -> Nothing
 
@@ -1467,16 +1469,27 @@ function run_minimization(
     extractor::LumenConfig,
     atoms::Vector{Vector{SL.Atom}}
 )
-    minimized_formula =
-        SD.abc_minimize(
+    # minimized_formula =
+    #     SD.abc_minimize(
+    #         atoms,
+    #         get_binary(extractor);
+    #         fast=1,
+    #         depth=get_depth(extractor),
+    #         float_type=get_float_type(extractor)
+    #     )
+
+    # return _refine_dnf(minimized_formula)
+
+    ABC_jll.abc() do binary
+        minimized_formula = SD.abc_minimize(
             atoms,
-            get_binary(extractor);
+            binary;
             fast=1,
             depth=get_depth(extractor),
             float_type=get_float_type(extractor)
         )
-
-    return _refine_dnf(minimized_formula)
+        return refine_dnf(minimized_formula)
+    end
 end
 
 """

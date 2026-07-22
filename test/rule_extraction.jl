@@ -10,7 +10,7 @@ fillartifacts()
 
 
 # Loader lists
-abcloader = ABCLoader()
+# abcloader = ABCLoader()
 mitloader = MITESPRESSOLoader()
 
 Xc, yc = @load_iris
@@ -74,18 +74,18 @@ extracted_rules = RuleExtraction.extractrules(
 extractor = LumenRuleExtractor()
 
 extracted_rules = RuleExtraction.extractrules(extractor, solem_dt);
-#extracted_rules = RuleExtraction.extractrules( # TODO: attend artifact loading for lumen..
-#    extractor,
-#    solem_dt;
-#    minimization_scheme = :mitespresso,
-#);
+extracted_rules = RuleExtraction.extractrules( # TODO: attend artifact loading for lumen..
+   extractor,
+   solem_dt;
+   minimization_scheme = :mitespresso,
+);
 
 extracted_rules = RuleExtraction.extractrules(extractor, solem_rf);
-#extracted_rules = RuleExtraction.extractrules(
-#    extractor,
-#    solem_rf;
-#    minimization_scheme = :mitespresso,
-#);
+extracted_rules = RuleExtraction.extractrules(
+   extractor,
+   solem_rf;
+   minimization_scheme = :mitespresso,
+);
 
 # ---------------------------------------------------------------------------- #
 #                          batrees rules extraction                            #
