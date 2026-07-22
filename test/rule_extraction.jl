@@ -76,15 +76,6 @@ extractor = LumenRuleExtractor()
 # abc
 extracted_rules = RuleExtraction.extractrules(extractor, solem_dt);
 
-# ▣
-# ├[1/3] (([petal_width] ≥ 1.7000000000000002)) ∨ ((([petal_length] ≥ 5.0)) ∧ (([petal_width] ≥ 0.75)))  ↣  virginica : NamedTuple()
-# ├[2/3] ([petal_width] < 0.75)  ↣  setosa : NamedTuple()
-# └[3/3] ([petal_length] < 5.0) ∧ ([petal_width] ≥ 0.75) ∧ ([petal_width] < 1.7000000000000002)  ↣  versicolor : NamedTuple()
-
-# after ABC_jll implementation
-@btime RuleExtraction.extractrules(extractor, solem_dt)
-# 47.443 ms (5251 allocations: 518.31 KiB)
-
 # mit espresso
 extracted_rules = RuleExtraction.extractrules( # TODO: attend artifact loading for lumen..
    extractor,
@@ -94,15 +85,6 @@ extracted_rules = RuleExtraction.extractrules( # TODO: attend artifact loading 
 
 # abc
 extracted_rules = RuleExtraction.extractrules(extractor, solem_rf);
-
-# ▣
-# ├[1/3] (([petal_width] ≥ 1.65)) ∨ ((([petal_length] ≥ 2.75)) ∧ (([petal_width] ≥ 1.45)) ∧ (([sepal_length] ≥ 6.25)) ∧ (([sepal_length] < 6.4)) ∧ (([sepal_width] < 2.8499999999999996)))  ↣  virginica : NamedTuple()
-# ├[2/3] ([petal_length] < 2.5999999999999996) ∧ ([petal_width] < 1.65)  ↣  setosa : NamedTuple()
-# └[3/3] ((([petal_length] ≥ 2.5999999999999996)) ∧ (([petal_length] < 2.75)) ∧ (([petal_width] < 1.65))) ∨ ((([petal_length] ≥ 2.5999999999999996)) ∧ (([petal_width] < 1.45))) ∨ ((([petal_length] ≥ 2.75)) ∧ (([petal_width] < 1.65)) ∧ (([sepal_length] < 6.25))) ∨ ((([petal_length] ≥ 2.75)) ∧ (([petal_width] < 1.65)) ∧ (([sepal_length] ≥ 6.4))) ∨ ((([petal_length] ≥ 2.75)) ∧ (([petal_width] < 1.65)) ∧ (([sepal_width] ≥ 2.8499999999999996)))  ↣  versicolor : NamedTuple()
-
-# after ABC_jll implementation
-@btime RuleExtraction.extractrules(extractor, solem_rf)
-# 52.546 ms (24980 allocations: 1.60 MiB)
 
 # mit espresso
 extracted_rules = RuleExtraction.extractrules(
