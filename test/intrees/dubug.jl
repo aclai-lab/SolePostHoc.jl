@@ -11,21 +11,13 @@ Xc = DataFrame(Xc)
 
 @rput Xc yc
 
+# ---------------------------------------------------------------------------- #
 R"""
 library(randomForest)
+set.seed(1)
 
 rf <- randomForest(as.data.frame(Xc), as.factor(yc), ntree=2)
 
-# dtree <- rpart(target ~ ., data = df, parms = list(split = "entropy"))
-
-# dtree <- rpart(target ~ ., data = df, method = "class", parms = list(split = "information"), control = rpart.control(
-#         cp = 0,
-#         minsplit = 2,
-#         minbucket = 1,
-#         maxdepth = 30,
-#         xval = 0,
-#     )
-# )
 for (i in seq_len(rf$ntree)) {
     cat("\n--- Tree", i, "---\n")
     print(getTree(rf, k = i, labelVar = TRUE))
@@ -33,32 +25,38 @@ for (i in seq_len(rf$ntree)) {
 """
 
 # --- Tree 1 ---
-#   left daughter right daughter    split var split point status prediction
-# 1             2              3 petal_length        2.60      1       <NA>
-# 2             0              0         <NA>        0.00     -1     setosa
-# 3             4              5  petal_width        1.75      1       <NA>
-# 4             0              0         <NA>        0.00     -1 versicolor
-# 5             0              0         <NA>        0.00     -1  virginica
+#    left daughter right daughter    split var split point status prediction
+# 1              2              3 petal_length        2.45      1       <NA>
+# 2              0              0         <NA>        0.00     -1     setosa
+# 3              4              5 petal_length        4.95      1       <NA>
+# 4              6              7  petal_width        1.65      1       <NA>
+# 5              8              9 petal_length        5.05      1       <NA>
+# 6              0              0         <NA>        0.00     -1 versicolor
+# 7              0              0         <NA>        0.00     -1  virginica
+# 8             10             11 sepal_length        6.50      1       <NA>
+# 9              0              0         <NA>        0.00     -1  virginica
+# 10             0              0         <NA>        0.00     -1  virginica
+# 11             0              0         <NA>        0.00     -1 versicolor
 
 # --- Tree 2 ---
 #    left daughter right daughter    split var split point status prediction
-# 1              2              3  petal_width        0.80      1       <NA>
+# 1              2              3  petal_width        0.75      1       <NA>
 # 2              0              0         <NA>        0.00     -1     setosa
 # 3              4              5  petal_width        1.75      1       <NA>
-# 4              6              7  sepal_width        2.25      1       <NA>
-# 5              8              9 sepal_length        6.00      1       <NA>
-# 6             10             11  petal_width        1.25      1       <NA>
-# 7             12             13  petal_width        1.65      1       <NA>
-# 8             14             15 petal_length        4.85      1       <NA>
+# 4              6              7  petal_width        1.55      1       <NA>
+# 5              8              9  petal_width        1.85      1       <NA>
+# 6             10             11 petal_length        4.95      1       <NA>
+# 7             12             13 petal_length        5.40      1       <NA>
+# 8             14             15 sepal_length        5.95      1       <NA>
 # 9              0              0         <NA>        0.00     -1  virginica
 # 10             0              0         <NA>        0.00     -1 versicolor
 # 11             0              0         <NA>        0.00     -1  virginica
 # 12             0              0         <NA>        0.00     -1 versicolor
-# 13            16             17 petal_length        4.75      1       <NA>
-# 14             0              0         <NA>        0.00     -1 versicolor
+# 13             0              0         <NA>        0.00     -1  virginica
+# 14            16             17 petal_length        4.95      1       <NA>
 # 15             0              0         <NA>        0.00     -1  virginica
-# 16             0              0         <NA>        0.00     -1  virginica
-# 17             0              0         <NA>        0.00     -1 versicolor
+# 16             0              0         <NA>        0.00     -1 versicolor
+# 17             0              0         <NA>        0.00     -1  virginica
 
 featurenames = [
     :sepal_length,
@@ -66,10 +64,6 @@ featurenames = [
     :petal_length,
     :petal_width,
 ]
-
-setosa     = yc[findfirst(==("setosa"), yc)]
-versicolor = yc[findfirst(==("versicolor"), yc)]
-virginica  = yc[findfirst(==("virginica"), yc)]
 
 leaf(label) = ConstantModel(label, (;
     supporting_predictions = [label],
@@ -96,19 +90,37 @@ node(condition, left, right) = Branch(condition, left, right, (;
 # --------------------------------------------------------------------------- #
 # Tree 1 from randomForest::getTree(rf, k = 1, labelVar = TRUE)
 #
-# 1: petal_length < 2.60
+# 1: petal_length <= 2.45
 # ├─ 2: setosa
-# └─ 3: petal_width < 1.75
-#    ├─ 4: versicolor
-#    └─ 5: virginica
+# └─ 3: petal_length <= 4.95
+#    ├─ 4: petal_width <= 1.65
+#    │  ├─ 6: versicolor
+#    │  └─ 7: virginica
+#    └─ 5: petal_length <= 5.05
+#       ├─ 8: sepal_length <= 6.50
+#       │  ├─ 10: virginica
+#       │  └─ 11: versicolor
+#       └─ 9: virginica
 # --------------------------------------------------------------------------- #
 tree1_root = node(
-    split(3, 2.60), # petal_length < 2.60
-    leaf(setosa),
+    split(3, 2.45), # petal_length <= 2.45
+    leaf("setosa"),
     node(
-        split(4, 1.75), # petal_width < 1.75
-        leaf(versicolor),
-        leaf(virginica),
+        split(3, 4.95), # petal_length <= 4.95
+        node(
+            split(4, 1.65), # petal_width <= 1.65
+            leaf("versicolor"),
+            leaf("virginica"),
+        ),
+        node(
+            split(3, 5.05), # petal_length <= 5.05
+            node(
+                split(1, 6.50), # sepal_length <= 6.50
+                leaf("virginica"),
+                leaf("versicolor"),
+            ),
+            leaf("virginica"),
+        ),
     ),
 )
 
@@ -121,54 +133,54 @@ tree1 = SoleModels.DecisionTree(tree1_root, (;
 # --------------------------------------------------------------------------- #
 # Tree 2 from randomForest::getTree(rf, k = 2, labelVar = TRUE)
 #
-# 1: petal_width < 0.80
+# 1: petal_width <= 0.75
 # ├─ 2: setosa
-# └─ 3: petal_width < 1.75
-#    ├─ 4: sepal_width < 2.25
-#    │  ├─ 6: petal_width < 1.25
+# └─ 3: petal_width <= 1.75
+#    ├─ 4: petal_width <= 1.55
+#    │  ├─ 6: petal_length <= 4.95
 #    │  │  ├─ 10: versicolor
 #    │  │  └─ 11: virginica
-#    │  └─ 7: petal_width < 1.65
+#    │  └─ 7: petal_length <= 5.40
 #    │     ├─ 12: versicolor
-#    │     └─ 13: petal_length < 4.75
-#    │        ├─ 16: virginica
-#    │        └─ 17: versicolor
-#    └─ 5: sepal_length < 6.00
-#       ├─ 8: petal_length < 4.85
-#       │  ├─ 14: versicolor
+#    │     └─ 13: virginica
+#    └─ 5: petal_width <= 1.85
+#       ├─ 8: sepal_length <= 5.95
+#       │  ├─ 14: petal_length <= 4.95
+#       │  │  ├─ 16: versicolor
+#       │  │  └─ 17: virginica
 #       │  └─ 15: virginica
 #       └─ 9: virginica
 # --------------------------------------------------------------------------- #
 tree2_root = node(
-    split(4, 0.80), # petal_width < 0.80
-    leaf(setosa),
+    split(4, 0.75), # petal_width <= 0.75
+    leaf("setosa"),
     node(
-        split(4, 1.75), # petal_width < 1.75
+        split(4, 1.75), # petal_width <= 1.75
         node(
-            split(2, 2.25), # sepal_width < 2.25
+            split(4, 1.55), # petal_width <= 1.55
             node(
-                split(4, 1.25), # petal_width < 1.25
-                leaf(versicolor),
-                leaf(virginica),
+                split(3, 4.95), # petal_length <= 4.95
+                leaf("versicolor"),
+                leaf("virginica"),
             ),
             node(
-                split(4, 1.65), # petal_width < 1.65
-                leaf(versicolor),
-                node(
-                    split(3, 4.75), # petal_length < 4.75
-                    leaf(virginica),
-                    leaf(versicolor),
-                ),
+                split(3, 5.40), # petal_length <= 5.40
+                leaf("versicolor"),
+                leaf("virginica"),
             ),
         ),
         node(
-            split(1, 6.00), # sepal_length < 6.00
+            split(4, 1.85), # petal_width <= 1.85
             node(
-                split(3, 4.85), # petal_length < 4.85
-                leaf(versicolor),
-                leaf(virginica),
+                split(1, 5.95), # sepal_length <= 5.95
+                node(
+                    split(3, 4.95), # petal_length <= 4.95
+                    leaf("versicolor"),
+                    leaf("virginica"),
+                ),
+                leaf("virginica"),
             ),
-            leaf(virginica),
+            leaf("virginica"),
         ),
     ),
 )
@@ -198,8 +210,6 @@ solem_rf = SoleModels.DecisionEnsemble{eltype(yc)}(
 )
 
 # ---------------------------------------------------------------------------- #
-#                          intrees rules extraction                            #
-# ---------------------------------------------------------------------------- #
 R"""
 library(inTrees)
 
@@ -216,40 +226,43 @@ presentRules(exec, c(
 """
 
 #       condition                                                                                       
-#  [1,] "petal_length<=2.6"                                                                             
-#  [2,] "petal_length>2.6 & petal_width<=1.75"                                                          
-#  [3,] "petal_length>2.6 & petal_width>1.75"                                                           
-#  [4,] "petal_width<=0.8"                                                                              
-#  [5,] "sepal_width<=2.25 & petal_width>0.8 & petal_width<=1.75 & petal_width<=1.25"                   
-#  [6,] "sepal_width<=2.25 & petal_width>0.8 & petal_width<=1.75 & petal_width>1.25"                    
-#  [7,] "sepal_width>2.25 & petal_width>0.8 & petal_width<=1.75 & petal_width<=1.65"                    
-#  [8,] "sepal_width>2.25 & petal_length<=4.75 & petal_width>0.8 & petal_width<=1.75 & petal_width>1.65"
-#  [9,] "sepal_width>2.25 & petal_length>4.75 & petal_width>0.8 & petal_width<=1.75 & petal_width>1.65" 
-# [10,] "sepal_length<=6 & petal_length<=4.85 & petal_width>0.8 & petal_width>1.75"                     
-# [11,] "sepal_length<=6 & petal_length>4.85 & petal_width>0.8 & petal_width>1.75"                      
-# [12,] "sepal_length>6 & petal_width>0.8 & petal_width>1.75"  
+#  [1,] "petal_length<=2.45"                                                                               
+#  [2,] "petal_length>2.45 & petal_length<=4.95 & petal_width<=1.65"                                       
+#  [3,] "petal_length>2.45 & petal_length<=4.95 & petal_width>1.65"                                        
+#  [4,] "sepal_length<=6.5 & petal_length>2.45 & petal_length>4.95 & petal_length<=5.05"                   
+#  [5,] "sepal_length>6.5 & petal_length>2.45 & petal_length>4.95 & petal_length<=5.05"                    
+#  [6,] "petal_length>2.45 & petal_length>4.95 & petal_length>5.05"                                        
+#  [7,] "petal_width<=0.75"                                                                                
+#  [8,] "petal_length<=4.95 & petal_width>0.75 & petal_width<=1.75 & petal_width<=1.55"                    
+#  [9,] "petal_length>4.95 & petal_width>0.75 & petal_width<=1.75 & petal_width<=1.55"                     
+# [10,] "petal_length<=5.4 & petal_width>0.75 & petal_width<=1.75 & petal_width>1.55"                      
+# [11,] "petal_length>5.4 & petal_width>0.75 & petal_width<=1.75 & petal_width>1.55"                       
+# [12,] "sepal_length<=5.95 & petal_length<=4.95 & petal_width>0.75 & petal_width>1.75 & petal_width<=1.85"
+# [13,] "sepal_length<=5.95 & petal_length>4.95 & petal_width>0.75 & petal_width>1.75 & petal_width<=1.85" 
+# [14,] "sepal_length>5.95 & petal_width>0.75 & petal_width>1.75 & petal_width<=1.85"                      
+# [15,] "petal_width>0.75 & petal_width>1.75 & petal_width>1.85"  
 
 extractor = InTreesRuleExtractor()
 extracted_rules =
     RuleExtraction.extractrules(extractor, solem_rf, Xc, yc)
 
-# set = ClassificationRule{CategoricalArrays.CategoricalValue{String, UInt32}}
-#  [▣ ([petal_length] ∈ [-Inf,2.6))  ↣  setosa !!Checked
-# , ▣ (([petal_length] ∈ [2.6,Inf])) ∧ (([petal_width] ∈ [-Inf,1.75)))  ↣  versicolor !!Checked
-# , ▣ (([petal_length] ∈ [2.6,Inf])) ∧ (([petal_width] ∈ [1.75,Inf]))  ↣  virginica !!Checked
-# , ▣ ([petal_width] ∈ [-Inf,0.8))  ↣  setosa !!Checked
-# , ▣ (([petal_width] ∈ [0.8,1.25))) ∧ (([sepal_width] ∈ [-Inf,2.25)))  ↣  versicolor !!Checked
-# , ▣ (([petal_width] ∈ [1.25,1.75))) ∧ (([sepal_width] ∈ [-Inf,2.25)))  ↣  virginica !!Checked
-# , ▣ (([petal_width] ∈ [0.8,1.65))) ∧ (([sepal_width] ∈ [2.25,Inf]))  ↣  versicolor !!Checked
-# , ▣ (([petal_width] ∈ [1.65,1.75))) ∧ (([sepal_width] ∈ [2.25,Inf])) ∧ (([petal_length] ∈ [-Inf,4.75)))  ↣  virginica !!Checked
-# , ▣ (([petal_width] ∈ [1.65,1.75))) ∧ (([sepal_width] ∈ [2.25,Inf])) ∧ (([petal_length] ∈ [4.75,Inf]))  ↣  versicolor !!Checked
-# , ▣ (([petal_width] ∈ [1.75,Inf])) ∧ (([sepal_length] ∈ [-Inf,6.0))) ∧ (([petal_length] ∈ [-Inf,4.85)))  ↣  versicolor !!Checked
-# , ▣ (([petal_width] ∈ [1.75,Inf])) ∧ (([sepal_length] ∈ [-Inf,6.0))) ∧ (([petal_length] ∈ [4.85,Inf]))  ↣  virginica !!Checked
-# , ▣ (([petal_width] ∈ [1.75,Inf])) ∧ (([sepal_length] ∈ [6.0,Inf]))  ↣  virginica !!Checked
+# set = ClassificationRule{String}
+#  [▣ ([petal_length] ∈ [-Inf,2.45))  ↣  setosa
+# , ▣ (([petal_length] ∈ [2.45,4.95))) ∧ (([petal_width] ∈ [-Inf,1.65)))  ↣  versicolor
+# , ▣ (([petal_length] ∈ [2.45,4.95))) ∧ (([petal_width] ∈ [1.65,Inf]))  ↣  virginica
+# , ▣ (([petal_length] ∈ [4.95,5.05))) ∧ (([sepal_length] ∈ [-Inf,6.5)))  ↣  virginica
+# , ▣ (([petal_length] ∈ [4.95,5.05))) ∧ (([sepal_length] ∈ [6.5,Inf]))  ↣  versicolor
+# , ▣ ([petal_length] ∈ [5.05,Inf])  ↣  virginica
+# , ▣ ([petal_width] ∈ [-Inf,0.75))  ↣  setosa
+# , ▣ (([petal_width] ∈ [0.75,1.55))) ∧ (([petal_length] ∈ [-Inf,4.95)))  ↣  versicolor
+# , ▣ (([petal_width] ∈ [0.75,1.55))) ∧ (([petal_length] ∈ [4.95,Inf]))  ↣  virginica
+# , ▣ (([petal_width] ∈ [1.55,1.75))) ∧ (([petal_length] ∈ [-Inf,5.4)))  ↣  versicolor
+# , ▣ (([petal_width] ∈ [1.55,1.75))) ∧ (([petal_length] ∈ [5.4,Inf]))  ↣  virginica
+# , ▣ (([petal_width] ∈ [1.75,1.85))) ∧ (([sepal_length] ∈ [-Inf,5.95))) ∧ (([petal_length] ∈ [-Inf,4.95)))  ↣  versicolor
+# , ▣ (([petal_width] ∈ [1.75,1.85))) ∧ (([sepal_length] ∈ [-Inf,5.95))) ∧ (([petal_length] ∈ [4.95,Inf]))  ↣  virginica
+# , ▣ (([petal_width] ∈ [1.75,1.85))) ∧ (([sepal_length] ∈ [5.95,Inf]))  ↣  virginica
+# , ▣ ([petal_width] ∈ [1.85,Inf])  ↣  virginica
 # ]
-
-# function listrules is validated against R implementation,
-# giving the same results in the same order
 
 R"""
 ruleMetric <- getRuleMetric(exec,Xc,yc)
@@ -268,18 +281,20 @@ presentRules(ruleMetric, c(
 #  [1,] "setosa"    
 #  [2,] "versicolor"
 #  [3,] "virginica" 
-#  [4,] "setosa"    
+#  [4,] "virginica" 
 #  [5,] "versicolor"
-#  [6,] "versicolor"
-#  [7,] "versicolor"
-#  [8,] "virginica" 
-#  [9,] "versicolor"
+#  [6,] "virginica" 
+#  [7,] "setosa"    
+#  [8,] "versicolor"
+#  [9,] "virginica" 
 # [10,] "versicolor"
 # [11,] "virginica" 
-# [12,] "virginica" 
+# [12,] "versicolor"
+# [13,] "virginica" 
+# [14,] "virginica" 
+# [15,] "virginica"
 
-# ATTENTION! predictions are not validated.
-# rule number 6 is "versicolor" in R, while is "virginica" in our intrees.
-# this seems clearly due to a different float format: julia uses Float64 by default,
-# while R uses Float32, let's check it out:
-
+# ---------------------------------------------------------------------------- #
+# function listrules is validated against R implementation,
+# giving the same results in the same order
+# ---------------------------------------------------------------------------- #

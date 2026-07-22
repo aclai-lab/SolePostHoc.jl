@@ -393,7 +393,7 @@ function intrees(
         _starterruleset(model; listrules_kwargs...) :
         listrules(model; listrules_kwargs...)
 
-        @show set
+    @show set
 
     # prune rules if enabled
     get_prune_rules(extractor) && (set = _prune_ruleset(set, X, y, extractor))
