@@ -393,8 +393,6 @@ function intrees(
         _starterruleset(model; listrules_kwargs...) :
         listrules(model; listrules_kwargs...)
 
-    @show set
-
     # prune rules if enabled
     get_prune_rules(extractor) && (set = _prune_ruleset(set, X, y, extractor))
 
@@ -404,6 +402,8 @@ function intrees(
     else
         error("Unexpected rule selection method: $(get_rule_selection_method(extractor))")
     end
+
+    @show ruleset
 
     # construct final decision list via sequential covering
     _stel(

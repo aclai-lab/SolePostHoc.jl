@@ -58,12 +58,7 @@ for (i in seq_len(rf$ntree)) {
 # 16             0              0         <NA>        0.00     -1 versicolor
 # 17             0              0         <NA>        0.00     -1  virginica
 
-featurenames = [
-    :sepal_length,
-    :sepal_width,
-    :petal_length,
-    :petal_width,
-]
+featurenames = [:sepal_length, :sepal_width, :petal_length, :petal_width]
 
 leaf(label) = ConstantModel(label, (;
     supporting_predictions = [label],
@@ -217,12 +212,7 @@ treeList <- RF2List(rf)
 exec <- extractRules(treeList,Xc)
 exec[1:2,]
 
-presentRules(exec, c(
-    "sepal_length",
-    "sepal_width",
-    "petal_length",
-    "petal_width"
-))
+presentRules(exec, colnames(Xc))
 """
 
 #       condition                                                                                       
@@ -267,14 +257,8 @@ extracted_rules =
 R"""
 ruleMetric <- getRuleMetric(exec,Xc,yc)
 ruleMetric[1:2,]
-# pruneRule <- pruneRule(ruleMetric,Xc,yc)
 
-presentRules(ruleMetric, c(
-    "sepal_length",
-    "sepal_width",
-    "petal_length",
-    "petal_width"
-))
+presentRules(ruleMetric, colnames(Xc))
 """
 
 #       pred        
@@ -298,3 +282,21 @@ presentRules(ruleMetric, c(
 # function listrules is validated against R implementation,
 # giving the same results in the same order
 # ---------------------------------------------------------------------------- #
+R"""
+ruleMetric <- pruneRule(ruleMetric,Xc,yc)
+ruleMetric[1:2,]
+ruleMetric <- selectRuleRRF(ruleMetric,Xc,yc)
+
+presentRules(ruleMetric, colnames(Xc))
+"""
+
+# _select_rules_cbc(set, X, y, extractor)
+# ruleset = ClassificationRule{String}[
+#   ▣ ([petal_length] ∈ [-Inf,2.45))  ↣  setosa
+# , ▣ ([petal_width] ∈ [-Inf,0.75))  ↣  setosa
+# , ▣ ([petal_length] ∈ [2.45,4.95))  ↣  versicolor
+# , ▣ ([petal_width] ∈ [0.75,1.55))  ↣  versicolor
+# , ▣ ([petal_width] ∈ [1.55,1.75))  ↣  versicolor
+# , ▣ ([petal_width] ∈ [1.75,1.85))  ↣  versicolor
+# , ▣ (([petal_length] ∈ [4.95,5.05))) ∧ (([sepal_length] ∈ [-Inf,6.5)))  ↣  virginica
+# ]
