@@ -1,7 +1,12 @@
 import DecisionTree as DT
 using ComplexityMeasures
 using SoleModels
+using SoleModels: info, evaluaterule
 
+using SoleLogics
+using SoleLogics: AbstractInterpretationSet, nconjuncts
+
+using SoleBase: bestguess
 
 ############################################################################################
 ############################################################################################
@@ -9,35 +14,6 @@ using SoleModels
 include("apiIntrees.jl")
 include("intrees-pruning.jl")
 
-"""
-    intrees(model::Union{AbstractModel,DecisionForest}, X, y::AbstractVector{<:Label}; kwargs...)::DecisionList
-
-Return a decision list which approximates the behavior of the input `model` on the specified supervised dataset.
-The set of relevant and
-non-redundant rules in the decision list are obtained by means of rule selection, rule pruning,
-and sequential covering (STEL).
-
-# References
-- Deng, Houtao. "Interpreting tree ensembles with intrees." International Journal of Data Science and Analytics 7.4 (2019): 277-287.
-
-# Keyword Arguments
-- `prune_rules::Bool=true`: access to prune or not
-- `pruning_s::Union{Float64,Nothing}=nothing`: parameter that limits the denominator in the pruning metric calculation
-- `pruning_decay_threshold::Union{Float64,Nothing}=nothing`: threshold used in pruning to remove or not a joint from the rule
-- `rule_selection_method::Symbol=:CBC`: rule selection method. Currently only supports `:CBC`
-- `rule_complexity_metric::Symbol=:natoms`: Metric to use for estimating a rule complexity measure
-- `max_rules::Int=-1`: maximum number of rules in the final decision list (excluding default rule). Use -1 for unlimited rules.
-- `min_coverage::Union{Float64,Nothing}=nothing`: minimum rule coverage for STEL
-- See [`modalextractrules`](@ref) keyword arguments...
-
-Although the method was originally presented for forests it is hereby extended to work with any symbolic models.
-
-See also
-[`AbstractModel`](@ref),
-[`DecisionList`](@ref),
-[`listrules`](@ref),
-[`rulemetrics`](@ref).
-"""
 function intrees(
     model,
     X,
@@ -84,13 +60,13 @@ function intrees(
     """
     function cfs(
         X,
-        y::AbstractVector{<:Label},
+        y::AbstractVector{<:SoleModels.Label},
     )
         entropyd(_x) = ComplexityMeasures.entropy(probabilities(_x))
         midd(_x, _y) = -entropyd(collect(zip(_x, _y)))+entropyd(_x)+entropyd(_y)
         information_gain(f1, f2) = entropyd(f1) - (entropyd(f1) - midd(f1, f2))
         su(f1, f2) = (2.0 * information_gain(f1, f2) / (entropyd(f1) + entropyd(f2)))
-        function merit_calculation(X, y::AbstractVector{<:Label})
+        function merit_calculation(X, y::AbstractVector{<:SoleModels.Label})
             n_samples, n_features = size(X)
             rff = 0
             rcf = 0
