@@ -4,6 +4,7 @@ version = "0.1.2"
 authors = ["Michele Ghiotti", "Giovanni Pagliarini", "Riccardo Pasini", "Marco Perrotta", "Eduard I. Stan"]
 
 [deps]
+ABC_jll = "73717f16-8662-5d85-9e79-a3c1fc1c8861"
 AbstractTrees = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
@@ -50,6 +51,7 @@ SoleData = {rev = "main", url = "https://github.com/aclai-lab/SoleData.jl"}
 SoleModels = {rev = "main", url = "https://github.com/aclai-lab/SoleModels.jl"}
 
 [compat]
+ABC_jll = "1.1"
 AbstractTrees = "0.4"
 BenchmarkTools = "1"
 CSV = "0.10"
@@ -71,7 +73,7 @@ JSON = "0.21, 1"
 LinearAlgebra = "1"
 Logging = "1.11"
 MLJ = "0.23"
-MLJDecisionTreeInterface = "0.4"
+MLJDecisionTreeInterface = "0.5"
 ModalDecisionTrees = "0.5.2, 0.5"
 MultivariateStats = "0.10"
 NearestNeighbors = "0.4"
