@@ -47,14 +47,20 @@ featurenames(s::AbstractModel) = s.info.featurenames
 # ---------------------------------------------------------------------------------------- #
 #                                  InTrees                                                 #
 # ---------------------------------------------------------------------------------------- #
+export intrees, InTrees
 export InTreesRuleExtractor
-export intrees
-include("intrees/intrees.jl")
 
-function extractrules(extractor::InTreesRuleExtractor, args...)::DecisionSet
-    dl = intrees(extractor, args...)
+include("intrees/main.jl")
+@reexport using .InTrees
+
+"""$(_get_rule_extractor_docstring("InTreesRuleExtractor", InTrees))"""
+struct InTreesRuleExtractor <: RuleExtractor end
+
+function extractrules(::InTreesRuleExtractor, m, args...; kwargs...)::DecisionSet
+    config = InTreesConfig(; kwargs...)
+    dl = intrees(config, m, args...)
     ll = listrules(dl, use_shortforms=false)
-    return if get_dns(extractor)
+    return if get_dns(config)
         rules_obj = convert_classif_rules(dl, ll)
         DecisionSet(rules_obj)
     else
@@ -98,7 +104,7 @@ include("BA-Trees/src/main.jl")
 struct BATreesRuleExtractor <: RuleExtractor end
 
 function extractrules(::BATreesRuleExtractor, m, args...; kwargs...)
-    dsbatrees = batrees(m, dsOutput = true, args...; kwargs...)
+    dsbatrees = batrees(m, dsOutput=true, args...; kwargs...)
     return dsbatrees
 end
 
@@ -155,7 +161,7 @@ struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
 
 function extractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
     dl = rulecosiplus(m, args...; kwargs...) # decision list
-    ll = listrules(dl, use_shortforms = false) # decision list to list of rules
+    ll = listrules(dl, use_shortforms=false) # decision list to list of rules
     rules_obj = convert_classif_rules(dl, ll)
     dsrulecosiplus = DecisionSet(rules_obj)
     return dsrulecosiplus

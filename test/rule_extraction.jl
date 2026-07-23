@@ -47,20 +47,23 @@ apply!(solem_rf, logiset, yc[test])
 # ---------------------------------------------------------------------------- #
 #                          intrees rules extraction                           #
 # ---------------------------------------------------------------------------- #
+# InTreesRuleExtractor is now a stateless dispatch marker (like LumenRuleExtractor,
+# BATreesRuleExtractor, etc.); actual parameters are passed as kwargs to
+# `extractrules`, which builds an `InTreesConfig` internally.
 extractor = InTreesRuleExtractor()
 extracted_rules =
     RuleExtraction.extractrules(extractor, solem_dt, Xc[test, :], yc[test])
 
-extractor = InTreesRuleExtractor(min_coverage=1.0)
 extracted_rules = RuleExtraction.extractrules(
     extractor,
     solem_dt,
     Xc[test, :],
-    yc[test]
+    yc[test];
+    min_coverage=1.0,
 )
 
-@test_throws MethodError InTreesRuleExtractor(invalid=true)
-@test_throws ErrorException RuleExtraction.extractrules(
+@test_throws MethodError InTreesConfig(invalid=true)
+@test_throws MethodError RuleExtraction.extractrules(
     extractor,
     solem_dt,
     Xc[test, :],
@@ -74,7 +77,7 @@ extracted_rules = RuleExtraction.extractrules(
 extractor = LumenRuleExtractor()
 
 extracted_rules = RuleExtraction.extractrules(extractor, solem_dt);
-#extracted_rules = RuleExtraction.extractrules( # TODO: attend artifact loading for lumen..
+#extracted_rules = RuleExtraction.extractrules( # TODO: attend artifact loading for lumen..
 #    extractor,
 #    solem_dt;
 #    minimization_scheme = :mitespresso,

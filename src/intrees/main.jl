@@ -1,104 +1,44 @@
+module InTrees
+
 import DecisionTree as DT
 using ComplexityMeasures
 using SoleModels
 using DataFrames
+using Random
 
-# ---------------------------------------------------------------------------- #
-#                                InTrees struct                                #
-# ---------------------------------------------------------------------------- #
-"""
-    InTreesRuleExtractor(; kwargs...)
+include("config.jl")
 
-Create a rule extractor based on the InTrees method.
-
-# Keyword Arguments
-- `prune_rules::Bool=true`: access to prune or not
-- `pruning_s::Union{Float64,Nothing}=nothing`: parameter that limits the denominator in the pruning metric calculation
-- `pruning_decay_threshold::Union{Float64,Nothing}=nothing`: threshold used in pruning to remove or not a joint from the rule
-- `rule_selection_method::Symbol=:CBC`: rule selection method. Currently only supports `:CBC`
-- `rule_complexity_metric::Symbol=:natoms`: Metric to use for estimating a rule complexity measure
-- `min_coverage::Union{Float64,Nothing}=nothing`: minimum rule coverage for stel
-- `rng::AbstractRNG=Random.TaskLocalRNG()`: RNG used for any randomized steps (e.g., feature selection)
-
-See also [`intrees`](@ref).
-"""
-struct InTreesRuleExtractor <: RuleExtractor
-    dns::Bool
-    prune_rules::Bool
-    pruning_s::Float64
-    pruning_decay_threshold::Float64
-    cbc_threshold::Float64
-    min_coverage::Float64
-    max_rules::Int64
-    rule_selection_method::Symbol
-    rule_complexity_metric::Symbol
-    n_subfeatures::Int64
-    n_trees::Int64
-    partial_sampling::Float64
-    max_depth::Int64
-    rng::AbstractRNG
-
-    function InTreesRuleExtractor(;
-        dns::Bool=true,
-        prune_rules::Bool=true,
-        pruning_s::Float64=1.0e-6,
-        pruning_decay_threshold::Float64=0.05,
-        cbc_threshold::Float64=0.01,
-        min_coverage::Float64=0.01,
-        max_rules::Int64=-1,
-        rule_selection_method::Symbol=:CBC,
-        rule_complexity_metric::Symbol=:natoms,
-        n_subfeatures::Int64=2,
-        n_trees::Int64=50,
-        partial_sampling::Float64=0.7,
-        max_depth::Int64=5,
-        rng::AbstractRNG=Random.TaskLocalRNG()
-    )
-        new(
-            dns,
-            prune_rules,
-            pruning_s,
-            pruning_decay_threshold,
-            cbc_threshold,
-            min_coverage,
-            max_rules,
-            rule_selection_method,
-            rule_complexity_metric,
-            n_subfeatures,
-            n_trees,
-            partial_sampling,
-            max_depth,
-            rng
-        )
-    end
-end
-
-# ---------------------------------------------------------------------------- #
-#                                  methods                                     #
-# ---------------------------------------------------------------------------- #
-@inline get_dns(r::InTreesRuleExtractor) = r.dns
-@inline get_prune_rules(r::InTreesRuleExtractor) = r.prune_rules
-@inline get_pruning_s(r::InTreesRuleExtractor) = r.pruning_s
-@inline get_pruning_decay_threshold(r::InTreesRuleExtractor) = r.pruning_decay_threshold
-@inline get_cbc_threshold(r::InTreesRuleExtractor) = r.cbc_threshold
-@inline get_min_coverage(r::InTreesRuleExtractor) = r.min_coverage
-@inline get_max_rules(r::InTreesRuleExtractor) = r.max_rules
-@inline get_rule_selection_method(r::InTreesRuleExtractor) = r.rule_selection_method
-@inline get_rule_complexity_metric(r::InTreesRuleExtractor) = r.rule_complexity_metric
-@inline get_n_subfeatures(r::InTreesRuleExtractor) = r.n_subfeatures
-@inline get_n_trees(r::InTreesRuleExtractor) = r.n_trees
-@inline get_partial_sampling(r::InTreesRuleExtractor) = r.partial_sampling
-@inline get_max_depth(r::InTreesRuleExtractor) = r.max_depth
-@inline get_rng(r::InTreesRuleExtractor) = r.rng
+export intrees, InTreesConfig
 
 # ---------------------------------------------------------------------------- #
 #                           Intrees pruning utility                            #
 # ---------------------------------------------------------------------------- #
+"""
+    _prune_rule(::Type{<:Atom}, r::Rule, args...; kwargs...) -> Rule
+
+Wrap a single-atom antecedent in a `LeftmostConjunctiveForm` and delegate to
+the conjunctive-form pruning method.
+"""
 function _prune_rule(::Type{<:Atom}, r::Rule{O}, args...; kwargs...) where {O}
     r = Rule(LeftmostConjunctiveForm([antecedent(r)]), consequent(r), info(r))
     _prune_rule(typeof(antecedent(r)), r, args...; kwargs...,)
 end
 
+"""
+    _prune_rule(
+        ::Type{<:LeftmostConjunctiveForm},
+        r::Rule,
+        X::AbstractInterpretationSet,
+        y::AbstractVector{<:SoleModels.Label};
+        pruning_s::AbstractFloat,
+        pruning_decay_thr::AbstractFloat,
+        kwargs...
+    ) -> Rule
+
+Greedily remove conjuncts from `r`'s antecedent whose removal does not
+increase the rule's error by more than `pruning_decay_thr` (normalized by
+`pruning_s`), as in the original InTrees pruning procedure.
+"""
 function _prune_rule(
     ::Type{<:LeftmostConjunctiveForm},
     r::Rule{O},
@@ -134,6 +74,12 @@ function _prune_rule(
     return Rule(LeftmostConjunctiveForm(SoleLogics.grandchildren(antd)[valid_idxs]), cons)
 end
 
+"""
+    _prune_rule(::Type{<:MultiFormula}, r::Rule, args...; kwargs...) -> Rule
+
+Flatten a `MultiFormula` antecedent into its per-modality children and
+delegate to the conjunctive-form pruning method.
+"""
 function _prune_rule(::Type{<:MultiFormula}, r::Rule{O}, args...; kwargs...) where {O}
     @assert antecedent(r) isa MultiFormula "Cannot use this function on $(antecedent(r))"
     children = [
@@ -146,11 +92,23 @@ function _prune_rule(::Type{<:MultiFormula}, r::Rule{O}, args...; kwargs...) whe
     end
 end
 
+"""
+    _prune_ruleset(
+        ruleset::Vector{<:Rule},
+        X::AbstractInterpretationSet,
+        y::AbstractVector{<:SoleModels.Label},
+        config::InTreesConfig
+    ) -> Vector{<:Rule}
+
+Prune every rule in `ruleset` in parallel via [`_prune_rule`](@ref), using the
+pruning parameters stored in `config`. Rules with a `BooleanTruth` antecedent
+(e.g. produced by XGBoost) are kept unchanged.
+"""
 function _prune_ruleset(
     ruleset::Vector{<:Rule},
     X::AbstractInterpretationSet,
     y::AbstractVector{<:SoleModels.Label},
-    extractor::InTreesRuleExtractor
+    config::InTreesConfig
 )
     pruned = similar(ruleset)
 
@@ -160,8 +118,8 @@ function _prune_ruleset(
         else
             _prune_rule(
                 typeof(antecedent(ruleset[i])), ruleset[i], X, y;
-                pruning_s=get_pruning_s(extractor),
-                pruning_decay_thr=get_pruning_decay_threshold(extractor)
+                pruning_s=get_pruning_s(config),
+                pruning_decay_thr=get_pruning_decay_threshold(config)
             )
         end
     end
@@ -172,7 +130,16 @@ end
 # ---------------------------------------------------------------------------- #
 #                                    Cbc                                       #
 # ---------------------------------------------------------------------------- #
-function _select_rules_cbc(ruleset, X, y, extractor)
+"""
+    _select_rules_cbc(ruleset, X, y, config::InTreesConfig) -> Vector{<:Rule}
+
+Select a compact subset of `ruleset` via the Complexity-guided Boolean
+Combination (CBC) procedure: rule-coverage checkmasks are used as features to
+fit a random forest against `y`, and rules whose normalized impurity
+importance exceeds `get_cbc_threshold(config)` are kept, sorted by
+importance (desc), error (asc), and complexity (asc).
+"""
+function _select_rules_cbc(ruleset, X, y, config::InTreesConfig)
     n_rules = length(ruleset)
     metrics = Matrix{Float64}(undef, n_rules, 3)
     checkmasks = Vector{BitVector}(undef, n_rules)
@@ -182,22 +149,22 @@ function _select_rules_cbc(ruleset, X, y, extractor)
         checkmasks[i] = eval_result[:checkmask,]
         metrics[i, 1] = eval_result[:coverage]
         metrics[i, 2] = eval_result[:error]
-        metrics[i, 3] = eval_result[get_rule_complexity_metric(extractor)]
+        metrics[i, 3] = eval_result[get_rule_complexity_metric(config)]
     end
 
     # build random forest for feature importance
     rf = DT.build_forest(
         y, hcat(checkmasks...),
-        get_n_subfeatures(extractor),
-        get_n_trees(extractor),
-        get_partial_sampling(extractor),
-        get_max_depth(extractor);
-        rng=get_rng(extractor))
+        get_n_subfeatures(config),
+        get_n_trees(config),
+        get_partial_sampling(config),
+        get_max_depth(config);
+        rng=get_rng(config))
     importance = DT.impurity_importance(rf)
     importances = importance ./ maximum(importance)
 
     # select features with sufficient importance
-    selected_idxs = findall(importances .> get_cbc_threshold(extractor))
+    selected_idxs = findall(importances .> get_cbc_threshold(config))
     isempty(selected_idxs) && return ruleset
 
     # combine metrics with importance and original indices
@@ -211,7 +178,7 @@ function _select_rules_cbc(ruleset, X, y, extractor)
     sorted = sortslices(combined, dims=1, by=x->(-x[4], x[2], x[3]))
 
     # extract final indices, limiting if max_rules is set
-    max_rules = get_max_rules(extractor)
+    max_rules = get_max_rules(config)
     n_selected = max_rules > 0 ? min(max_rules, size(sorted, 1)) : size(sorted, 1)
     final_idxs = Int64.(sorted[1:n_selected, 5])
 
@@ -227,6 +194,13 @@ end
 @inline _get_pred_class(pred_model) =
     isa(pred_model, ConstantModel) ? pred_model.outcome : string(pred_model)
 
+"""
+    _compute_rule_metrics(s, X, y, rule_complexity_metric)
+        -> NamedTuple{(:coverage, :error, :length)}
+
+Compute coverage, error and complexity for rule `s`. The tautological
+(`⊤`) default rule is handled as a special case (full coverage, length 1).
+"""
 function _compute_rule_metrics(s, X, y, rule_complexity_metric)
     return if _is_true_antecedent(antecedent(s))
         pred_class = _get_pred_class(consequent(s))
@@ -237,6 +211,13 @@ function _compute_rule_metrics(s, X, y, rule_complexity_metric)
     end
 end
 
+"""
+    _select_best_rule(rules_error, rules_coverage, rules_length, rng) -> Int
+
+Return the index of the best rule among candidates, breaking ties in order by
+minimum error, then maximum coverage, then minimum length, then at random
+using `rng`.
+"""
 function _select_best_rule(
     rules_error::Vector{T},
     rules_coverage::Vector{T},
@@ -267,6 +248,22 @@ function _select_best_rule(
     return rand(rng, candidates)
 end
 
+"""
+    _stel(
+        r::AbstractVector{<:Rule},
+        X::AbstractInterpretationSet,
+        y::AbstractVector{<:SoleModels.Label};
+        max_rules::Int64=-1,
+        min_coverage::Float64=0.01,
+        rule_complexity_metric::Symbol=:natoms,
+        rng::AbstractRNG=Random.TaskLocalRNG()
+    ) -> DecisionList
+
+Sequential covering (STEL): repeatedly pick the best remaining rule (by error,
+coverage, then complexity), append it to the decision list, and restrict `X`/`y`
+to the instances it does not cover, until no instances remain, the tautological
+default rule is picked, or `max_rules` is reached.
+"""
 function _stel(
     r::AbstractVector{<:Rule},
     X::AbstractInterpretationSet,
@@ -353,36 +350,77 @@ end
 )
 
 """
-    intrees(model::Union{AbstractModel,DecisionForest}, X, y::AbstractVector{<:Label}; kwargs...)::DecisionList
+    intrees(config::InTreesConfig, model::AbstractModel, X, y::AbstractVector{<:Label})
+        -> DecisionList
 
-Return a decision list which approximates the behavior of the input `model` on the specified supervised dataset.
-The set of relevant and
-non-redundant rules in the decision list are obtained by means of rule selection, rule pruning,
-and sequential covering (stel).
+Return a decision list which approximates the behavior of the input `model` on
+the specified supervised dataset. The set of relevant and non-redundant rules
+in the decision list is obtained by means of rule extraction, rule pruning,
+CBC rule selection, and sequential covering (STEL), using the parameters
+encoded in `config`.
 
 # References
-- Deng, Houtao. "Interpreting tree ensembles with intrees." International Journal of Data Science and Analytics 7.4 (2019): 277-287.
+- Deng, Houtao. "Interpreting tree ensembles with intrees." International
+  Journal of Data Science and Analytics 7.4 (2019): 277-287.
 
-# Keyword Arguments
-- `prune_rules::Bool=true`: access to prune or not
-- `pruning_s::Union{Float64,Nothing}=nothing`: parameter that limits the denominator in the pruning metric calculation
-- `pruning_decay_threshold::Union{Float64,Nothing}=nothing`: threshold used in pruning to remove or not a joint from the rule
-- `rule_selection_method::Symbol=:CBC`: rule selection method. Currently only supports `:CBC`
-- `rule_complexity_metric::Symbol=:natoms`: Metric to use for estimating a rule complexity measure
-- `max_rules::Int=-1`: maximum number of rules in the final decision list (excluding default rule). Use -1 for unlimited rules.
-- `min_coverage::Union{Float64,Nothing}=nothing`: minimum rule coverage for stel
-- See [`extractrules`](@ref) keyword arguments...
+# Pipeline
+1. Extract the starting ruleset from `model` (per-tree rules for ensembles,
+   `listrules` otherwise).
+2. If `get_prune_rules(config)`, prune every rule's antecedent
+   ([`_prune_ruleset`](@ref)).
+3. Select a compact subset of rules via CBC ([`_select_rules_cbc`](@ref)).
+4. Build the final decision list via sequential covering ([`_stel`](@ref)).
 
-Although the method was originally presented for forests it is hereby extended to work with any symbolic models.
+Although the method was originally presented for forests it is hereby extended
+to work with any symbolic model.
+
+# Arguments
+- `config::InTreesConfig`: Algorithm configuration (pruning, CBC, STEL
+  parameters).
+- `model::AbstractModel`: A single (possibly ensemble) symbolic model.
+- `X::AbstractInterpretationSet`: The dataset used to evaluate rules.
+- `y::AbstractVector{<:SoleModels.Label}`: Ground-truth labels for `X`.
+
+# Returns
+- `DecisionList`: The extracted decision list.
+
+---
+
+    intrees(model::AbstractModel, X, y::AbstractVector{<:Label}; kwargs...)
+        -> DecisionList
+
+Convenience method that builds an [`InTreesConfig`](@ref) internally from
+`kwargs` and forwards the call to `intrees(config, model, X, y)`. Any keyword
+argument accepted by `InTreesConfig` (e.g. `prune_rules`, `pruning_s`,
+`pruning_decay_threshold`, `rule_selection_method`, `rule_complexity_metric`,
+`min_coverage`, `max_rules`, `n_subfeatures`, `n_trees`, `partial_sampling`,
+`max_depth`, `rng`, `dns`, `cbc_threshold`) can be passed here.
+
+`X` can be an `AbstractInterpretationSet` or an `AbstractDataFrame` (in the
+latter case it is converted via `SoleData.scalarlogiset`).
+
+# Examples
+```julia
+# Default configuration
+dl = intrees(model, X, y)
+
+# Explicit config object
+config = InTreesConfig(prune_rules=true, max_rules=20)
+dl = intrees(config, model, X, y)
+
+# Custom CBC / pruning parameters via keyword arguments
+dl = intrees(model, X, y; n_trees=100, pruning_decay_threshold=0.1)
+```
 
 See also
+[`InTreesConfig`](@ref),
 [`AbstractModel`](@ref),
 [`DecisionList`](@ref),
 [`listrules`](@ref),
 [`rulemetrics`](@ref).
 """
 function intrees(
-    extractor::InTreesRuleExtractor,
+    config::InTreesConfig,
     model::AbstractModel,
     X::AbstractInterpretationSet,
     y::AbstractVector{<:SoleModels.Label}
@@ -394,61 +432,43 @@ function intrees(
           listrules(model; listrules_kwargs...)
 
     # prune rules if enabled
-    get_prune_rules(extractor) && (set = _prune_ruleset(set, X, y, extractor))
+    get_prune_rules(config) && (set = _prune_ruleset(set, X, y, config))
 
     # rule selection
-    ruleset = if get_rule_selection_method(extractor) == :CBC
-        _select_rules_cbc(set, X, y, extractor)
+    ruleset = if get_rule_selection_method(config) == :CBC
+        _select_rules_cbc(set, X, y, config)
     else
-        error("Unexpected rule selection method: $(get_rule_selection_method(extractor))")
+        error("Unexpected rule selection method: $(get_rule_selection_method(config))")
     end
 
     # construct final decision list via sequential covering
     _stel(
         ruleset, X, y;
-        max_rules=get_max_rules(extractor),
-        min_coverage=get_min_coverage(extractor),
-        rule_complexity_metric=get_rule_complexity_metric(extractor),
-        rng=get_rng(extractor)
+        max_rules=get_max_rules(config),
+        min_coverage=get_min_coverage(config),
+        rule_complexity_metric=get_rule_complexity_metric(config),
+        rng=get_rng(config)
     )
 end
+
 intrees(
-    extractor::InTreesRuleExtractor,
+    config::InTreesConfig,
     X::AbstractInterpretationSet,
     y::AbstractVector{<:SoleModels.Label},
     model::AbstractModel
-) = intrees(extractor, model, X, y)
+) = intrees(config, model, X, y)
 
-intrees(extractor::InTreesRuleExtractor, m, X::AbstractDataFrame, y) =
-    intrees(extractor, m, SoleData.scalarlogiset(X; allow_propositional=true), y)
+intrees(config::InTreesConfig, m, X::AbstractDataFrame, y) =
+    intrees(config, m, SoleData.scalarlogiset(X; allow_propositional=true), y)
 
-"""
-    intrees(model::AbstractModel, X, y; kwargs...)::DecisionList
-
-Convenience method that builds an [`InTreesRuleExtractor`](@ref) internally from `kwargs`
-and forwards the call to `intrees(extractor, model, X, y)`.
-
-This allows calling `intrees` directly on a model without having to construct an
-`InTreesRuleExtractor` explicitly, e.g.:
-
-    dl = intrees(model, X, y)
-
-Any keyword argument accepted by `InTreesRuleExtractor` (e.g. `prune_rules`,
-`pruning_s`, `pruning_decay_threshold`, `rule_selection_method`,
-`rule_complexity_metric`, `min_coverage`, `max_rules`, `n_subfeatures`, `n_trees`,
-`partial_sampling`, `max_depth`, `rng`, `dns`, `cbc_threshold`) can be passed here.
-
-`X` can be an `AbstractInterpretationSet` or an `AbstractDataFrame` (in the latter
-case it is converted via `SoleData.scalarlogiset`).
-
-See also [`InTreesRuleExtractor`](@ref).
-"""
 function intrees(
     model::AbstractModel,
     X,
     y::AbstractVector{<:SoleModels.Label};
     kwargs...
 )
-    extractor = SolePostHoc.InTreesRuleExtractor(; kwargs...)
-    return SolePostHoc.intrees(extractor, model, X, y)
+    config = InTreesConfig(; kwargs...)
+    return intrees(config, model, X, y)
+end
+
 end
