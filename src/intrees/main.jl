@@ -2,13 +2,27 @@ module InTrees
 
 import DecisionTree as DT
 using ComplexityMeasures
-using SoleModels
 using DataFrames
 using Random
+
+using SoleData
+
+using SoleLogics
+using SoleLogics: Atom, LeftmostConjunctiveForm
+using SoleLogics: AbstractInterpretationSet, BooleanTruth
+
+
+using SoleModels
+using SoleModels: AbstractModel, Rule, antecedent, consequent, info
+using SoleModels: rulemetrics, bestguess, evaluaterule
+using SoleModels: DecisionList, ConstantModel, isensemble, listrules
+using SoleModels: RuleExtractor
+using SoleModels: MultiFormula, modforms
 
 include("config.jl")
 
 export intrees, InTreesConfig
+export get_dns
 
 # ---------------------------------------------------------------------------- #
 #                           Intrees pruning utility                            #
