@@ -47,9 +47,6 @@ apply!(solem_rf, logiset, yc[test])
 # ---------------------------------------------------------------------------- #
 #                          intrees rules extraction                           #
 # ---------------------------------------------------------------------------- #
-# InTreesRuleExtractor is now a stateless dispatch marker (like LumenRuleExtractor,
-# BATreesRuleExtractor, etc.); actual parameters are passed as kwargs to
-# `extractrules`, which builds an `InTreesConfig` internally.
 extractor = InTreesRuleExtractor()
 extracted_rules =
     RuleExtraction.extractrules(extractor, solem_dt, Xc[test, :], yc[test])
