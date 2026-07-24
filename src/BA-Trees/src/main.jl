@@ -12,7 +12,7 @@ export batrees
 
 
 """
-    batrees(f; dataset_name="iris", num_trees=10, max_depth=10, dsOutput=true)
+    batrees(f; dataset_name="iris", num_trees=10, max_depth=10, dsOutput=false)
 
 Builds and trains a set of binary decision trees OR using the specified function `f`.
 
@@ -30,29 +30,29 @@ Builds and trains a set of binary decision trees OR using the specified function
 # Example
 """
 function batrees(
-    f = nothing;
-    dataset_name = "iris",
-    num_trees = 10,
-    max_depth = 10,
-    dsOutput = true,
-    mode_obj = 0,
-    silent = true,
+    f=nothing;
+    dataset_name="iris",
+    num_trees=10,
+    max_depth=10,
+    dsOutput=false,
+    mode_obj=0,
+    silent=true,
 )
     if (isnothing(f))
         if (dsOutput)
             WRAP_batrees(
                 nothing,
                 max_depth,
-                dataset_name = dataset_name,
-                num_trees = num_trees,
-                mod = mode_obj,
+                dataset_name=dataset_name,
+                num_trees=num_trees,
+                mod=mode_obj,
             )
             t = BAinSoleTree()
             return t
         end
     else
         if (dsOutput)
-            class_map = WRAP_batrees(f, max_depth, mod = mode_obj)
+            class_map = WRAP_batrees(f, max_depth, mod=mode_obj)
 
             silent || println("FINISH WRAP working for DS.")
             ds = BAinDS(class_map)
@@ -63,7 +63,7 @@ function batrees(
             silent || println("=========================")
             return ds
         else
-            WRAP_batrees(f, max_depth, mod = mode_obj)
+            WRAP_batrees(f, max_depth, mod=mode_obj)
             silent || println("FINISH WRAP working for SoleTrees conversion.")
             t = BAinSoleTree()
             return t
