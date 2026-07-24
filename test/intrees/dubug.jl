@@ -4,7 +4,8 @@ using MLJ
 using DataFrames, Random
 
 using SoleData: AbstractCondition, RangeScalarCondition,
-    honors_minval, honors_maxval
+    honors_minval, honors_maxval, 
+    _rangescalarcond_to_scalarconds_in_conjunction
 using SoleModels: Label, CLabel, RLabel
 
 using StatsBase: countmap
@@ -74,14 +75,12 @@ function find_max_y(
     idx_match = checkcondition(set, X, featurenames)
     
     y_match = y[idx_match]
-    y_most = y isa Vector{<:RLabel} ?
-        reg_func(y_match) :
-        mode(sort!(y_match))
-    correct = count(==(y_most), y)
-    confidence = correct / length(y)
+    y_most = mode(sort!(y_match))
+    correct = count(==(y_most), y_match)
+    confidence = correct / length(y_match)
     err = 1 - confidence
 
-    return mode(sort!(y[idx_match]))
+    return y_most, err
 end
 
 # ---------------------------------------------------------------------------- #
@@ -422,12 +421,15 @@ target <- yc
 
 newRuleMetric <- measureRule(rule["condition"],X,target)
 errOrig <- as.numeric(newRuleMetric["err"])
-# ruleV <- unlist(strsplit(rule["condition"],split= " & "))
-# pred <- rule["pred"]
+ruleV <- unlist(strsplit(rule["condition"],split= " & "))
+pred <- rule["pred"]
 
-# if(length(ruleV)==1) return(newRuleMetric)
+if(length(ruleV)==1) return(newRuleMetric)
 # for(i in length(ruleV):1){
-# restRule <- ruleV[-i]
+"""
+
+R"""
+restRule <- ruleV[-1]
 # restRule <- paste(restRule,collapse= " & ")
 # metricTmp <- measureRule(restRule,X,target,pred)
 # errNew <- as.numeric(metricTmp["err"]) 
@@ -449,7 +451,7 @@ errOrig <- as.numeric(newRuleMetric["err"])
 
 
 
-function prune_rules(
+function prune_rule(
     set::ClassificationRule{T},
     X::Matrix{S},
     y::Vector{<:Label},
@@ -458,7 +460,48 @@ function prune_rules(
     type_decay = 2,
     reg_func::Base.Callable=mean
 ) where {T,S<:Float,F}
-    y_most = find_max_y(set, X, y, featurenames; reg_func)
+    y_most, err = find_max_y(set, X, y, featurenames; reg_func)
+    rule = antecedent(set)
+    pred = consequent(set)
+
+    scalar_conds = vcat(
+        [_rangescalarcond_to_scalarconds_in_conjunction(a.value)
+        for a in rule.grandchildren]...
+    )
+    nconds = length(scalar_conds)
+
+    nconds < 2 && return
+
+    for i in nconds:-1:1
+#         remaining_parts = copy(rule_parts)
+#         deleteat!(remaining_parts, i)
+
+#         rest_rule = join(remaining_parts, " & ")
+#         metric_tmp = measure_rule(
+#             rest_rule,
+#             X,
+#             target;
+#             pred=pred,
+#             rule2table=rule2table,
+#         )
+
+#         err_new = metric_tmp.err
+
+#         decay = if type_decay == 1
+#             (err_new - err_orig) / max(err_orig, 1e-6)
+#         else
+#             err_new - err_orig
+#         end
+
+#         if decay <= max_decay
+#             rule_parts = remaining_parts
+#             new_metric = metric_tmp
+
+#             length(rule_parts) <= 1 && break
+#         end
+    end
+
+#     return new_metric
 
 end
 
@@ -467,7 +510,7 @@ typeof(set)
 
 X = Matrix(Xc)
 y = Vector(yc)
-test = prune_rules(set[2], X, y, featurenames)
+test = prune_rule(set[10], X, y, featurenames)
 
 # ---------------------------------------------------------------------------- #
 # function prune_single_rule(
