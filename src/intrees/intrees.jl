@@ -394,25 +394,25 @@ function intrees(
         listrules(model; listrules_kwargs...)
 
     # prune rules if enabled
-    get_prune_rules(extractor) && (set = _prune_ruleset(set, X, y, extractor))
+    # get_prune_rules(extractor) && (set = _prune_ruleset(set, X, y, extractor))
 
-    # rule selection
-    ruleset = if get_rule_selection_method(extractor) == :CBC
-        _select_rules_cbc(set, X, y, extractor)
-    else
-        error("Unexpected rule selection method: $(get_rule_selection_method(extractor))")
-    end
+    # # rule selection
+    # ruleset = if get_rule_selection_method(extractor) == :CBC
+    #     _select_rules_cbc(set, X, y, extractor)
+    # else
+    #     error("Unexpected rule selection method: $(get_rule_selection_method(extractor))")
+    # end
 
-    @show ruleset
+    # @show ruleset
 
-    # construct final decision list via sequential covering
-    _stel(
-        ruleset, X, y;
-        max_rules=get_max_rules(extractor),
-        min_coverage=get_min_coverage(extractor),
-        rule_complexity_metric=get_rule_complexity_metric(extractor),
-        rng=get_rng(extractor)
-    )
+    # # construct final decision list via sequential covering
+    # _stel(
+    #     ruleset, X, y;
+    #     max_rules=get_max_rules(extractor),
+    #     min_coverage=get_min_coverage(extractor),
+    #     rule_complexity_metric=get_rule_complexity_metric(extractor),
+    #     rng=get_rng(extractor)
+    # )
 end
 intrees(
     extractor::InTreesRuleExtractor,

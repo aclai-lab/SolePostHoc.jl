@@ -5,6 +5,11 @@ using DataFrames, Random
 
 using SoleData: AbstractCondition, RangeScalarCondition,
     honors_minval, honors_maxval
+using SoleModels: Label, CLabel, RLabel
+
+using StatsBase: countmap
+
+const Float = Union{Float32,Float64}
 
 using RCall
 @rlibrary inTrees
@@ -13,6 +18,71 @@ Xc, yc = @load_iris
 Xc = DataFrame(Xc)
 
 @rput Xc yc
+
+# ---------------------------------------------------------------------------- #
+#                              check condition                                 #
+# ---------------------------------------------------------------------------- #
+value(a::Atom) = a.value
+i_name(a::Atom) = a.value.feature.i_name
+
+checkcondition(r::AbstractCondition, featval::Real) =
+    error("Please, provide method for $(typeof(r)), $(typeof(featval))")
+
+@inline function checkcondition(r::RangeScalarCondition, featval::Real)
+    honors_minval(r, featval) && honors_maxval(r, featval)
+end
+
+@inline checkcondition(a::Atom, featval::Real) =
+    checkcondition(value(a), featval)
+
+@inline function checkcondition(
+    rule::ClassificationRule{T},
+    x::AbstractVector, 
+    featurenames::Vector{<:Union{String,Symbol}}
+) where T
+    return all(atoms(rule)) do a
+        fidx = findfirst(==(T.(i_name(a))), T.(featurenames))
+        checkcondition(value(a), x[fidx])
+    end
+end
+
+@inline function checkcondition(
+    rule::ClassificationRule{T},
+    X::AbstractArray{S}, 
+    args...
+) where {T,S}
+    return [checkcondition(rule, x, args...) for x in eachrow(X)]
+end
+
+@inline function checkcondition(
+    set::Vector{ClassificationRule{T}},
+    args...
+) where T
+    return [checkcondition(r, args...) for r in set]
+end
+
+# ---------------------------------------------------------------------------- #
+#                                  find max y                                  #
+# ---------------------------------------------------------------------------- #
+function find_max_y(
+    set::ClassificationRule{T},
+    X::Matrix{S},
+    y::Vector{<:Label},
+    featurenames::Vector{F};
+    reg_func::Base.Callable=mean
+) where {T,S<:Float,F}
+    idx_match = checkcondition(set, X, featurenames)
+    
+    y_match = y[idx_match]
+    y_most = y isa Vector{<:RLabel} ?
+        reg_func(y_match) :
+        mode(sort!(y_match))
+    correct = count(==(y_most), y)
+    confidence = correct / length(y)
+    err = 1 - confidence
+
+    return mode(sort!(y[idx_match]))
+end
 
 # ---------------------------------------------------------------------------- #
 R"""
@@ -236,8 +306,8 @@ presentRules(exec, colnames(Xc))
 # [15,] "petal_width>0.75 & petal_width>1.75 & petal_width>1.85"  
 
 extractor = InTreesRuleExtractor()
-extracted_rules =
-    RuleExtraction.extractrules(extractor, solem_rf, Xc, yc)
+# extracted_rules =
+#     RuleExtraction.extractrules(extractor, solem_rf, Xc, yc)
 
 # set = ClassificationRule{String}
 #  [▣ ([petal_length] ∈ [-Inf,2.45))  ↣  setosa
@@ -296,46 +366,6 @@ selectRules <- selectRuleRRF(pruneRules,Xc,yc)
 """
 
 # ---------------------------------------------------------------------------- #
-# using DataFrames
-# using Statistics
-
-# _empty_metric() = (
-#     len = -1,
-#     freq = -1.0,
-#     err = -1.0,
-#     condition = "",
-#     pred = "",
-# )
-
-# # R equivalent of names(which.max(table(ys))) for character-like labels.
-# function _modal_label(ys)
-#     labels = string.(ys)
-#     candidates = sort!(unique(labels))
-#     counts = [count(label -> label == candidate, labels) for candidate in candidates]
-#     return candidates[argmax(counts)]
-# end
-
-# # R's is.numeric(target), except Bool is treated as categorical.
-# _is_numeric_target(target) =
-#     all(value -> value isa Real && !(value isa Bool), target)
-
-# function _matching_indices(rule_exec, X, target, rule2table::Function)
-#     membership = rule2table(rule_exec, X, target)
-
-#     membership isa AbstractVector ||
-#         throw(ArgumentError("rule2table must return a vector"))
-
-#     length(membership) == size(X, 1) ||
-#         throw(DimensionMismatch(
-#             "rule2table returned $(length(membership)) entries, " *
-#             "but X has $(size(X, 1)) rows",
-#         ))
-
-#     # Equivalent to R's which(...). Missing values are not matches.
-#     return findall(value -> !ismissing(value) && !iszero(value), membership)
-# end
-
-# ---------------------------------------------------------------------------- #
 R"""
 pred <- NULL
 regMethod <- "mean"
@@ -352,122 +382,94 @@ print(ruleExec)
 ixMatch <- eval(parse(text=ruleExec))
 print(ixMatch)
 
-# if(length(ixMatch)==0){
-# v <- c("-1","-1", "-1", "", "")
-# names(v) <- c("len","freq","err","condition","pred")
-# return(v)
-# }
-# ys <- target[ixMatch]
-# freq <- round(length(ys)/nrow(X),digits=3)
+if(length(ixMatch)==0){
+    v <- c("-1","-1", "-1", "", "")
+    names(v) <- c("len","freq","err","condition","pred")
+return(v)
+}
+ys <- target[ixMatch]
+freq <- round(length(ys)/nrow(X),digits=3)
+print(freq)
+
+  if(is.numeric(target))
+  {
+      if(regMethod == "median"){
+        ysMost = median(ys)
+      }else{
+        ysMost <- mean(ys)
+      }
+      err <- sum((ysMost - ys)^2)/length(ys)   
+  }else{ 
+    if(length(pred)>0){ #if pred of the rule is provided
+      ysMost = as.character(pred)
+    }else{
+    ysMost <- names(which.max(  table(ys))) # get back the first max
+    }
+    ly <- sum(as.character(ys)==ysMost)
+    conf <- round(ly/length(ys),digits=3)  
+    err <- 1 - conf
+  }
+  rule <- origRule
 """
 
-#   if(is.numeric(target))
-#   {
-#       if(regMethod == "median"){
-#         ysMost = median(ys)
-#       }else{
-#         ysMost <- mean(ys)
-#       }
-#       err <- sum((ysMost - ys)^2)/length(ys)   
-#   }else{ 
-#     if(length(pred)>0){ #if pred of the rule is provided
-#       ysMost = as.character(pred)
-#     }else{
-#       ysMost <- names(which.max(  table(ys))) # get back the first max
-#     }
-#     ly <- sum(as.character(ys)==ysMost)
-#     conf <- round(ly/length(ys),digits=3)    
-#     err <- 1 - conf
-#   }
-#   rule <- origRule
+R"""
+# pruneSingleRule <-
+maxDecay <- 0.05
+typeDecay <- 2
+rule <- ruleMetric[10,]
+X <- Xc
+target <- yc
 
-#   v <- c(len, freq, err, rule, ysMost)
-#   names(v) <- c("len","freq","err","condition","pred")
-#   return(v)
+newRuleMetric <- measureRule(rule["condition"],X,target)
+errOrig <- as.numeric(newRuleMetric["err"])
+# ruleV <- unlist(strsplit(rule["condition"],split= " & "))
+# pred <- rule["pred"]
 
-# measureRule <-
-# function(ruleExec,X,target,pred=NULL,regMethod="mean"){
-#   len <- length(unlist(strsplit(ruleExec, split=" & ")))
-#   origRule <- ruleExec
-#   ruleExec <- paste("which(", ruleExec, ")")
-#   ixMatch <- eval(parse(text=ruleExec)) 
-#   if(length(ixMatch)==0){
-#     v <- c("-1","-1", "-1", "", "")
-#     names(v) <- c("len","freq","err","condition","pred")
-#     return(v)
-#   }
-#   ys <- target[ixMatch]
-#   freq <- round(length(ys)/nrow(X),digits=3)
-
-#   if(is.numeric(target))
-#   {
-#       if(regMethod == "median"){
-#         ysMost = median(ys)
-#       }else{
-#         ysMost <- mean(ys)
-#       }
-#       err <- sum((ysMost - ys)^2)/length(ys)   
-#   }else{ 
-#     if(length(pred)>0){ #if pred of the rule is provided
-#       ysMost = as.character(pred)
-#     }else{
-#       ysMost <- names(which.max(  table(ys))) # get back the first max
-#     }
-#     ly <- sum(as.character(ys)==ysMost)
-#     conf <- round(ly/length(ys),digits=3)    
-#     err <- 1 - conf
-#   }
-#   rule <- origRule
-
-#   v <- c(len, freq, err, rule, ysMost)
-#   names(v) <- c("len","freq","err","condition","pred")
-#   return(v)
+# if(length(ruleV)==1) return(newRuleMetric)
+# for(i in length(ruleV):1){
+# restRule <- ruleV[-i]
+# restRule <- paste(restRule,collapse= " & ")
+# metricTmp <- measureRule(restRule,X,target,pred)
+# errNew <- as.numeric(metricTmp["err"]) 
+# if(typeDecay == 1){
+#     decay <- (errNew-errOrig)/max(errOrig,0.000001)
+# }else{
+#     decay <- (errNew-errOrig)
+# }      
+# if( decay <= maxDecay){
+# #if( errNew-errOrig <= maxDecay){
+#     ruleV <- ruleV[-i] 
+#     # newRule saves the last changed rule and metrics
+#     newRuleMetric <- metricTmp
+#     if(length(ruleV)<=1)break
 # }
+# }
+# return(newRuleMetric)
+"""
 
-# ---------------------------------------------------------------------------- #
-function measure_rule(
-    rule_exec::AbstractString,
-    X,
-    target::AbstractVector;
-    pred=nothing,
-    reg_method=:mean,
-    rule2table::Function,
-)
-    clause_count = isempty(rule_exec) ? 0 : length(split(rule_exec, " & "))
-    ix_match = _matching_indices(rule_exec, X, target, rule2table)
 
-    isempty(ix_match) && return _empty_metric()
 
-    ys = target[ix_match]
-    freq = round(length(ys) / size(X, 1); digits=3)
+function prune_rules(
+    set::ClassificationRule{T},
+    X::Matrix{S},
+    y::Vector{<:Label},
+    featurenames::Vector{F};
+    max_decay::Float64=0.05,
+    type_decay = 2,
+    reg_func::Base.Callable=mean
+) where {T,S<:Float,F}
+    y_most = find_max_y(set, X, y, featurenames; reg_func)
 
-    if _is_numeric_target(target)
-        ys_most =
-            (reg_method == :median || reg_method == "median") ?
-            median(ys) :
-            mean(ys)
-
-        err = sum(abs2, ys .- ys_most) / length(ys)
-    else
-        # Matches R: use the supplied rule prediction when present;
-        # otherwise use the modal target value.
-        ys_most = pred === nothing ? _modal_label(ys) : string(pred)
-
-        correct = count(y -> string(y) == ys_most, ys)
-        confidence = round(correct / length(ys); digits=3)
-        err = 1 - confidence
-    end
-
-    # A NamedTuple is the Julia equivalent of R's named vector.
-    return (
-        len = clause_count,
-        freq = freq,
-        err = err,
-        condition = String(rule_exec),
-        pred = ys_most,
-    )
 end
 
+set = intrees(extractor, solem_rf, Xc, yc)
+typeof(set)
+
+X = Matrix(Xc)
+y = Vector(yc)
+test = prune_rules(set[2], X, y, featurenames)
+
+# ---------------------------------------------------------------------------- #
 # function prune_single_rule(
 #     rule,
 #     X,
@@ -696,50 +698,6 @@ featurenames = names(Xc)
 for a in atoms(rules)
     fidx = findfirst(==(i_name(a)), Symbol.(featurenames))
     checkcondition(a, X[fidx])
-end
-
-a = atoms(rules)[1]
-
-checkcondition(set, X, featurenames)
-checkcondition(set[5], Xm, featurenames)
-# ---------------------------------------------------------------------------- #
-value(a::Atom) = a.value
-i_name(a::Atom) = a.value.feature.i_name
-
-checkcondition(r::AbstractCondition, featval::Real) =
-    error("Please, provide method for $(typeof(r)), $(typeof(featval))")
-
-@inline function checkcondition(r::RangeScalarCondition, featval::Real)
-    honors_minval(r, featval) && honors_maxval(r, featval)
-end
-
-@inline checkcondition(a::Atom, featval::Real) =
-    checkcondition(value(a), featval)
-
-@inline function checkcondition(
-    rule::ClassificationRule{T},
-    x::AbstractVector, 
-    featurenames::Vector{<:Union{String,Symbol}}
-) where T
-    return all(atoms(rule)) do a
-        fidx = findfirst(==(T.(i_name(a))), T.(featurenames))
-        checkcondition(value(a), x[fidx])
-    end
-end
-
-@inline function checkcondition(
-    rule::ClassificationRule{T},
-    X::AbstractArray{S}, 
-    args...
-) where {T,S}
-    return [checkcondition(rule, x, args...) for x in eachrow(X)]
-end
-
-@inline function checkcondition(
-    set::Vector{ClassificationRule{T}},
-    args...
-) where T
-    return [checkcondition(r, args...) for r in set]
 end
 
 # ---------------------------------------------------------------------------- #
