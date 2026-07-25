@@ -3,15 +3,32 @@ using SoleModels, SolePostHoc, SoleLogics, SoleData
 using MLJ
 using DataFrames, Random
 
-using SoleData: AbstractCondition, RangeScalarCondition,
-    honors_minval, honors_maxval, apply_test_operator, test_operator, threshold,
-    scalartiling
+using SoleData: AbstractCondition, RangeScalarCondition, scalartiling,
+    _rangescalarcond_to_scalarconds_in_conjunction
+# using SoleData: LeftmostLinearForm, Connective, SyntaxStructure, grandchildren
 
 using SoleModels: Label, CLabel, RLabel
 
 # using StatsBase: countmap
 
 const Float = Union{Float32,Float64}
+
+# ---------------------------------------------------------------------------- #
+# methods to be moved into SoleData LeftmostLinearForm
+function Base.copy(
+    lf::LeftmostLinearForm{C,SS}
+) where {C<:Connective,SS<:SyntaxStructure}
+    return LeftmostLinearForm{C,SS}(copy(grandchildren(lf)))
+end
+
+Base.push!(lf::LeftmostLinearForm, el) = Base.push!(grandchildren(lf), el)
+
+function Base.deleteat!(lf::LeftmostLinearForm, indices)
+    deleteat!(grandchildren(lf), indices)
+    return lf
+end
+
+# ---------------------------------------------------------------------------- #
 
 using RCall
 @rlibrary inTrees
@@ -78,7 +95,7 @@ leaf(label) = ConstantModel(label, (;
 split(feature_id::Int, threshold::Real) = Atom(
     ScalarCondition(
         VariableValue(feature_id, featurenames[feature_id]),
-        <,
+        ≤,
         threshold,
     ),
 )
@@ -308,123 +325,87 @@ pred <- NULL
 regMethod <- "mean"
 X <- Xc
 target <- yc
-ruleExec <- ruleMetric[2,]["condition"]
-
-print(ruleExec)
-len <- length(unlist(strsplit(ruleExec, split=" & ")))
-print(len)
-origRule <- ruleExec
-ruleExec <- paste("which(", ruleExec, ")")
-print(ruleExec)
-ixMatch <- eval(parse(text=ruleExec))
-print(ixMatch)
-
-if(length(ixMatch)==0){
-    v <- c("-1","-1", "-1", "", "")
-    names(v) <- c("len","freq","err","condition","pred")
-return(v)
-}
-ys <- target[ixMatch]
-freq <- round(length(ys)/nrow(X),digits=3)
-print(freq)
-
-  if(is.numeric(target))
-  {
-      if(regMethod == "median"){
-        ysMost = median(ys)
-      }else{
-        ysMost <- mean(ys)
-      }
-      err <- sum((ysMost - ys)^2)/length(ys)   
-  }else{ 
-    if(length(pred)>0){ #if pred of the rule is provided
-      ysMost = as.character(pred)
-    }else{
-    ysMost <- names(which.max(  table(ys))) # get back the first max
-    }
-    ly <- sum(as.character(ys)==ysMost)
-    conf <- round(ly/length(ys),digits=3)  
-    err <- 1 - conf
-  }
-  rule <- origRule
-"""
-
-R"""
-# pruneSingleRule <-
+rule <- ruleMetric[10,]
 maxDecay <- 0.05
-typeDecay <- 1
-rule <- ruleMetric[2,]
-print(rule)
-X <- Xc
-target <- yc
-pruneSingleRule(rule,X,target, maxDecay, typeDecay)
+typeDecay <- 2
 """
 
 R"""
 newRuleMetric <- measureRule(rule["condition"],X,target)
-errOrig <- as.numeric(newRuleMetric["err"])
+errOrig <- as.numeric(newRuleMetric["err"])  
 ruleV <- unlist(strsplit(rule["condition"],split= " & "))
 pred <- rule["pred"]
 
 if(length(ruleV)==1) return(newRuleMetric)
-# for(i in length(ruleV):1){
+for(i in length(ruleV):1){
+print("ruleV")
+print(ruleV)
+restRule <- ruleV[-i]
+restRule <- paste(restRule,collapse= " & ")
+metricTmp <- measureRule(restRule,X,target,pred)
+errNew <- as.numeric(metricTmp["err"]) 
+if(typeDecay == 1){
+    decay <- (errNew-errOrig)/max(errOrig,0.000001)
+}else{
+    decay <- (errNew-errOrig)
+}
+if( decay <= maxDecay){
+    ruleV <- ruleV[-i] 
+    newRuleMetric <- metricTmp
+    if(length(ruleV)<=1)break
+}
+}
+# print(newRuleMetric)
 """
 
-R"""
-restRule <- ruleV[-1]
-# restRule <- paste(restRule,collapse= " & ")
-# metricTmp <- measureRule(restRule,X,target,pred)
-# errNew <- as.numeric(metricTmp["err"]) 
-# if(typeDecay == 1){
-#     decay <- (errNew-errOrig)/max(errOrig,0.000001)
-# }else{
-#     decay <- (errNew-errOrig)
-# }      
-# if( decay <= maxDecay){
-# #if( errNew-errOrig <= maxDecay){
-#     ruleV <- ruleV[-i] 
-#     # newRule saves the last changed rule and metrics
-#     newRuleMetric <- metricTmp
-#     if(length(ruleV)<=1)break
-# }
-# }
-# return(newRuleMetric)
-"""
+# [1] "ruleV"
+#    condition1    condition2    condition3    condition4 
+#  "X[,3]<=5.4"  "X[,4]>0.75" "X[,4]<=1.75"  "X[,4]>1.55" 
+# [1] "ruleV"
+#    condition1    condition2    condition3 
+#  "X[,3]<=5.4"  "X[,4]>0.75" "X[,4]<=1.75" 
+# [1] "ruleV"
+#    condition1    condition2    condition3 
+#  "X[,3]<=5.4"  "X[,4]>0.75" "X[,4]<=1.75" 
+# [1] "ruleV"
+#    condition1    condition2    condition3 
+#  "X[,3]<=5.4"  "X[,4]>0.75" "X[,4]<=1.75" 
 
+# ---------------------------------------------------------------------------- #
 function prune_rule(
     set::ClassificationRule{T},
     X::Matrix{S},
     y::Vector{<:Label},
     featurenames::Vector{F};
     max_decay::Float64=0.05,
-    type_decay = 2
+    type_decay::Int=2
 ) where {T,S<:Float,F}
-    y_most, err = measure_rule(set, X, y, featurenames)
-    @show "PASO"
-    @show y_most
-    @show err
-    nconds = length(set)
-
-    nconds < 2 && return set, y_most, err
+    pred, err = measure_rule(set, X, y, featurenames)
+    conds = LeftmostConjunctiveForm(set)
+    nconds = length(conds)
+    nconds ≤ 1 && return set, pred, err
 
     for i in nconds:-1:1
-        remaining_parts = copy(set)
-        deleteat!(remaining_parts, i)
-        y_new, err_new = measure_rule(remaining_parts, X, y, featurenames)
+        remaining_conds = copy(conds)
+        deleteat!(remaining_conds, i)
+        _, err_new = measure_rule(remaining_conds, X, y, featurenames; pred)
 
         decay = type_decay == 1 ?
             (err_new - err) / max(err, 1e-6) :
             err_new - err
 
-        decay <= max_decay && begin
-            set = remaining_parts
-            y_most, err = y_new, err_new
-            length(set) ≤ 1 && break
+        decay ≤ max_decay && begin
+            deleteat!(conds, i)
+            # set = remaining_conds
+            err = err_new
+            length(conds) ≤ 1 && break
         end
     end
 
-    return scalartiling(set), y_most, err
+    return scalartiling(conds), pred, err
+    # return set, pred, err
 end
+# ---------------------------------------------------------------------------- #
 
 set = intrees(extractor, solem_rf, Xc, yc)
 typeof(set)
@@ -432,7 +413,6 @@ typeof(set)
 X = Matrix(Xc)
 y = Vector(yc)
 scalar_cond, y_most, err = prune_rule(set[10], X, y, featurenames)
-
 
 # ---------------------------------------------------------------------------- #
 # function prune_single_rule(
@@ -461,10 +441,10 @@ scalar_cond, y_most, err = prune_rule(set[10], X, y, featurenames)
 
 #     # Keep `err_orig` fixed throughout, as in the R implementation.
 #     for i in length(rule_parts):-1:1
-#         remaining_parts = copy(rule_parts)
-#         deleteat!(remaining_parts, i)
+#         remaining_conds = copy(rule_parts)
+#         deleteat!(remaining_conds, i)
 
-#         rest_rule = join(remaining_parts, " & ")
+#         rest_rule = join(remaining_conds, " & ")
 #         metric_tmp = measure_rule(
 #             rest_rule,
 #             X,
@@ -482,7 +462,7 @@ scalar_cond, y_most, err = prune_rule(set[10], X, y, featurenames)
 #         end
 
 #         if decay <= max_decay
-#             rule_parts = remaining_parts
+#             rule_parts = remaining_conds
 #             new_metric = metric_tmp
 
 #             length(rule_parts) <= 1 && break
