@@ -2,10 +2,10 @@
 #                              element to string                               #
 # ---------------------------------------------------------------------------- #
 @inline get_op_str(op) = op == (<) ?
-                        "<" : op == (<=) ?
-                        "≤" : op == (>) ?
-                        ">" : op == (>=) ?
-                        "≥" : string(op)
+                         "<" : op == (<=) ?
+                         "≤" : op == (>) ?
+                         ">" : op == (>=) ?
+                         "≥" : string(op)
 
 function antecedent_to_string(antecedent)
     atoms = antecedent.grandchildren
@@ -30,7 +30,7 @@ function _element_to_string(x::Atom)
     return if cond isa SoleData.RangeScalarCondition
         lower_op = SoleData.minincluded(cond) ? "≥" : ">"
         upper_op = SoleData.maxincluded(cond) ? "≤" : "<"
-        
+
         "(" *
         join(
             [
@@ -43,7 +43,7 @@ function _element_to_string(x::Atom)
     elseif hasproperty(cond, :metacond)
         # standard scalar condition
         op_str = get_op_str(SoleData.test_operator(cond))
-        
+
         "[$(i_name)] $(op_str) $(digits(SoleData.threshold(cond)))"
     else
         syntaxstring(x; threshold_digits=2)
@@ -89,8 +89,8 @@ atom_parser = function (a::String)
         parsecondition(
             SoleData.ScalarCondition,
             a;
-            featuretype = SoleData.VariableValue,
-            featvaltype = Real,
+            featuretype=SoleData.VariableValue,
+            featvaltype=Real,
         ),
     )
 end
@@ -124,7 +124,7 @@ function convert_classif_rules(
         #println("DNF per outcome ", outcome, ": ", dnf_string)
 
         # Parsing DNF string into a formula
-        φ = SoleLogics.parseformula(dnf_string; atom_parser = atom_parser)
+        φ = SoleLogics.parseformula(dnf_string; atom_parser=atom_parser)
 
         #Apply DNF transformation
         dnf_result = dnf(φ)
@@ -207,12 +207,12 @@ function build_dnf_rules(rules)
         # parse the string into a SoleLogics formula
         φ = SoleLogics.parseformula(
             big_dnf_str;
-            atom_parser = a -> Atom(
+            atom_parser=a -> Atom(
                 parsecondition(
                     ScalarCondition,
                     a;
-                    featuretype = VariableValue,
-                    featvaltype = Real,
+                    featuretype=VariableValue,
+                    featvaltype=Real,
                 ),
             ),
         )
@@ -232,7 +232,7 @@ by grouping rules by outcome.
 Returns a new DecisionSet with one rule per class in DNF form.
 """
 function make_decisionset(dl::DecisionList)::DecisionSet
-    rules_list = listrules(dl, use_shortforms = true)
+    rules_list = listrules(dl, use_shortforms=true)
 
     # group antecedents by outcome
     class_to_antecedents = Dict{String,Vector{String}}()
@@ -254,26 +254,26 @@ function make_decisionset(dl::DecisionList)::DecisionSet
 
         φ = SoleLogics.parseformula(
             big_dnf_str;
-            atom_parser = a -> Atom(
+            atom_parser=a -> Atom(
                 parsecondition(
                     ScalarCondition,
                     a;
-                    featuretype = VariableValue,
-                    featvaltype = Real,
+                    featuretype=VariableValue,
+                    featvaltype=Real,
                 ),
             ),
         )
-        println("pre : ", φ)
+        #println("pre : ", φ)
         φ = dnf(φ)
         push!(minimized_rules, Rule(φ, c))
-        println("post :", φ)
+        #println("post :", φ)
     end
 
     return DecisionSet(minimized_rules)
 end
 
 function make_decisionset(de::DecisionEnsemble)::DecisionSet
-    ll = listrules(de, use_shortforms = true)
+    ll = listrules(de, use_shortforms=true)
     minimized_rules = build_dnf_rules(ll)
     ds = DecisionSet(minimized_rules)
 end
@@ -330,7 +330,7 @@ end
 # end
 
 function convertApi(f)
-    ll = listrules(f, use_shortforms = true)
+    ll = listrules(f, use_shortforms=true)
     minimized_rules = build_dnf_rules(ll)
     ds = DecisionSet(minimized_rules)
 end
