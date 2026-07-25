@@ -65,7 +65,7 @@ end
 # ---------------------------------------------------------------------------- #
 #                                  find max y                                  #
 # ---------------------------------------------------------------------------- #
-function find_max_y(
+function measure_rule(
     set::ClassificationRule{T},
     X::Matrix{S},
     y::Vector{<:Label},
@@ -414,11 +414,15 @@ print(freq)
 R"""
 # pruneSingleRule <-
 maxDecay <- 0.05
-typeDecay <- 2
-rule <- ruleMetric[10,]
+typeDecay <- 1
+rule <- ruleMetric[2,]
+print(rule)
 X <- Xc
 target <- yc
+pruneSingleRule(rule,X,target, maxDecay, typeDecay)
+"""
 
+R"""
 newRuleMetric <- measureRule(rule["condition"],X,target)
 errOrig <- as.numeric(newRuleMetric["err"])
 ruleV <- unlist(strsplit(rule["condition"],split= " & "))
@@ -457,12 +461,10 @@ function prune_rule(
     y::Vector{<:Label},
     featurenames::Vector{F};
     max_decay::Float64=0.05,
-    type_decay = 2,
-    reg_func::Base.Callable=mean
+    type_decay = 2
 ) where {T,S<:Float,F}
-    y_most, err = find_max_y(set, X, y, featurenames; reg_func)
+    y_most, err = measure_rule(set, X, y, featurenames)
     rule = antecedent(set)
-    pred = consequent(set)
 
     scalar_conds = vcat(
         [_rangescalarcond_to_scalarconds_in_conjunction(a.value)
@@ -473,36 +475,22 @@ function prune_rule(
     nconds < 2 && return
 
     for i in nconds:-1:1
-#         remaining_parts = copy(rule_parts)
-#         deleteat!(remaining_parts, i)
+        remaining_parts = copy(scalar_conds)
+        deleteat!(remaining_parts, i)
+        y_new, err_new = measure_rule(set, X, y, featurenames)
 
-#         rest_rule = join(remaining_parts, " & ")
-#         metric_tmp = measure_rule(
-#             rest_rule,
-#             X,
-#             target;
-#             pred=pred,
-#             rule2table=rule2table,
-#         )
+        decay = type_decay == 1 ?
+            (err_new - err) / max(err, 1e-6) :
+            err_new - err
 
-#         err_new = metric_tmp.err
-
-#         decay = if type_decay == 1
-#             (err_new - err_orig) / max(err_orig, 1e-6)
-#         else
-#             err_new - err_orig
-#         end
-
-#         if decay <= max_decay
-#             rule_parts = remaining_parts
-#             new_metric = metric_tmp
-
-#             length(rule_parts) <= 1 && break
-#         end
+        decay <= max_decay && begin
+            scalar_conds = remaining_parts
+            y_most, err = y_new, err_new
+            length(scalar_conds) ≤ 1 && break
+        end
     end
 
-#     return new_metric
-
+    return SoleData.scalartiling(scalar_conds), y_most, err
 end
 
 set = intrees(extractor, solem_rf, Xc, yc)
@@ -510,7 +498,8 @@ typeof(set)
 
 X = Matrix(Xc)
 y = Vector(yc)
-test = prune_rule(set[10], X, y, featurenames)
+scalar_conds, y_most, err = prune_rule(set[2], X, y, featurenames)
+
 
 # ---------------------------------------------------------------------------- #
 # function prune_single_rule(

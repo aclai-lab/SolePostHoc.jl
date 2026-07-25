@@ -388,7 +388,7 @@ function intrees(
     y::AbstractVector{<:SoleModels.Label}
 )
     # Extract rules from model
-    listrules_kwargs = (use_shortforms=true, normalize=true)
+    # listrules_kwargs = (use_shortforms=true, normalize=true)
     set = isensemble(model) ?
         _starterruleset(model; listrules_kwargs...) :
         listrules(model; listrules_kwargs...)
