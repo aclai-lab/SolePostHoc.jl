@@ -4,11 +4,12 @@ using MLJ
 using DataFrames, Random
 
 using SoleData: AbstractCondition, RangeScalarCondition,
-    honors_minval, honors_maxval, 
-    _rangescalarcond_to_scalarconds_in_conjunction
+    honors_minval, honors_maxval, apply_test_operator, test_operator, threshold,
+    scalartiling
+
 using SoleModels: Label, CLabel, RLabel
 
-using StatsBase: countmap
+# using StatsBase: countmap
 
 const Float = Union{Float32,Float64}
 
@@ -19,69 +20,6 @@ Xc, yc = @load_iris
 Xc = DataFrame(Xc)
 
 @rput Xc yc
-
-# ---------------------------------------------------------------------------- #
-#                              check condition                                 #
-# ---------------------------------------------------------------------------- #
-value(a::Atom) = a.value
-i_name(a::Atom) = a.value.feature.i_name
-
-checkcondition(r::AbstractCondition, featval::Real) =
-    error("Please, provide method for $(typeof(r)), $(typeof(featval))")
-
-@inline function checkcondition(r::RangeScalarCondition, featval::Real)
-    honors_minval(r, featval) && honors_maxval(r, featval)
-end
-
-@inline checkcondition(a::Atom, featval::Real) =
-    checkcondition(value(a), featval)
-
-@inline function checkcondition(
-    rule::ClassificationRule{T},
-    x::AbstractVector, 
-    featurenames::Vector{<:Union{String,Symbol}}
-) where T
-    return all(atoms(rule)) do a
-        fidx = findfirst(==(T.(i_name(a))), T.(featurenames))
-        checkcondition(value(a), x[fidx])
-    end
-end
-
-@inline function checkcondition(
-    rule::ClassificationRule{T},
-    X::AbstractArray{S}, 
-    args...
-) where {T,S}
-    return [checkcondition(rule, x, args...) for x in eachrow(X)]
-end
-
-@inline function checkcondition(
-    set::Vector{ClassificationRule{T}},
-    args...
-) where T
-    return [checkcondition(r, args...) for r in set]
-end
-
-# ---------------------------------------------------------------------------- #
-#                                  find max y                                  #
-# ---------------------------------------------------------------------------- #
-function measure_rule(
-    set::ClassificationRule{T},
-    X::Matrix{S},
-    y::Vector{<:Label},
-    featurenames::Vector{F};
-    reg_func::Base.Callable=mean
-) where {T,S<:Float,F}
-    idx_match = checkcondition(set, X, featurenames)
-    
-    y_match = y[idx_match]
-    y_most = mode(sort!(y_match))
-    correct = count(==(y_most), y_match)
-    confidence = correct / length(y_match)
-    err = 1 - confidence
-
-    return y_most, err
-end
 
 # ---------------------------------------------------------------------------- #
 R"""
@@ -453,8 +391,6 @@ restRule <- ruleV[-1]
 # return(newRuleMetric)
 """
 
-
-
 function prune_rule(
     set::ClassificationRule{T},
     X::Matrix{S},
@@ -464,33 +400,30 @@ function prune_rule(
     type_decay = 2
 ) where {T,S<:Float,F}
     y_most, err = measure_rule(set, X, y, featurenames)
-    rule = antecedent(set)
+    @show "PASO"
+    @show y_most
+    @show err
+    nconds = length(set)
 
-    scalar_conds = vcat(
-        [_rangescalarcond_to_scalarconds_in_conjunction(a.value)
-        for a in rule.grandchildren]...
-    )
-    nconds = length(scalar_conds)
-
-    nconds < 2 && return
+    nconds < 2 && return set, y_most, err
 
     for i in nconds:-1:1
-        remaining_parts = copy(scalar_conds)
+        remaining_parts = copy(set)
         deleteat!(remaining_parts, i)
-        y_new, err_new = measure_rule(set, X, y, featurenames)
+        y_new, err_new = measure_rule(remaining_parts, X, y, featurenames)
 
         decay = type_decay == 1 ?
             (err_new - err) / max(err, 1e-6) :
             err_new - err
 
         decay <= max_decay && begin
-            scalar_conds = remaining_parts
+            set = remaining_parts
             y_most, err = y_new, err_new
-            length(scalar_conds) ≤ 1 && break
+            length(set) ≤ 1 && break
         end
     end
 
-    return SoleData.scalartiling(scalar_conds), y_most, err
+    return scalartiling(set), y_most, err
 end
 
 set = intrees(extractor, solem_rf, Xc, yc)
@@ -498,7 +431,7 @@ typeof(set)
 
 X = Matrix(Xc)
 y = Vector(yc)
-scalar_conds, y_most, err = prune_rule(set[2], X, y, featurenames)
+scalar_cond, y_most, err = prune_rule(set[10], X, y, featurenames)
 
 
 # ---------------------------------------------------------------------------- #
