@@ -51,7 +51,9 @@ function _prune_rule(
 
         # return error of the rule without idx-th pair
         e_minus_i = SoleModels.rulemetrics(rule, X, y)[:error]
-        decay_i = (e_minus_i - e_zero) / max(e_zero, s)
+        decay_i = percentage_degradation ?
+            (e_minus_i - e_zero) / max(e_zero, s) :
+            (e_minus_i - e_zero)
 
         if decay_i ≤ decay_threshold
             # remove the idx-th pair in the vector of decisions
