@@ -9,24 +9,7 @@ using SoleData: AbstractCondition, RangeScalarCondition, scalartiling,
 
 using SoleModels: Label, CLabel, RLabel
 
-# using StatsBase: countmap
-
 const Float = Union{Float32,Float64}
-
-# ---------------------------------------------------------------------------- #
-# methods to be moved into SoleData LeftmostLinearForm
-function Base.copy(
-    lf::LeftmostLinearForm{C,SS}
-) where {C<:Connective,SS<:SyntaxStructure}
-    return LeftmostLinearForm{C,SS}(copy(grandchildren(lf)))
-end
-
-Base.push!(lf::LeftmostLinearForm, el) = Base.push!(grandchildren(lf), el)
-
-function Base.deleteat!(lf::LeftmostLinearForm, indices)
-    deleteat!(grandchildren(lf), indices)
-    return lf
-end
 
 # ---------------------------------------------------------------------------- #
 
@@ -372,41 +355,6 @@ if( decay <= maxDecay){
 #  "X[,3]<=5.4"  "X[,4]>0.75" "X[,4]<=1.75" 
 
 # ---------------------------------------------------------------------------- #
-function prune_rule(
-    set::ClassificationRule{T},
-    X::Matrix{S},
-    y::Vector{<:Label},
-    featurenames::Vector{F};
-    max_decay::Float64=0.05,
-    type_decay::Int=2
-) where {T,S<:Float,F}
-    pred, err = measure_rule(set, X, y, featurenames)
-    conds = LeftmostConjunctiveForm(set)
-    nconds = length(conds)
-    nconds ≤ 1 && return set, pred, err
-
-    for i in nconds:-1:1
-        remaining_conds = copy(conds)
-        deleteat!(remaining_conds, i)
-        _, err_new = measure_rule(remaining_conds, X, y, featurenames; pred)
-
-        decay = type_decay == 1 ?
-            (err_new - err) / max(err, 1e-6) :
-            err_new - err
-
-        decay ≤ max_decay && begin
-            deleteat!(conds, i)
-            # set = remaining_conds
-            err = err_new
-            length(conds) ≤ 1 && break
-        end
-    end
-
-    return scalartiling(conds), pred, err
-    # return set, pred, err
-end
-# ---------------------------------------------------------------------------- #
-
 set = intrees(extractor, solem_rf, Xc, yc)
 typeof(set)
 

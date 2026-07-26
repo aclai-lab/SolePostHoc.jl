@@ -1,12 +1,26 @@
+import SoleLogics: LeftmostConjunctiveForm, LeftmostLinearForm
+
 using SoleData: AbstractCondition, RangeScalarCondition, ScalarCondition,
-    LeftmostConjunctiveForm,
     honors_minval, honors_maxval, apply_test_operator, test_operator, threshold,
-    minval, maxval, feature, threshold,
+    minval, maxval, feature, threshold, grandchildren,
     _isgreater_test_operator, _isless_test_operator
 
 using SoleModels: Label
 
 const Float = Union{Float32,Float64}
+
+# ---------------------------------------------------------------------------- #
+# methods to be moved into SoleData LeftmostLinearForm
+function Base.copy(
+    lf::LeftmostLinearForm{C,SS}
+) where {C<:Connective,SS<:SyntaxStructure}
+    return LeftmostLinearForm{C,SS}(copy(grandchildren(lf)))
+end
+
+function Base.deleteat!(lf::LeftmostLinearForm, indices)
+    deleteat!(grandchildren(lf), indices)
+    return lf
+end
 
 # ---------------------------------------------------------------------------- #
 #                              check condition                                 #
@@ -39,11 +53,10 @@ end
 end
 
 @inline function checkcondition(
-    rule::Vector{ScalarCondition},
+    rule::LeftmostConjunctiveForm{T},
     x::AbstractVector,
     featurenames::Vector{<:Union{String,Symbol}}
-)
-@show "PASO"
+) where T
     return all(atoms(rule)) do a
         name = i_name(a)
         fidx = findfirst(==(name), typeof(name).(featurenames))
@@ -52,16 +65,16 @@ end
 end
 
 @inline function checkcondition(
-    rule::Union{ClassificationRule{T},Vector{ScalarCondition}},
-    X::AbstractArray{S}, 
+    rule::Union{ClassificationRule{T},LeftmostConjunctiveForm{T}},
+    X::Matrix{S}, 
     args...
 ) where {T,S}
-@show "PASO"
     return [checkcondition(rule, x, args...) for x in eachrow(X)]
 end
 
 @inline function checkcondition(
-    set::Vector{ClassificationRule{T}},
+    set::Union{
+        Vector{ClassificationRule{T}},Vector{LeftmostConjunctiveForm{T}}},
     args...
 ) where T
     return [checkcondition(rule, args...) for rule in set]
@@ -102,7 +115,7 @@ end
 #                                 measure_rule                                 #
 # ---------------------------------------------------------------------------- #
 function measure_rule(
-    set::Union{ClassificationRule{T},Vector{ScalarCondition}},
+    set::Union{ClassificationRule{T},LeftmostConjunctiveForm{T}},
     X::Matrix{S},
     y::Vector{<:Label},
     featurenames::Vector{F};

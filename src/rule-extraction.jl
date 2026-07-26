@@ -49,7 +49,8 @@ featurenames(s::AbstractModel) = s.info.featurenames
 # ---------------------------------------------------------------------------------------- #
 export InTreesRuleExtractor
 export intrees
-export measure_rule, LeftmostConjunctiveForm
+export measure_rule, LeftmostConjunctiveForm, prune_rule
+export prune_ruleset
 include("intrees/intrees.jl")
 
 function extractrules(extractor::InTreesRuleExtractor, args...)::DecisionSet
