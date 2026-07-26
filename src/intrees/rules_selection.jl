@@ -10,7 +10,7 @@ fit a random forest against `y`, and rules whose normalized impurity
 importance exceeds `get_cbc_threshold(config)` are kept, sorted by
 importance (desc), error (asc), and complexity (asc).
 """
-function cbc(ruleset, X, y, config::RuleExtractor)
+function cbc(ruleset, X, y, config::AbstractConfig)
     n_rules = length(ruleset)
     metrics = Matrix{Float64}(undef, n_rules, 3)
     checkmasks = Vector{BitVector}(undef, n_rules)

@@ -67,9 +67,13 @@ function extractrules(config::InTreesConfig, m, args...)::DecisionSet
     end
 end
 
-function extractrules(::InTreesRuleExtractor, args...; kwargs...)::DecisionSet
+function extractrules(
+    ::Type{InTreesRuleExtractor},
+    args...;
+    kwargs...
+)::DecisionSet
     config = InTreesConfig(; kwargs...)
-    extractrules(config, args...; kwargs...)
+    extractrules(config, args...)
 end
 
 #===========================================================================================

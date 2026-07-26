@@ -150,7 +150,7 @@ end
 #                               InTrees config                                 #
 # ---------------------------------------------------------------------------- #
 """
-    InTreesConfig <: RuleExtractor
+    InTreesConfig <: AbstractConfig
 
 Configuration object for the InTrees rule-extraction algorithm.
 
@@ -201,7 +201,7 @@ cfg = InTreesConfig(
 See also: [`intrees`](@ref), [`RuleExtractor`](@ref), [`PruningConfig`](@ref)
 """
 
-struct InTreesConfig <: RuleExtractor
+struct InTreesConfig <: AbstractConfig
     pruning::PruningConfig
     rule_selection::Union{Nothing,AbstractRuleSelection}
     complexity_metric::Symbol

@@ -46,43 +46,67 @@ apply!(solem_rf, logiset, yc[test])
 # ---------------------------------------------------------------------------- #
 #                           intrees rules extraction                           #
 # ---------------------------------------------------------------------------- #
-config = InTreesConfig(pruning=PruningConfig(prune_rules=false))
+config = InTreesConfig(pruning=PruningConfig(
+    prune_rules=false), rng=Xoshiro(42))
 extracted_rules =
     RuleExtraction.extractrules(config, solem_dt, Xc[test, :], yc[test])
     
-config = InTreesConfig(pruning=PruningConfig(prune_rules=true))
+config = InTreesConfig(pruning=PruningConfig(
+    prune_rules=true), rng=Xoshiro(42))
 rules_pruned =
     RuleExtraction.extractrules(config, solem_dt, Xc[test, :], yc[test])
 
 # ---------------------------------------------------------------------------- #
 config = InTreesConfig(pruning=PruningConfig(
     prune_rules=true,
-    percentage_degradation=false))
+    percentage_degradation=false),
+    rng=Xoshiro(42))
 extracted_rules =
     RuleExtraction.extractrules(config, solem_dt, Xc[test, :], yc[test])
     
 config = InTreesConfig(pruning=PruningConfig(
     prune_rules=true,
-    percentage_degradation=true))
+    percentage_degradation=true),
+    rng=Xoshiro(42))
 rules_pruned =
     RuleExtraction.extractrules(config, solem_dt, Xc[test, :], yc[test])
 
 # ---------------------------------------------------------------------------- #
-config = InTreesConfig(rule_selection=nothing)
+config = InTreesConfig(rule_selection=nothing, rng=Xoshiro(42))
 extracted_rules =
     RuleExtraction.extractrules(config, solem_dt, Xc[test, :], yc[test])
     
-config = InTreesConfig(rule_selection=CBC())
+config = InTreesConfig(rule_selection=CBC(), rng=Xoshiro(42))
 rules_pruned =
     RuleExtraction.extractrules(config, solem_dt, Xc[test, :], yc[test])
 
 # ---------------------------------------------------------------------------- #
+config = InTreesConfig(
+    pruning=PruningConfig(
+        prune_rules=true,
+        percentage_degradation=true),
+    rule_selection=CBC(),
+    min_coverage=0.33, # 3 classes
+    rng=Xoshiro(42)
+)
 extracted_rules = RuleExtraction.extractrules(
     config,
     solem_dt,
     Xc[test, :],
+    yc[test]
+)
+
+extracted_rules = RuleExtraction.extractrules(
+    InTreesRuleExtractor,
+    solem_dt,
+    Xc[test, :],
     yc[test];
-    min_coverage=1.0,
+    pruning=PruningConfig(
+        prune_rules=true,
+        percentage_degradation=true),
+    rule_selection=CBC(),
+    min_coverage=0.33, # 3 classes
+    rng=Xoshiro(42)
 )
 
 @test_throws MethodError InTreesConfig(invalid=true)
@@ -92,7 +116,7 @@ extracted_rules = RuleExtraction.extractrules(
     yc[test];
     invalid=true,
 )
-@test_throws ErrorException RuleExtraction.extractrules(
+@test_throws MethodError RuleExtraction.extractrules(
     config,
     solem_dt,
     Xc[test, :],

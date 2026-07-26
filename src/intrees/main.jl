@@ -19,6 +19,7 @@ using SoleModels: DecisionList, ConstantModel, isensemble, listrules
 using SoleModels: RuleExtractor
 using SoleModels: MultiFormula, modforms
 
+abstract type AbstractConfig end
 abstract type AbstractRuleSelection end
 
 include("config.jl")
