@@ -55,6 +55,22 @@ config = InTreesConfig(pruning=PruningConfig(prune_rules=true))
 rules_pruned =
     RuleExtraction.extractrules(config, solem_dt, Xc[test, :], yc[test])
 
+# ▣
+# ├[1/3] (¬([petal_length] < 2.45) ∧ ¬([petal_length] ≥ 2.45) ∧ ¬([petal_width] ≥ 1.75)) ∨ (¬([petal_length] < 2.45) ∧ ¬([petal_length] ≥ 2.45) ∧ ¬([petal_length] ≥ 2.45)) ∨ (¬([petal_length] < 2.45) ∧ ¬([petal_length] ≥ 2.45) ∧ ¬([petal_length] ≥ 4.85)) ∨ (¬([petal_length] < 2.45) ∧ ¬([petal_width] < 1.65) ∧ ¬([petal_width] ≥ 1.75)) ∨ (¬([petal_length] < 2.45) ∧ ¬([petal_width] < 1.65) ∧ ¬([petal_length] ≥ 2.45)) ∨ (¬([petal_length] < 2.45) ∧ ¬([petal_width] < 1.65) ∧ ¬([petal_length] ≥ 4.85)) ∨ (¬([petal_length] < 2.45) ∧ ¬([petal_length] < 4.95) ∧ ¬([petal_width] ≥ 1.75)) ∨ (¬([petal_length] < 2.45) ∧ ¬([petal_length] < 4.95) ∧ ¬([petal_length] ≥ 2.45)) ∨ (¬([petal_length] < 2.45) ∧ ¬([petal_length] < 4.95) ∧ ¬([petal_length] ≥ 4.85)) ∨ (¬([petal_length] < 2.45) ∧ ¬([petal_width] < 1.75) ∧ ¬([petal_width] ≥ 1.75)) ∨ (¬([petal_length] < 2.45) ∧ ¬([petal_width] < 1.75) ∧ ¬([petal_length] ≥ 2.45)) ∨ (¬([petal_length] < 2.45) ∧ ¬([petal_width] < 1.75) ∧ ¬([petal_length] ≥ 4.85)) ∨ (¬([petal_length] < 2.45) ∧ ([petal_width] ≥ 1.75) ∧ ([petal_length] ≥ 2.45) ∧ ([petal_length] ≥ 4.85))  ↣  virginica : NamedTuple()
+# ├[2/3] ([petal_length] < 2.45)  ↣  setosa : NamedTuple()
+# └[3/3] (¬([petal_length] < 2.45) ∧ ([petal_width] < 1.65) ∧ ([petal_length] < 4.95) ∧ ([petal_length] ≥ 2.45) ∧ ([petal_width] < 1.75) ∧ ¬([petal_width] ≥ 1.75)) ∨ (¬([petal_length] < 2.45) ∧ ([petal_width] < 1.65) ∧ ([petal_length] < 4.95) ∧ ([petal_length] ≥ 2.45) ∧ ([petal_width] < 1.75) ∧ ¬([petal_length] ≥ 2.45)) ∨ (¬([petal_length] < 2.45) ∧ ([petal_width] < 1.65) ∧ ([petal_length] < 4.95) ∧ ([petal_length] ≥ 2.45) ∧ ([petal_width] < 1.75) ∧ ¬([petal_length] ≥ 4.85))  ↣  versicolor : NamedTuple()
+
+# typeof(set) = Vector{ClassificationRule{CategoricalArrays.CategoricalValue{String, UInt32}}}
+# ▣
+# ├[1/3] (¬([petal_length] < 2.45) ∧ ¬([petal_width] ≥ 1.75) ∧ ¬([petal_length] ≥ 2.45)) ∨ (¬([petal_length] < 2.45) ∧ ¬([petal_width] ≥ 1.75) ∧ ¬([petal_length] < 4.95)) ∨ (¬([petal_length] < 2.45) ∧ ([petal_width] ≥ 1.75))  ↣  virginica : NamedTuple()
+# ├[2/3] ([petal_length] < 2.45)  ↣  setosa : NamedTuple()
+# └[3/3] ¬([petal_length] < 2.45) ∧ ¬([petal_width] ≥ 1.75) ∧ ([petal_length] < 4.95) ∧ ([petal_length] ≥ 2.45)  ↣  versicolor : NamedTuple()
+
+# ▣
+# ├[1/3] ([petal_length] ≤ Inf) ∧ ([petal_length] ≥ 4.85)  ↣  virginica : NamedTuple()
+# ├[2/3] (([petal_length] < 2.45) ∧ ¬([petal_length] ≥ 4.85) ∧ ([petal_length] ≥ -Inf)) ∨ (([petal_length] < 2.45) ∧ ¬([petal_length] ≤ Inf) ∧ ([petal_length] ≥ -Inf))  ↣  setosa : NamedTuple()
+# └[3/3] (¬([petal_length] ≥ 2.45) ∧ ¬([petal_length] < 2.45) ∧ ¬([petal_length] ≥ 4.85)) ∨ (¬([petal_length] ≥ 2.45) ∧ ¬([petal_length] < 2.45) ∧ ¬([petal_length] ≤ Inf)) ∨ (¬([petal_length] ≥ 2.45) ∧ ¬([petal_length] ≥ -Inf) ∧ ¬([petal_length] ≥ 4.85)) ∨ (¬([petal_length] ≥ 2.45) ∧ ¬([petal_length] ≥ -Inf) ∧ ¬([petal_length] ≤ Inf)) ∨ (¬([petal_length] < 4.95) ∧ ¬([petal_length] < 2.45) ∧ ¬([petal_length] ≥ 4.85)) ∨ (¬([petal_length] < 4.95) ∧ ¬([petal_length] < 2.45) ∧ ¬([petal_length] ≤ Inf)) ∨ (¬([petal_length] < 4.95) ∧ ¬([petal_length] ≥ -Inf) ∧ ¬([petal_length] ≥ 4.85)) ∨ (¬([petal_length] < 4.95) ∧ ¬([petal_length] ≥ -Inf) ∧ ¬([petal_length] ≤ Inf)) ∨ (([petal_length] < 4.95) ∧ ([petal_length] ≥ 2.45) ∧ ¬([petal_length] < 2.45) ∧ ¬([petal_length] ≥ 4.85)) ∨ (([petal_length] < 4.95) ∧ ([petal_length] ≥ 2.45) ∧ ¬([petal_length] < 2.45) ∧ ¬([petal_length] ≤ Inf)) ∨ (([petal_length] < 4.95) ∧ ([petal_length] ≥ 2.45) ∧ ¬([petal_length] ≥ -Inf) ∧ ¬([petal_length] ≥ 4.85)) ∨ (([petal_length] < 4.95) ∧ ([petal_length] ≥ 2.45) ∧ ¬([petal_length] ≥ -Inf) ∧ ¬([petal_length] ≤ Inf))  ↣  versicolor : NamedTuple()
+
 extracted_rules = RuleExtraction.extractrules(
     config,
     solem_dt,
