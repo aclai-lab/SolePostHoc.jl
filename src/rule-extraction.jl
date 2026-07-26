@@ -56,8 +56,7 @@ include("intrees/main.jl")
 """$(_get_rule_extractor_docstring("InTreesRuleExtractor", InTrees))"""
 struct InTreesRuleExtractor <: RuleExtractor end
 
-function extractrules(::InTreesRuleExtractor, m, args...; kwargs...)::DecisionSet
-    config = InTreesConfig(; kwargs...)
+function extractrules(config::InTreesConfig, m, args...; kwargs...)::DecisionSet
     dl = intrees(config, m, args...)
     ll = listrules(dl, use_shortforms=false)
     return if get_dns(config)
@@ -66,6 +65,11 @@ function extractrules(::InTreesRuleExtractor, m, args...; kwargs...)::DecisionSe
     else
         DecisionSet(ll)
     end
+end
+
+function extractrules(::InTreesRuleExtractor, args...; kwargs...)::DecisionSet
+    config = InTreesConfig(; kwargs...)
+    extractrules(config, args...; kwargs...)
 end
 
 #===========================================================================================

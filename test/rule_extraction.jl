@@ -47,12 +47,12 @@ apply!(solem_rf, logiset, yc[test])
 # ---------------------------------------------------------------------------- #
 #                          intrees rules extraction                           #
 # ---------------------------------------------------------------------------- #
-extractor = InTreesRuleExtractor()
+config = InTreesConfig()
 extracted_rules =
-    RuleExtraction.extractrules(extractor, solem_dt, Xc[test, :], yc[test])
+    RuleExtraction.extractrules(config, solem_dt, Xc[test, :], yc[test])
 
 extracted_rules = RuleExtraction.extractrules(
-    extractor,
+    config,
     solem_dt,
     Xc[test, :],
     yc[test];
@@ -61,7 +61,7 @@ extracted_rules = RuleExtraction.extractrules(
 
 @test_throws MethodError InTreesConfig(invalid=true)
 @test_throws MethodError RuleExtraction.extractrules(
-    extractor,
+    config,
     solem_dt,
     Xc[test, :],
     yc[test];
