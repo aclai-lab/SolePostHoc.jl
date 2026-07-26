@@ -264,11 +264,11 @@ See also
 [`rulemetrics`](@ref).
 """
 function intrees(
-    config::InTreesConfig,
+    config::InTreesConfig{T},
     model::AbstractModel,
     X::AbstractInterpretationSet,
     y::AbstractVector{<:SoleModels.Label}
-)
+) where T
     # Extract rules from model
     listrules_kwargs = (use_shortforms=true, normalize=false)
     set = isensemble(model) ?
@@ -279,9 +279,7 @@ function intrees(
     get_prune_rules(config) && (set = _prune_ruleset(set, X, y, config))
 
     # rule selection
-    rule_selection = get_rule_selection(config)
-    isnothing(rule_selection) ||
-        (set = get_rule_selection(config)(set, X, y, config))
+    isnothing(T) || (set = rules_selection(config, set, X, y))
 
     # construct final decision list via sequential covering
     _stel(
