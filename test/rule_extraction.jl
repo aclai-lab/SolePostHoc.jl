@@ -6,7 +6,7 @@ using DataFrames, Random
 using SoleData.Artifacts
 
 # fill your Artifacts.toml file;
-fillartifacts()
+# fillartifacts() # comment this line in debug
 
 
 # Loader lists
