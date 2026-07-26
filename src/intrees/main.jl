@@ -331,22 +331,22 @@ function intrees(
 
     # prune rules if enabled
     get_prune_rules(config) && (set = _prune_ruleset(set, X, y, config))
-
+set
     # rule selection
-    ruleset = if get_rule_selection_method(config) == :CBC
-        _select_rules_cbc(set, X, y, config)
-    else
-        error("Unexpected rule selection method: $(get_rule_selection_method(config))")
-    end
+    # ruleset = if get_rule_selection_method(config) == :CBC
+    #     _select_rules_cbc(set, X, y, config)
+    # else
+    #     error("Unexpected rule selection method: $(get_rule_selection_method(config))")
+    # end
 
-    # construct final decision list via sequential covering
-    _stel(
-        ruleset, X, y;
-        max_rules=get_max_rules(config),
-        min_coverage=get_min_coverage(config),
-        rule_complexity_metric=get_rule_complexity_metric(config),
-        rng=get_rng(config)
-    )
+    # # construct final decision list via sequential covering
+    # _stel(
+    #     ruleset, X, y;
+    #     max_rules=get_max_rules(config),
+    #     min_coverage=get_min_coverage(config),
+    #     rule_complexity_metric=get_rule_complexity_metric(config),
+    #     rng=get_rng(config)
+    # )
 end
 
 intrees(

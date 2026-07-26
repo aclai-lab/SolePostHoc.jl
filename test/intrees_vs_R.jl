@@ -250,7 +250,7 @@ presentRules(exec, colnames(Xc))
 # [14,] "sepal_length>5.95 & petal_width>0.75 & petal_width>1.75 & petal_width<=1.85"                      
 # [15,] "petal_width>0.75 & petal_width>1.75 & petal_width>1.85"  
 
-config = InTreesConfig()
+config = InTreesConfig(pruning=PruningConfig(prune_rules=false))
 extracted_rules = intrees(config, solem_rf, Xc, yc)
 
 # set = ClassificationRule{String}
@@ -304,21 +304,53 @@ set.seed(1)
 
 pruneRules <- pruneRule(ruleMetric,Xc,yc)
 pruneRules[1:2,]
-selectRules <- selectRuleRRF(pruneRules,Xc,yc)
+# selectRules <- selectRuleRRF(pruneRules,Xc,yc)
 
-# presentRules(ruleMetric, colnames(Xc))
+presentRules(pruneRules, colnames(Xc))
 """
 
-# ---------------------------------------------------------------------------- #
-R"""
-pred <- NULL
-regMethod <- "mean"
-X <- Xc
-target <- yc
-rule <- ruleMetric[10,]
-maxDecay <- 0.05
-typeDecay <- 2
-"""
+#  [1,] "petal_length<=2.45"                                                            
+#  [2,] "petal_length>2.45 & petal_length<=4.95 & petal_width<=1.65"                    
+#  [3,] "petal_width>1.65"                                                              
+#  [4,] "petal_length>4.95"                                                             
+#  [5,] "sepal_length>6.5 & petal_length<=5.05"                                         
+#  [6,] "petal_length>4.95"                                                             
+#  [7,] "petal_width<=0.75"                                                             
+#  [8,] "petal_length<=4.95 & petal_width>0.75 & petal_width<=1.75"                     
+#  [9,] "petal_length>4.95 & petal_width<=1.55"                                         
+# [10,] "petal_width>0.75 & petal_width<=1.75"                                          
+# [11,] "petal_length>5.4"                                                              
+# [12,] "sepal_length<=5.95 & petal_length<=4.95 & petal_width>0.75 & petal_width<=1.85"
+# [13,] "petal_length>4.95"                                                             
+# [14,] "petal_width>1.75"                                                              
+# [15,] "petal_width>1.75" 
+
+config = InTreesConfig(pruning=PruningConfig(
+    prune_rules=true,
+    decay_threshold=0.05,
+    percentage_degradation=true))
+extracted_rules = intrees(config, solem_rf, Xc, yc)
+
+# ▣ ([petal_length] ≤ 2.45)  ↣  setosa
+# ▣ (([petal_length] > 2.45)) ∧ (([petal_length] ≤ 4.95)) ∧ (([petal_width] ≤ 1.65))  ↣  versicolor
+# ▣ ([petal_width] > 1.65)  ↣  virginica
+# ▣ (([petal_length] > 4.95)) ∧ (([petal_length] ≤ 5.05)) ∧ (([sepal_length] ≤ 6.5))  ↣  virginica
+# ▣ (([petal_length] ≤ 5.05)) ∧ (([sepal_length] > 6.5))  ↣  versicolor
+# ▣ ([petal_length] > 5.05)  ↣  virginica
+# ▣ (([petal_width] > 0.75)) ∧ (([petal_width] ≤ 1.75)) ∧ (([petal_length] ≤ 5.4))  ↣  versicolor
+# ▣ ([petal_length] > 5.4)  ↣  virginica
+# ▣ (([petal_width] > 1.75)) ∧ (([petal_width] ≤ 1.85)) ∧ (([sepal_length] ≤ 5.95)) ∧ (([petal_length] ≤ 4.95))  ↣  versicolor
+# ▣ (([petal_width] > 1.75)) ∧ (([petal_length] > 4.95))  ↣  virginica
+# ▣ (([petal_width] > 1.75)) ∧ (([sepal_length] > 5.95))  ↣  virginica
+# ▣ ([petal_width] > 1.85)  ↣  virginica
+
+# The results of the R implementation and the Julia implementation are similar,
+# so we can validate them: the pruning algorithm systematically removes atoms
+# and checks that the error remains unchanged. The heuristic used is to start by
+# removing atoms from the last one. Depending on their order, the output may
+# change. They are often ordered alphabetically or in 'discovery' order.
+# We do not think it is necessary to dwell too much on the order: this result is
+# sufficient to demonstrate the soundness of its functioning.
 
 R"""
 newRuleMetric <- measureRule(rule["condition"],X,target)
