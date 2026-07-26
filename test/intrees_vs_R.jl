@@ -6,15 +6,7 @@ using SoleLogics, SoleData, SoleModels
 
 using MLJ
 using DataFrames
-# using Random
 
-# using SoleData: AbstractCondition, RangeScalarCondition, scalartiling,
-#     _rangescalarcond_to_scalarconds_in_conjunction
-# # using SoleData: LeftmostLinearForm, Connective, SyntaxStructure, grandchildren
-
-# using SoleModels: Label, CLabel, RLabel
-
-# const Float = Union{Float32,Float64}
 
 # ---------------------------------------------------------------------------- #
 using RCall
@@ -344,6 +336,7 @@ extracted_rules = intrees(config, solem_rf, Xc, yc)
 # ▣ (([petal_width] > 1.75)) ∧ (([sepal_length] > 5.95))  ↣  virginica
 # ▣ ([petal_width] > 1.85)  ↣  virginica
 
+# ---------------------------------------------------------------------------- #
 # The results of the R implementation and the Julia implementation are similar,
 # so we can validate them: the pruning algorithm systematically removes atoms
 # and checks that the error remains unchanged. The heuristic used is to start by
@@ -351,9 +344,7 @@ extracted_rules = intrees(config, solem_rf, Xc, yc)
 # change. They are often ordered alphabetically or in 'discovery' order.
 # We do not think it is necessary to dwell too much on the order: this result is
 # sufficient to demonstrate the soundness of its functioning.
-
-
-
+# ---------------------------------------------------------------------------- #
 
 R"""
 library("RRF")
