@@ -45,10 +45,14 @@ logiset = scalarlogiset(Xc[test, :], allow_propositional=true)
 apply!(solem_rf, logiset, yc[test])
 
 # ---------------------------------------------------------------------------- #
-#                          intrees rules extraction                           #
+#                           intrees rules extraction                           #
 # ---------------------------------------------------------------------------- #
-config = InTreesConfig()
+config = InTreesConfig(pruning=PruningConfig(prune_rules=false))
 extracted_rules =
+    RuleExtraction.extractrules(config, solem_dt, Xc[test, :], yc[test])
+    
+config = InTreesConfig(pruning=PruningConfig(prune_rules=true))
+rules_pruned =
     RuleExtraction.extractrules(config, solem_dt, Xc[test, :], yc[test])
 
 extracted_rules = RuleExtraction.extractrules(

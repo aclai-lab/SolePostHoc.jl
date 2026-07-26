@@ -18,22 +18,23 @@ end
         r::Rule,
         X::AbstractInterpretationSet,
         y::AbstractVector{<:SoleModels.Label};
-        pruning_s::AbstractFloat,
-        pruning_decay_thr::AbstractFloat,
+        s::AbstractFloat,
+        decay_threshold::AbstractFloat,
         kwargs...
     ) -> Rule
 
 Greedily remove conjuncts from `r`'s antecedent whose removal does not
-increase the rule's error by more than `pruning_decay_thr` (normalized by
-`pruning_s`), as in the original InTrees pruning procedure.
+increase the rule's error by more than `decay_threshold` (normalized by
+`s`), as in the original InTrees pruning procedure.
 """
 function _prune_rule(
     ::Type{<:LeftmostConjunctiveForm},
     r::Rule{O},
     X::AbstractInterpretationSet,
     y::AbstractVector{<:SoleModels.Label};
-    pruning_s::AbstractFloat,
-    pruning_decay_thr::AbstractFloat,
+    decay_threshold::Float32,
+    percentage_degradation::Bool,
+    s::Float32,
     kwargs...,
 ) where {O}
     nruleconjuncts = SoleModels.nconjuncts(r)
@@ -50,9 +51,9 @@ function _prune_rule(
 
         # return error of the rule without idx-th pair
         e_minus_i = SoleModels.rulemetrics(rule, X, y)[:error]
-        decay_i = (e_minus_i - e_zero) / max(e_zero, pruning_s)
+        decay_i = (e_minus_i - e_zero) / max(e_zero, s)
 
-        if decay_i ≤ pruning_decay_thr
+        if decay_i ≤ decay_threshold
             # remove the idx-th pair in the vector of decisions
             valid_idxs = setdiff(valid_idxs, idx)
             e_zero = e_minus_i
@@ -106,8 +107,9 @@ function _prune_ruleset(
         else
             _prune_rule(
                 typeof(antecedent(ruleset[i])), ruleset[i], X, y;
-                pruning_s=get_pruning_s(config),
-                pruning_decay_thr=get_pruning_decay_threshold(config)
+                decay_threshold=get_decay_threshold(config),
+                percentage_degradation=get_percentage_degradation(config),
+                s=get_s(config)
             )
         end
     end

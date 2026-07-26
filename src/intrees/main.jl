@@ -22,7 +22,7 @@ using SoleModels: MultiFormula, modforms
 include("config.jl")
 include("pruning.jl")
 
-export intrees, InTreesConfig
+export intrees, InTreesConfig, PruningConfig
 export get_dns
 
 # ---------------------------------------------------------------------------- #

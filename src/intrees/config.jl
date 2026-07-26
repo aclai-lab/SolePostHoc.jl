@@ -1,4 +1,57 @@
 # ---------------------------------------------------------------------------- #
+#                               pruning config                                 #
+# ---------------------------------------------------------------------------- #
+"""
+    PruningConfig
+
+Configuration object for the pruning rule-extraction algorithm.
+
+# Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `prune_rules` | `Bool` | `true` | Whether to prune each rule's antecedent before selection. |
+| `decay_threshold` | `Float64` | `0.05` | Maximum tolerated error-decay before a conjunct is dropped from a rule. |
+| `percentage_degradation` | `Bool` | `false` | Choose between percentage degradation(`true`) and absolute degradation(`false`). |
+| `s` | `Float64` | `1.0e-6` | Denominator floor used when computing percentage degradation. |
+
+# Validation
+
+The constructor throws `ArgumentError` when:
+- `pruning_s` or `pruning_decay_threshold` is negative.
+
+See also: [`intrees`](@ref), [`InTreesConfig`](@ref)
+"""
+struct PruningConfig
+    prune_rules::Bool
+    decay_threshold::Float32
+    percentage_degradation::Bool
+    s::Float32
+
+    function PruningConfig(;
+        prune_rules::Bool=true,
+        decay_threshold::Float64=0.05,
+        percentage_degradation::Bool=false,
+        s::Float64=1.0e-6,
+    )
+        # validate non-negative parameters
+        if s < 0.0 || decay_threshold < 0.0
+            throw(ArgumentError(
+                "s and decay_threshold must be non-negative. Got " *
+                "s=$(s), decay_threshold=$(decay_threshold)."
+            ))
+        end
+
+        new(
+            prune_rules,
+            decay_threshold,
+            percentage_degradation,
+            s
+        )
+    end
+end
+
+# ---------------------------------------------------------------------------- #
 #                               InTrees config                                 #
 # ---------------------------------------------------------------------------- #
 """
@@ -15,9 +68,7 @@ and consistency validation before storing anything.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `dns` | `Bool` | `true` | Whether the starting ruleset is built in "decision-node-set" mode (one rule per branch/leaf) rather than per-path. |
-| `prune_rules` | `Bool` | `true` | Whether to prune each rule's antecedent before selection. |
-| `pruning_s` | `Float64` | `1.0e-6` | Denominator floor used when computing the pruning decay metric. |
-| `pruning_decay_threshold` | `Float64` | `0.05` | Maximum tolerated error-decay before a conjunct is dropped from a rule. |
+| `pruning` | `PruningConfig` | `default` | Set pruning algorithm parameters. |
 | `cbc_threshold` | `Float64` | `0.01` | Minimum normalized feature importance for a rule to survive CBC selection. |
 | `min_coverage` | `Float64` | `0.01` | Minimum rule coverage required to enter the STEL sequential-covering step. |
 | `max_rules` | `Int64` | `-1` | Maximum number of rules in the final decision list (excluding the default rule). `-1` means unlimited. |
@@ -33,8 +84,7 @@ and consistency validation before storing anything.
 
 The constructor throws `ArgumentError` when:
 - `rule_selection_method` is not `:CBC`.
-- `pruning_s`, `min_coverage`, or `cbc_threshold` is negative.
-- `pruning_decay_threshold` is negative.
+- `min_coverage`, or `cbc_threshold` is negative.
 - `partial_sampling` is outside (0.0, 1.0].
 - `n_trees` or `max_depth` is not positive.
 - `n_subfeatures` is negative.
@@ -48,26 +98,24 @@ cfg = InTreesConfig()
 
 # Custom pruning and coverage parameters
 cfg = InTreesConfig(
-    pruning_decay_threshold = 0.1,
-    min_coverage            = 0.02,
-    max_rules               = 20,
+    pruning = PruningConfig(decay_threshold = 0.1),
+    min_coverage = 0.02,
+    max_rules = 20,
 )
 
 # Tune the underlying CBC random forest
 cfg = InTreesConfig(
-    n_trees          = 100,
-    max_depth        = 8,
+    n_trees = 100,
+    max_depth = 8,
     partial_sampling = 0.8,
 )
 ```
 
-See also: [`intrees`](@ref), [`RuleExtractor`](@ref)
+See also: [`intrees`](@ref), [`RuleExtractor`](@ref), [`PruningConfig`](@ref)
 """
 struct InTreesConfig <: RuleExtractor
     dns::Bool
-    prune_rules::Bool
-    pruning_s::Float64
-    pruning_decay_threshold::Float64
+    pruning::PruningConfig
     cbc_threshold::Float64
     min_coverage::Float64
     max_rules::Int64
@@ -81,9 +129,7 @@ struct InTreesConfig <: RuleExtractor
 
     function InTreesConfig(;
         dns::Bool=true,
-        prune_rules::Bool=true,
-        pruning_s::Float64=1.0e-6,
-        pruning_decay_threshold::Float64=0.05,
+        pruning::PruningConfig=PruningConfig(),
         cbc_threshold::Float64=0.01,
         min_coverage::Float64=0.01,
         max_rules::Int64=-1,
@@ -101,14 +147,10 @@ struct InTreesConfig <: RuleExtractor
         ))
 
         # validate non-negative parameters
-        if pruning_s < 0.0 || min_coverage < 0.0 || cbc_threshold < 0.0 ||
-           pruning_decay_threshold < 0.0
+        if min_coverage < 0.0 || cbc_threshold < 0.0
             throw(ArgumentError(
-                "pruning_s, min_coverage, cbc_threshold and " *
-                "pruning_decay_threshold must be non-negative. Got " *
-                "pruning_s=$(pruning_s), min_coverage=$(min_coverage), " *
-                "cbc_threshold=$(cbc_threshold), " *
-                "pruning_decay_threshold=$(pruning_decay_threshold)."
+                "min_coverage and cbc_threshold must be non-negative. Got " *
+                "min_coverage=$(min_coverage), cbc_threshold=$(cbc_threshold)."
             ))
         end
 
@@ -140,9 +182,7 @@ struct InTreesConfig <: RuleExtractor
 
         new(
             dns,
-            prune_rules,
-            pruning_s,
-            pruning_decay_threshold,
+            pruning,
             cbc_threshold,
             min_coverage,
             max_rules,
@@ -172,21 +212,30 @@ Return `true` if the starting ruleset is built in decision-node-set mode.
 
 Return `true` if rule pruning is enabled in `r`.
 """
-@inline get_prune_rules(r::InTreesConfig) = r.prune_rules
+@inline get_prune_rules(r::InTreesConfig) = r.pruning.prune_rules
 
 """
-    get_pruning_s(r::InTreesConfig) -> Float64
-
-Return the denominator floor used in the pruning decay metric stored in `r`.
-"""
-@inline get_pruning_s(r::InTreesConfig) = r.pruning_s
-
-"""
-    get_pruning_decay_threshold(r::InTreesConfig) -> Float64
+    get_decay_threshold(r::InTreesConfig) -> Float32
 
 Return the pruning decay threshold stored in `r`.
 """
-@inline get_pruning_decay_threshold(r::InTreesConfig) = r.pruning_decay_threshold
+@inline get_decay_threshold(r::InTreesConfig) = r.pruning.decay_threshold
+
+"""
+    get_percentage_degradation(r::InTreesConfig) -> Bool
+
+Return `true` if percentage_degradation is applied,
+    `false` if absolute degradation is applied.
+"""
+@inline get_percentage_degradation(r::InTreesConfig) =
+    r.pruning.percentage_degradation
+
+"""
+    get_s(r::InTreesConfig) -> Float32
+
+Return the denominator floor used in the pruning decay metric stored in `r`.
+"""
+@inline get_s(r::InTreesConfig) = r.pruning.s
 
 """
     get_cbc_threshold(r::InTreesConfig) -> Float64
