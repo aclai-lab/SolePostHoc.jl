@@ -352,46 +352,8 @@ extracted_rules = intrees(config, solem_rf, Xc, yc)
 # We do not think it is necessary to dwell too much on the order: this result is
 # sufficient to demonstrate the soundness of its functioning.
 
-R"""
-newRuleMetric <- measureRule(rule["condition"],X,target)
-errOrig <- as.numeric(newRuleMetric["err"])  
-ruleV <- unlist(strsplit(rule["condition"],split= " & "))
-pred <- rule["pred"]
 
-if(length(ruleV)==1) return(newRuleMetric)
-for(i in length(ruleV):1){
-print("ruleV")
-print(ruleV)
-restRule <- ruleV[-i]
-restRule <- paste(restRule,collapse= " & ")
-metricTmp <- measureRule(restRule,X,target,pred)
-errNew <- as.numeric(metricTmp["err"]) 
-if(typeDecay == 1){
-    decay <- (errNew-errOrig)/max(errOrig,0.000001)
-}else{
-    decay <- (errNew-errOrig)
-}
-if( decay <= maxDecay){
-    ruleV <- ruleV[-i] 
-    newRuleMetric <- metricTmp
-    if(length(ruleV)<=1)break
-}
-}
-# print(newRuleMetric)
-"""
 
-# [1] "ruleV"
-#    condition1    condition2    condition3    condition4 
-#  "X[,3]<=5.4"  "X[,4]>0.75" "X[,4]<=1.75"  "X[,4]>1.55" 
-# [1] "ruleV"
-#    condition1    condition2    condition3 
-#  "X[,3]<=5.4"  "X[,4]>0.75" "X[,4]<=1.75" 
-# [1] "ruleV"
-#    condition1    condition2    condition3 
-#  "X[,3]<=5.4"  "X[,4]>0.75" "X[,4]<=1.75" 
-# [1] "ruleV"
-#    condition1    condition2    condition3 
-#  "X[,3]<=5.4"  "X[,4]>0.75" "X[,4]<=1.75" 
 
 R"""
 library("RRF")

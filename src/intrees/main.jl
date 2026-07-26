@@ -19,69 +19,14 @@ using SoleModels: DecisionList, ConstantModel, isensemble, listrules
 using SoleModels: RuleExtractor
 using SoleModels: MultiFormula, modforms
 
+abstract type AbstractRuleSelection end
+
 include("config.jl")
 include("pruning.jl")
+include("rules_selection.jl")
 
-export intrees, InTreesConfig, PruningConfig
+export intrees, InTreesConfig, PruningConfig, CBC
 export get_dns
-
-# ---------------------------------------------------------------------------- #
-#                                    Cbc                                       #
-# ---------------------------------------------------------------------------- #
-"""
-    _select_rules_cbc(ruleset, X, y, config::InTreesConfig) -> Vector{<:Rule}
-
-Select a compact subset of `ruleset` via the Complexity-guided Boolean
-Combination (CBC) procedure: rule-coverage checkmasks are used as features to
-fit a random forest against `y`, and rules whose normalized impurity
-importance exceeds `get_cbc_threshold(config)` are kept, sorted by
-importance (desc), error (asc), and complexity (asc).
-"""
-function _select_rules_cbc(ruleset, X, y, config::InTreesConfig)
-    n_rules = length(ruleset)
-    metrics = Matrix{Float64}(undef, n_rules, 3)
-    checkmasks = Vector{BitVector}(undef, n_rules)
-
-    Threads.@threads for i in eachindex(ruleset)
-        eval_result = rulemetrics(ruleset[i], X, y)
-        checkmasks[i] = eval_result[:checkmask,]
-        metrics[i, 1] = eval_result[:coverage]
-        metrics[i, 2] = eval_result[:error]
-        metrics[i, 3] = eval_result[get_rule_complexity_metric(config)]
-    end
-
-    # build random forest for feature importance
-    rf = DT.build_forest(
-        y, hcat(checkmasks...),
-        get_n_subfeatures(config),
-        get_n_trees(config),
-        get_partial_sampling(config),
-        get_max_depth(config);
-        rng=get_rng(config))
-    importance = DT.impurity_importance(rf)
-    importances = importance ./ maximum(importance)
-
-    # select features with sufficient importance
-    selected_idxs = findall(importances .> get_cbc_threshold(config))
-    isempty(selected_idxs) && return ruleset
-
-    # combine metrics with importance and original indices
-    combined = hcat(
-        metrics[selected_idxs, :],
-        importances[selected_idxs],
-        selected_idxs
-    )
-
-    # sort by importance (desc), error (asc), complexity (asc)
-    sorted = sortslices(combined, dims=1, by=x->(-x[4], x[2], x[3]))
-
-    # extract final indices, limiting if max_rules is set
-    max_rules = get_max_rules(config)
-    n_selected = max_rules > 0 ? min(max_rules, size(sorted, 1)) : size(sorted, 1)
-    final_idxs = Int64.(sorted[1:n_selected, 5])
-
-    return ruleset[final_idxs]
-end
 
 # ---------------------------------------------------------------------------- #
 #                                    Stel                                      #
@@ -166,10 +111,10 @@ function _stel(
     r::AbstractVector{<:Rule},
     X::AbstractInterpretationSet,
     y::AbstractVector{<:SoleModels.Label};
-    max_rules::Int64=-1,
-    min_coverage::Float64=0.01,
-    rule_complexity_metric::Symbol=:natoms,
-    rng::AbstractRNG=Random.TaskLocalRNG()
+    max_rules::UInt32,
+    min_coverage::Float32,
+    rule_complexity_metric::Symbol,
+    rng::AbstractRNG
 )
     rules = Rule[]
     ruleset = [r..., Rule(SoleModels.bestguess(y; suppress_parity_warning=true))]
@@ -218,8 +163,8 @@ function _stel(
 
         # compute remaining instances
         idx_remaining = _is_true_antecedent(antecedent(ruleset[idx_best])) ?
-                        Int64[] :
-                        findall(.!evaluaterule(ruleset[idx_best], X, y)[:checkmask,])
+            Int64[] :
+            findall(.!evaluaterule(ruleset[idx_best], X, y)[:checkmask,])
 
         # exit condition
         if idx_best == length(ruleset)
@@ -331,22 +276,20 @@ function intrees(
 
     # prune rules if enabled
     get_prune_rules(config) && (set = _prune_ruleset(set, X, y, config))
-set
-    # rule selection
-    # ruleset = if get_rule_selection_method(config) == :CBC
-    #     _select_rules_cbc(set, X, y, config)
-    # else
-    #     error("Unexpected rule selection method: $(get_rule_selection_method(config))")
-    # end
 
-    # # construct final decision list via sequential covering
-    # _stel(
-    #     ruleset, X, y;
-    #     max_rules=get_max_rules(config),
-    #     min_coverage=get_min_coverage(config),
-    #     rule_complexity_metric=get_rule_complexity_metric(config),
-    #     rng=get_rng(config)
-    # )
+    # rule selection
+    rule_selection = get_rule_selection(config)
+    isnothing(rule_selection) ||
+        (set = get_rule_selection(config)(set, X, y, config))
+
+    # construct final decision list via sequential covering
+    _stel(
+        set, X, y;
+        max_rules=get_max_rules(config),
+        min_coverage=get_min_coverage(config),
+        rule_complexity_metric=get_complexity_metric(config),
+        rng=get_rng(config)
+    )
 end
 
 intrees(

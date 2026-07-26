@@ -8,7 +8,6 @@ using SoleData.Artifacts
 # fill your Artifacts.toml file;
 # fillartifacts() # comment this line in debug
 
-
 # Loader lists
 abcloader = ABCLoader()
 mitloader = MITESPRESSOLoader()
@@ -55,6 +54,7 @@ config = InTreesConfig(pruning=PruningConfig(prune_rules=true))
 rules_pruned =
     RuleExtraction.extractrules(config, solem_dt, Xc[test, :], yc[test])
 
+# ---------------------------------------------------------------------------- #
 config = InTreesConfig(pruning=PruningConfig(
     prune_rules=true,
     percentage_degradation=false))
@@ -67,6 +67,16 @@ config = InTreesConfig(pruning=PruningConfig(
 rules_pruned =
     RuleExtraction.extractrules(config, solem_dt, Xc[test, :], yc[test])
 
+# ---------------------------------------------------------------------------- #
+config = InTreesConfig(rule_selection=nothing)
+extracted_rules =
+    RuleExtraction.extractrules(config, solem_dt, Xc[test, :], yc[test])
+    
+config = InTreesConfig(rule_selection=CBC())
+rules_pruned =
+    RuleExtraction.extractrules(config, solem_dt, Xc[test, :], yc[test])
+
+# ---------------------------------------------------------------------------- #
 extracted_rules = RuleExtraction.extractrules(
     config,
     solem_dt,
@@ -77,6 +87,12 @@ extracted_rules = RuleExtraction.extractrules(
 
 @test_throws MethodError InTreesConfig(invalid=true)
 @test_throws MethodError RuleExtraction.extractrules(
+    solem_dt,
+    Xc[test, :],
+    yc[test];
+    invalid=true,
+)
+@test_throws ErrorException RuleExtraction.extractrules(
     config,
     solem_dt,
     Xc[test, :],
