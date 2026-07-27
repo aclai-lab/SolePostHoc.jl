@@ -80,23 +80,21 @@ coverage, then complexity), append it to the decision list, and restrict `X`/`y`
 to the instances it does not cover, until no instances remain, the tautological
 default rule is picked, or `max_rules` is reached.
 """
-function _stel(
-    r::AbstractVector{<:Rule},
+function postprocess(
+    config::InTreesConfig{T,S},
+    set::Vector{<:Rule{O}},
     X::AbstractInterpretationSet,
-    y::AbstractVector{<:SoleModels.Label};
-    max_rules::UInt32,
-    min_coverage::Float32,
-    rule_complexity_metric::Symbol,
-    rng::AbstractRNG
-)
+    y::AbstractVector{<:SoleModels.Label}
+) where {T,S<:STEL,O}
+    max_rules = get_max_rules(config)
     rules = Rule[]
-    ruleset = [r..., Rule(SoleModels.bestguess(y; suppress_parity_warning=true))]
+    ruleset = [set..., Rule(SoleModels.bestguess(y; suppress_parity_warning=true))]
 
     # filter rules by minimum coverage
     ruleset = filter(ruleset) do s
         return _is_true_antecedent(antecedent(s)) ?
                true :
-               SoleModels.rulemetrics(s, X, y)[:coverage] ≥ min_coverage
+               SoleModels.rulemetrics(s, X, y)[:coverage] ≥ get_min_coverage(config)
     end
 
     nrules = length(ruleset)
@@ -126,12 +124,12 @@ function _stel(
                 metrics = rulemetrics(r, X, y)
                 rules_coverage[i] = metrics.coverage
                 rules_error[i] = metrics.error
-                rules_length[i] = metrics[rule_complexity_metric]
+                rules_length[i] = metrics[get_complexity_metric(config)]
             end
         end
 
         # select best rule
-        idx_best = _select_best_rule(rules_error, rules_coverage, rules_length, rng)
+        idx_best = _select_best_rule(rules_error, rules_coverage, rules_length, get_rng(config))
         push!(rules, ruleset[idx_best])
 
         # compute remaining instances

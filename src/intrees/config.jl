@@ -67,13 +67,8 @@ Configuration object for the CBC rule-selection algorithm.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `rule_complexity_metric` | `Symbol` | `:natoms` | Metric used to estimate rule
-complexity (must be a key returned by `SoleModels.rulemetrics`). |
 | `threshold` | `Float64` | `0.01` | Minimum normalized feature importance for a
 rule to survive CBC selection. |
-
-| `max_rules` | `Int64` | `-1` | Maximum number of rules in the final decision
-list (excluding the default rule). `-1` means unlimited. |
 | `nsubfeatures` | `Int64` | `2` | Number of candidate features considered at
 each split of the CBC random forest. |
 | `ntrees` | `Int64` | `50` | Number of trees in the CBC random forest. |
@@ -92,7 +87,6 @@ The constructor throws `ArgumentError` when:
 
 See also: [`intrees`](@ref), [`InTreesConfig`](@ref)
 """
-
 struct CBC <: AbstractRuleSelection
     threshold::Float32
     nsubfeatures::UInt32
@@ -145,6 +139,48 @@ struct CBC <: AbstractRuleSelection
 end
 
 # ---------------------------------------------------------------------------- #
+#                                 stel config                                  #
+# ---------------------------------------------------------------------------- #
+"""
+    STEL <: AbstractPostProcess
+
+Configuration object for the CBC rule-selection algorithm.
+
+# Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `min_coverage` | `Float64` | `0.01` | Minimum rule coverage required to enter
+the STEL sequential-covering step. |
+
+# Validation
+
+The constructor throws `ArgumentError` when:
+- `min_coverage` is negative.
+
+See also: [`intrees`](@ref), [`InTreesConfig`](@ref)
+"""
+struct STEL <: AbstractPostProcess
+    min_coverage::Float32
+
+    function STEL(
+        min_coverage::Float64=0.01,
+    )
+        # validate non-negative parameters
+        if min_coverage < 0.0
+            throw(ArgumentError(
+                "min_coverage must be non-negative. Got " *
+                "min_coverage=$(min_coverage)."
+            ))
+        end
+
+        new(
+            min_coverage
+        )
+    end
+end
+
+# ---------------------------------------------------------------------------- #
 #                               InTrees config                                 #
 # ---------------------------------------------------------------------------- #
 """
@@ -160,20 +196,19 @@ and consistency validation before storing anything.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
+| `pruning` | `PruningConfig` | `default` | Set pruning algorithm parameters. |
+| `rulselection` | `AbstractRuleSelection` | `default` | Set rule_selection
+algorithm and parameters. |
+| `postprecess` | `AbstractPostProcess` | `default` | Set post_process
+algorithm and parameters. |
+| `complexity_metric` | `Symbol` | `:natoms` | Metric used to estimate rule
+complexity (must be a key returned by `SoleModels.rulemetrics`). |
+| `max_rules` | `Int64` | `-1` | Maximum number of rules in the final decision
+list (excluding the default rule). `-1` means unlimited. |
 | `dns` | `Bool` | `true` | Whether the starting ruleset is built in
 "decision-node-set" mode (one rule per branch/leaf) rather than per-path. |
-| `pruning` | `PruningConfig` | `default` | Set pruning algorithm parameters. |
-| `rule_selection` | `AbstractRuleSelection` | `default` | Set rule_selection
-algorithm and parameters. |
-| `min_coverage` | `Float64` | `0.01` | Minimum rule coverage required to enter
-the STEL sequential-covering step. |
 | `rng` | `AbstractRNG` | `Random.TaskLocalRNG()` | RNG used for any randomized
 step (CBC forest, tie-breaking in STEL). |
-
-# Validation
-
-The constructor throws `ArgumentError` when:
-- `min_coverage`, or `cbc_threshold` is negative.
 
 # Examples
 
@@ -202,38 +237,28 @@ See also: [`intrees`](@ref), [`RuleExtractor`](@ref), [`PruningConfig`](@ref)
 struct InTreesConfig{T,S} <: AbstractConfig
     pruning::PruningConfig
     rule_selection::Union{Nothing,AbstractRuleSelection}
-    post_pruning::Union{Nothing,AbstractPostPruning}
+    post_process::Union{Nothing,AbstractPostProcess}
     complexity_metric::Symbol
     max_rules::UInt32
-    min_coverage::Float32
     dns::Bool
     rng::AbstractRNG
 
     function InTreesConfig(;
         pruning::PruningConfig=PruningConfig(),
         rule_selection::T=nothing,
-        post_pruning::S=nothing,
+        post_process::S=nothing,
         complexity_metric::Symbol=:natoms,
         max_rules::Int64=0,
-        min_coverage::Float64=0.01,
         dns::Bool=true,
         rng::AbstractRNG=Random.TaskLocalRNG()
     ) where {
         T<:Union{Nothing,AbstractRuleSelection},
-        S<:Union{Nothing,AbstractPostPruning}
+        S<:Union{Nothing,AbstractPostProcess}
     }
-        # validate non-negative parameters
-        if min_coverage < 0.0
-            throw(ArgumentError(
-                "min_coverage must be non-negative. Got " *
-                "min_coverage=$(min_coverage)."
-            ))
-        end
-
         new{T,S}(
             pruning,
             rule_selection,
-            post_pruning,
+            post_process,
             complexity_metric,
             max_rules,
             min_coverage,
@@ -261,13 +286,6 @@ Return the maximum number of rules in the final decision list stored in `r`.
 `0` means unlimited.
 """
 @inline get_max_rules(r::InTreesConfig) = r.max_rules
-
-"""
-    get_min_coverage(r::InTreesConfig) -> Float64
-
-Return the minimum rule coverage required for STEL, stored in `r`.
-"""
-@inline get_min_coverage(r::InTreesConfig) = r.min_coverage
 
 """
     get_dns(r::InTreesConfig) -> Bool
@@ -359,3 +377,12 @@ Return the maximum depth of each tree in the CBC random forest stored in `r`.
 """
 @inline get_max_depth(r::InTreesConfig{T,S}) where {T<:CBC,S} =
     r.rule_selection.max_depth
+
+# ---------------------------------------------------------------------------- #
+"""
+    get_min_coverage(r::InTreesConfig{T,S}) where {T,S<:STEL} -> Float32
+
+Return the minimum rule coverage required for STEL, stored in `r`.
+"""
+@inline get_min_coverage(r::InTreesConfig{T,S}) where {T,S<:STEL} =
+r.post_process.min_coverage

@@ -10,7 +10,7 @@ fit a random forest against `y`, and rules whose normalized impurity
 importance exceeds `get_cbc_threshold(config)` are kept, sorted by
 importance (desc), error (asc), and complexity (asc).
 """
-function rules_selection(
+function ruleselection(
     config::InTreesConfig{T,S},
     set::Vector{<:Rule{O}},
     X::AbstractInterpretationSet,

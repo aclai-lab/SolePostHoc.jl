@@ -24,12 +24,12 @@ using SoleModels: MultiFormula, modforms
 
 abstract type AbstractConfig end
 abstract type AbstractRuleSelection end
-abstract type AbstractPostPruning end
+abstract type AbstractPostProcess end
 
 include("config.jl")
 include("pruning.jl")
-include("rules_selection.jl")
-include("post_pruning.jl")
+include("ruleselection.jl")
+include("postprocess.jl")
 
 export intrees, InTreesConfig, PruningConfig, CBC
 export get_dns
@@ -127,12 +127,12 @@ function intrees(
     get_prune_rules(config) && (set = _prune_ruleset(set, X, y, config))
 
     # rule selection
-    T isa Type{Nothing} || (set = rules_selection(config, set, X, y))
+    T isa Type{Nothing} || (set = ruleselection(config, set, X, y))
 
     # construct final decision list via sequential covering
     return S isa Type{Nothing} ?
         DecisionList(set, bestguess(y; suppress_parity_warning=true)) :
-        post_pruning(config, set, X, y)
+        postprocess(config, set, X, y)
 end
 
 intrees(
