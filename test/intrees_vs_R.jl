@@ -384,6 +384,14 @@ config = InTreesConfig(pruning=PruningConfig(prune_rules=false),
     rng=Xoshiro(42))
 extracted_rules = intrees(config, solem_rf, Xc, yc)
 
+# ├[1/6]┐ ([petal_length] ≤ 2.45)  ↣  setosa
+# ├[2/6]┐ ([petal_width] ≤ 0.75)  ↣  setosa
+# ├[3/6]┐ (([petal_length] > 2.45)) ∧ (([petal_length] ≤ 4.95)) ∧ (([petal_width] ≤ 1.65))  ↣  versicolor
+# ├[4/6]┐ (([petal_width] > 0.75)) ∧ (([petal_width] ≤ 1.75)) ∧ (([petal_width] ≤ 1.55)) ∧ (([petal_length] ≤ 4.95))  ↣  versicolor
+# ├[5/6]┐ (([petal_length] > 2.45)) ∧ (([petal_length] > 4.95)) ∧ (([petal_length] > 5.05))  ↣  virginica
+# ├[6/6]┐ (([petal_width] > 0.75)) ∧ (([petal_width] ≤ 1.75)) ∧ (([petal_width] > 1.55)) ∧ (([petal_length] ≤ 5.4))  ↣  versicolor
+# └✘ virginica : NamedTuple()
+
 # R implements the RRF algorithm for pruning, while we use a random forest.
 # One important modification in our algorithm is that the n_subfeatures value
 # for the random forest is not parameterized in R, but is fixed to
@@ -393,3 +401,58 @@ extracted_rules = intrees(config, solem_rf, Xc, yc)
 # from 0 to 1 with a more exponential behavior than ours, which rarely assigns
 # an importance of 0. Therefore, to make the results more similar,
 # it was necessary to set the default threshold to 0.1 instead of 0.01.
+
+R"""
+set.seed(1)
+
+rulePost <- buildLearner(ruleMetric,Xc,yc)
+
+presentRules(rulePost, colnames(Xc))
+"""
+
+# RObject{StrSxp}
+#      len freq                 err                
+# [1,] "1" "0.333333333333333"  "0"                
+# [2,] "3" "0.313333333333333"  "0"                
+# [3,] "3" "0.226666666666667"  "0"                
+# [4,] "4" "0.0666666666666667" "0"                
+# [5,] "4" "0.02"               "0"                
+# [6,] "3" "0.02"               "0.333333333333333"
+# [7,] "1" "0.02"               "0.333333333333333"
+#      condition                                                                     
+# [1,] "petal_length<=2.45"                                                          
+# [2,] "petal_length>2.45 & petal_length<=4.95 & petal_width<=1.65"                  
+# [3,] "petal_width>0.75 & petal_width>1.75 & petal_width>1.85"                      
+# [4,] "sepal_length>5.95 & petal_width>0.75 & petal_width>1.75 & petal_width<=1.85" 
+# [5,] "petal_length>4.95 & petal_width>0.75 & petal_width<=1.75 & petal_width<=1.55"
+# [6,] "petal_length>2.45 & petal_length>4.95 & petal_length>5.05"                   
+# [7,] "Else"                                                                        
+#      pred        
+# [1,] "setosa"    
+# [2,] "versicolor"
+# [3,] "virginica" 
+# [4,] "virginica" 
+# [5,] "virginica" 
+# [6,] "virginica" 
+# [7,] "versicolor"
+
+config = InTreesConfig(
+    pruning=PruningConfig(prune_rules=false),
+    rule_selection=nothing,
+    post_process=STEL(),
+    rng=Xoshiro(42))
+extracted_rules = intrees(config, solem_rf, Xc, yc)
+
+# ▣
+# ├[1/6]┐ ([petal_width] ≤ 0.75)  ↣  setosa
+# ├[2/6]┐ (([petal_length] > 2.45)) ∧ (([petal_length] ≤ 4.95)) ∧ (([petal_width] ≤ 1.65))  ↣  versicolor
+# ├[3/6]┐ (([petal_width] > 0.75)) ∧ (([petal_width] > 1.75)) ∧ (([petal_width] > 1.85))  ↣  virginica
+# ├[4/6]┐ (([petal_width] > 0.75)) ∧ (([petal_width] > 1.75)) ∧ (([petal_width] ≤ 1.85)) ∧ (([sepal_length] > 5.95))  ↣  virginica
+# ├[5/6]┐ (([petal_width] > 0.75)) ∧ (([petal_width] ≤ 1.75)) ∧ (([petal_width] ≤ 1.55)) ∧ (([petal_length] > 4.95))  ↣  virginica
+# ├[6/6]┐ (([petal_length] > 2.45)) ∧ (([petal_length] > 4.95)) ∧ (([petal_length] > 5.05))  ↣  virginica
+# └✘ versicolor : NamedTuple()
+
+# ---------------------------------------------------------------------------- #
+# function STEL is validated against R implementation,
+# giving the same results in the same order
+# ---------------------------------------------------------------------------- #
