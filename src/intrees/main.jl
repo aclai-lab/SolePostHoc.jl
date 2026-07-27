@@ -31,7 +31,7 @@ include("pruning.jl")
 include("ruleselection.jl")
 include("postprocess.jl")
 
-export intrees, InTreesConfig, PruningConfig, CBC
+export intrees, InTreesConfig, PruningConfig, CBC, STEL
 export get_dns
 
 # ---------------------------------------------------------------------------- #

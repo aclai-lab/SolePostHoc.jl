@@ -163,7 +163,7 @@ See also: [`intrees`](@ref), [`InTreesConfig`](@ref)
 struct STEL <: AbstractPostProcess
     min_coverage::Float32
 
-    function STEL(
+    function STEL(;
         min_coverage::Float64=0.01,
     )
         # validate non-negative parameters
@@ -261,7 +261,6 @@ struct InTreesConfig{T,S} <: AbstractConfig
             post_process,
             complexity_metric,
             max_rules,
-            min_coverage,
             dns,
             rng
         )
