@@ -86,7 +86,7 @@ See also: [`lumen`](@ref), [`LumenResult`](@ref), [`AbstractConfig`](@ref)
 """
 struct LumenConfig <: AbstractConfig
     minimization_scheme::Symbol
-    binary::String
+    binary::Union{Nothing,String}
     depth::Float64
     vertical::Float64
     horizontal::Float64
@@ -129,7 +129,7 @@ struct LumenConfig <: AbstractConfig
 
         # validate minimization scheme
         valid_schemes = Dict(
-            # :mitespresso => setup_espresso(),
+            :mitespresso => setup_espresso(),
             :boom => setup_boom(),
             :abc => setup_abc(),
             :abc_balanced => setup_abc(),
