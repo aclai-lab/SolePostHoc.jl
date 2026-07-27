@@ -28,12 +28,12 @@ apply!(solem_rf, logiset, yc[test])
 # ---------------------------------------------------------------------------- #
 config = InTreesConfig(pruning=PruningConfig(
     prune_rules=false), rng=Xoshiro(42))
-extracted_rules =
+@test_nowarn extracted_rules =
     RuleExtraction.extractrules(config, solem_rf, Xc[test, :], yc[test])
     
 config = InTreesConfig(pruning=PruningConfig(
     prune_rules=true), rng=Xoshiro(42))
-rules_pruned =
+@test_nowarn extracted_rules =
     RuleExtraction.extractrules(config, solem_rf, Xc[test, :], yc[test])
 
 # ---------------------------------------------------------------------------- #
@@ -41,23 +41,23 @@ config = InTreesConfig(pruning=PruningConfig(
     prune_rules=true,
     percentage_degradation=false),
     rng=Xoshiro(42))
-extracted_rules =
+@test_nowarn extracted_rules =
     RuleExtraction.extractrules(config, solem_rf, Xc[test, :], yc[test])
     
 config = InTreesConfig(pruning=PruningConfig(
     prune_rules=true,
     percentage_degradation=true),
     rng=Xoshiro(42))
-rules_pruned =
+@test_nowarn extracted_rules =
     RuleExtraction.extractrules(config, solem_rf, Xc[test, :], yc[test])
 
 # ---------------------------------------------------------------------------- #
 config = InTreesConfig(rule_selection=nothing, rng=Xoshiro(42))
-extracted_rules =
+@test_nowarn extracted_rules =
     RuleExtraction.extractrules(config, solem_rf, Xc[test, :], yc[test])
     
 config = InTreesConfig(rule_selection=CBC(), rng=Xoshiro(42))
-rules_pruned =
+@test_nowarn extracted_rules =
     RuleExtraction.extractrules(config, solem_rf, Xc[test, :], yc[test])
 
 # ---------------------------------------------------------------------------- #
@@ -66,7 +66,7 @@ config = InTreesConfig(
     rule_selection=nothing,
     post_process=nothing,
     rng=Xoshiro(42))
-extracted_rules =
+@test_nowarn extracted_rules =
     RuleExtraction.extractrules(config, solem_rf, Xc[test, :], yc[test])
     
 config = InTreesConfig(
@@ -74,7 +74,7 @@ config = InTreesConfig(
     rule_selection=CBC(),
     post_process=nothing,
     rng=Xoshiro(42))
-rules_pruned =
+@test_nowarn extracted_rules =
     RuleExtraction.extractrules(config, solem_rf, Xc[test, :], yc[test])
 
 config = InTreesConfig(
@@ -82,7 +82,7 @@ config = InTreesConfig(
     rule_selection=nothing,
     post_process=nothing,
     rng=Xoshiro(42))
-extracted_rules =
+@test_nowarn extracted_rules =
     RuleExtraction.extractrules(config, solem_rf, Xc[test, :], yc[test])
     
 config = InTreesConfig(
@@ -90,7 +90,7 @@ config = InTreesConfig(
     rule_selection=CBC(),
     post_process=nothing,
     rng=Xoshiro(42))
-rules_pruned =
+@test_nowarn extracted_rules =
     RuleExtraction.extractrules(config, solem_rf, Xc[test, :], yc[test])
 
 # ---------------------------------------------------------------------------- #
@@ -99,7 +99,7 @@ config = InTreesConfig(
     rule_selection=nothing,
     post_process=STEL(),
     rng=Xoshiro(42))
-extracted_rules =
+@test_nowarn extracted_rules =
     RuleExtraction.extractrules(config, solem_rf, Xc[test, :], yc[test])
     
 config = InTreesConfig(
@@ -107,7 +107,7 @@ config = InTreesConfig(
     rule_selection=CBC(),
     post_process=STEL(),
     rng=Xoshiro(42))
-rules_pruned =
+@test_nowarn extracted_rules =
     RuleExtraction.extractrules(config, solem_rf, Xc[test, :], yc[test])
 
 config = InTreesConfig(
@@ -115,7 +115,7 @@ config = InTreesConfig(
     rule_selection=nothing,
     post_process=STEL(),
     rng=Xoshiro(42))
-extracted_rules =
+@test_nowarn extracted_rules =
     RuleExtraction.extractrules(config, solem_rf, Xc[test, :], yc[test])
     
 config = InTreesConfig(
@@ -123,7 +123,7 @@ config = InTreesConfig(
     rule_selection=CBC(),
     post_process=STEL(),
     rng=Xoshiro(42))
-rules_pruned =
+@test_nowarn extracted_rules =
     RuleExtraction.extractrules(config, solem_rf, Xc[test, :], yc[test])
 
 # ---------------------------------------------------------------------------- #
@@ -135,14 +135,14 @@ config = InTreesConfig(
     post_process=STEL(min_coverage=0.33), # 3 classes
     rng=Xoshiro(42)
 )
-extracted_rules = RuleExtraction.extractrules(
+@test_nowarn extracted_rules = RuleExtraction.extractrules(
     config,
     solem_rf,
     Xc[test, :],
     yc[test]
 )
 
-extracted_rules = RuleExtraction.extractrules(
+@test_nowarn extracted_rules = RuleExtraction.extractrules(
     InTreesRuleExtractor,
     solem_rf,
     Xc[test, :],
