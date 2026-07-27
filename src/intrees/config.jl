@@ -69,12 +69,12 @@ Configuration object for the CBC rule-selection algorithm.
 |-------|------|---------|-------------|
 | `threshold` | `Float64` | `0.01` | Minimum normalized feature importance for a
 rule to survive CBC selection. |
-| `nsubfeatures` | `Int64` | `2` | Number of candidate features considered at
+| `nsubfeatures` | `Int` | `2` | Number of candidate features considered at
 each split of the CBC random forest. |
-| `ntrees` | `Int64` | `50` | Number of trees in the CBC random forest. |
+| `ntrees` | `Int` | `50` | Number of trees in the CBC random forest. |
 | `partial_sampling` | `Float64` | `0.7` | Fraction of samples used to build
 each tree of the CBC random forest, ∈ (0, 1]. |
-| `max_depth` | `Int64` | `5` | Maximum depth of each tree in the CBC random
+| `max_depth` | `Int` | `5` | Maximum depth of each tree in the CBC random
 forest. |
 
 # Validation
@@ -87,7 +87,7 @@ The constructor throws `ArgumentError` when:
 
 See also: [`intrees`](@ref), [`InTreesConfig`](@ref)
 """
-struct CBC <: AbstractRuleSelection
+mutable struct CBC <: AbstractRuleSelection
     threshold::Float32
     nsubfeatures::UInt32
     ntrees::UInt32
@@ -95,11 +95,11 @@ struct CBC <: AbstractRuleSelection
     max_depth::UInt32
 
     function CBC(;
-        threshold::Float64=0.01,
-        nsubfeatures::Int64=2,
-        ntrees::Int64=50,
+        threshold::Float64=0.1,
+        nsubfeatures::Int=0,
+        ntrees::Int=50,
         partial_sampling::Float64=0.7,
-        max_depth::Int64=5
+        max_depth::Int=10
     )
         # validate CBC random-forest parameters
         if partial_sampling ≤ 0.0 || partial_sampling > 1.0
@@ -124,7 +124,7 @@ struct CBC <: AbstractRuleSelection
             "nsubfeatures must be non-negative. Got: $(nsubfeatures)."
         ))
 
-        max_depth > 0 || throw(ArgumentError(
+        max_depth ≥ 0 || throw(ArgumentError(
             "max_depth must be a positive integer. Got: $(max_depth)."
         ))
 
@@ -203,7 +203,7 @@ algorithm and parameters. |
 algorithm and parameters. |
 | `complexity_metric` | `Symbol` | `:natoms` | Metric used to estimate rule
 complexity (must be a key returned by `SoleModels.rulemetrics`). |
-| `max_rules` | `Int64` | `-1` | Maximum number of rules in the final decision
+| `max_rules` | `Int` | `-1` | Maximum number of rules in the final decision
 list (excluding the default rule). `-1` means unlimited. |
 | `dns` | `Bool` | `true` | Whether the starting ruleset is built in
 "decision-node-set" mode (one rule per branch/leaf) rather than per-path. |
@@ -248,7 +248,7 @@ struct InTreesConfig{T,S} <: AbstractConfig
         rule_selection::T=nothing,
         post_process::S=nothing,
         complexity_metric::Symbol=:natoms,
-        max_rules::Int64=0,
+        max_rules::Int=0,
         dns::Bool=true,
         rng::AbstractRNG=Random.TaskLocalRNG()
     ) where {

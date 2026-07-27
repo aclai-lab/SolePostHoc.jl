@@ -120,8 +120,8 @@ function intrees(
     # Extract rules from model
     listrules_kwargs = (use_shortforms=true, normalize=false)
     set = isensemble(model) ?
-          _starterruleset(model; listrules_kwargs...) :
-          listrules(model; listrules_kwargs...)
+        _starterruleset(model; listrules_kwargs...) :
+        listrules(model; listrules_kwargs...)
 
     # prune rules if enabled
     get_prune_rules(config) && (set = _prune_ruleset(set, X, y, config))

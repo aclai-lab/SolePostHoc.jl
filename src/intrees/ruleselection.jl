@@ -16,6 +16,13 @@ function ruleselection(
     X::AbstractInterpretationSet,
     y::AbstractVector{<:SoleModels.Label}
 ) where {T<:CBC,S,O}
+    n_subfeatures = get_nsubfeatures(config)
+    n_subfeatures == 0 &&
+        (config.rule_selection.nsubfeatures = Int(floor(length(set) / 2)))
+    max_depth = get_max_depth(config)
+    max_depth == 0 &&
+        (config.rule_selection.max_depth = typemax(max_depth))
+    
     n_rules = length(set)
     metrics = Matrix{Float64}(undef, n_rules, 3)
     checkmasks = Vector{BitVector}(undef, n_rules)
