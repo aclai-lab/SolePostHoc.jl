@@ -136,7 +136,7 @@ function _stel(
 
         # compute remaining instances
         idx_remaining = _is_true_antecedent(antecedent(ruleset[idx_best])) ?
-            Int64[] :
+            Int[] :
             findall(.!evaluaterule(ruleset[idx_best], X, y)[:checkmask,])
 
         # exit condition

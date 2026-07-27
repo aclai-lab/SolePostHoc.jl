@@ -11,9 +11,12 @@ using SoleLogics
 using SoleLogics: Atom, LeftmostConjunctiveForm
 using SoleLogics: AbstractInterpretationSet, BooleanTruth
 
+using SoleData
+using SoleData: scalarlogiset
+
 
 using SoleModels
-using SoleModels: AbstractModel, Rule, antecedent, consequent, info
+using SoleModels: Label, AbstractModel, Rule, antecedent, consequent, info
 using SoleModels: rulemetrics, bestguess, evaluaterule
 using SoleModels: DecisionList, ConstantModel, isensemble, listrules
 using SoleModels: RuleExtractor
@@ -21,6 +24,7 @@ using SoleModels: MultiFormula, modforms
 
 abstract type AbstractConfig end
 abstract type AbstractRuleSelection end
+abstract type AbstractPostPruning end
 
 include("config.jl")
 include("pruning.jl")
@@ -108,11 +112,11 @@ See also
 [`rulemetrics`](@ref).
 """
 function intrees(
-    config::InTreesConfig{T},
+    config::InTreesConfig{T,S},
     model::AbstractModel,
     X::AbstractInterpretationSet,
-    y::AbstractVector{<:SoleModels.Label}
-) where T
+    y::AbstractVector{<:Label}
+) where {T,S}
     # Extract rules from model
     listrules_kwargs = (use_shortforms=true, normalize=false)
     set = isensemble(model) ?
@@ -126,29 +130,25 @@ function intrees(
     T isa Type{Nothing} || (set = rules_selection(config, set, X, y))
 
     # construct final decision list via sequential covering
-    _stel(
-        set, X, y;
-        max_rules=get_max_rules(config),
-        min_coverage=get_min_coverage(config),
-        rule_complexity_metric=get_complexity_metric(config),
-        rng=get_rng(config)
-    )
+    return S isa Type{Nothing} ?
+        DecisionList(set, bestguess(y; suppress_parity_warning=true)) :
+        post_pruning(config, set, X, y)
 end
 
 intrees(
     config::InTreesConfig,
     X::AbstractInterpretationSet,
-    y::AbstractVector{<:SoleModels.Label},
+    y::AbstractVector{<:Label},
     model::AbstractModel
 ) = intrees(config, model, X, y)
 
 intrees(config::InTreesConfig, m, X::AbstractDataFrame, y) =
-    intrees(config, m, SoleData.scalarlogiset(X; allow_propositional=true), y)
+    intrees(config, m, scalarlogiset(X; allow_propositional=true), y)
 
 function intrees(
     model::AbstractModel,
     X,
-    y::AbstractVector{<:SoleModels.Label};
+    y::AbstractVector{<:Label};
     kwargs...
 )
     config = InTreesConfig(; kwargs...)

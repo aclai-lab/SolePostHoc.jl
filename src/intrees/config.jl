@@ -199,9 +199,10 @@ cfg = InTreesConfig(
 See also: [`intrees`](@ref), [`RuleExtractor`](@ref), [`PruningConfig`](@ref)
 """
 
-struct InTreesConfig{T} <: AbstractConfig
+struct InTreesConfig{T,S} <: AbstractConfig
     pruning::PruningConfig
     rule_selection::Union{Nothing,AbstractRuleSelection}
+    post_pruning::Union{Nothing,AbstractPostPruning}
     complexity_metric::Symbol
     max_rules::UInt32
     min_coverage::Float32
@@ -211,12 +212,16 @@ struct InTreesConfig{T} <: AbstractConfig
     function InTreesConfig(;
         pruning::PruningConfig=PruningConfig(),
         rule_selection::T=nothing,
+        post_pruning::S=nothing,
         complexity_metric::Symbol=:natoms,
         max_rules::Int64=0,
         min_coverage::Float64=0.01,
         dns::Bool=true,
         rng::AbstractRNG=Random.TaskLocalRNG()
-    ) where {T<:Union{Nothing,AbstractRuleSelection}}
+    ) where {
+        T<:Union{Nothing,AbstractRuleSelection},
+        S<:Union{Nothing,AbstractPostPruning}
+    }
         # validate non-negative parameters
         if min_coverage < 0.0
             throw(ArgumentError(
@@ -225,9 +230,10 @@ struct InTreesConfig{T} <: AbstractConfig
             ))
         end
 
-        new{T}(
+        new{T,S}(
             pruning,
             rule_selection,
+            post_pruning,
             complexity_metric,
             max_rules,
             min_coverage,
@@ -310,46 +316,46 @@ Return the denominator floor used in the pruning decay metric stored in `r`.
 
 # ---------------------------------------------------------------------------- #
 """
-    get_cbc_threshold(r::InTreesConfig{T}) where {T<:CBC}
+    get_cbc_threshold(r::InTreesConfig{T,S}) where {T<:CBC,S}
         -> Float32
 
 Return the minimum normalized feature importance required by CBC selection,
 stored in `r`.
 """
-@inline get_threshold(r::InTreesConfig{T}) where {T<:CBC} =
+@inline get_threshold(r::InTreesConfig{T,S}) where {T<:CBC,S} =
     r.rule_selection.threshold
 
 """
-    get_ntrees(r::InTreesConfig{T}) where {T<:CBC}
+    get_ntrees(r::InTreesConfig{T,S}) where {T<:CBC,S}
         -> UInt32
 
 Return the number of trees in the CBC random forest stored in `r`.
 """
-@inline get_ntrees(r::InTreesConfig{T}) where {T<:CBC} =
+@inline get_ntrees(r::InTreesConfig{T,S}) where {T<:CBC,S} =
     r.rule_selection.ntrees
 
 """
-    get_nsubfeatures(r::InTreesConfig{T}) where {T<:CBC}
+    get_nsubfeatures(r::InTreesConfig{T,S}) where {T<:CBC,S}
         -> UInt32
 
 Return the number of candidate features per split of the CBC random forest,
 stored in `r`.
 """
-@inline get_nsubfeatures(r::InTreesConfig{T}) where {T<:CBC} =
+@inline get_nsubfeatures(r::InTreesConfig{T,S}) where {T<:CBC,S} =
     r.rule_selection.nsubfeatures
 
 """
-    get_partial_sampling(r::InTreesConfig{T}) where {T<:CBC} -> Float32
+    get_partial_sampling(r::InTreesConfig{T,S}) where {T<:CBC,S} -> Float32
 
 Return the per-tree sampling fraction of the CBC random forest stored in `r`.
 """
-@inline get_partial_sampling(r::InTreesConfig{T}) where {T<:CBC} =
+@inline get_partial_sampling(r::InTreesConfig{T,S}) where {T<:CBC,S} =
     r.rule_selection.partial_sampling
 
 """
-    get_max_depth(r::InTreesConfig{T}) where {T<:CBC} -> UInt32
+    get_max_depth(r::InTreesConfig{T,S}) where {T<:CBC,S} -> UInt32
 
 Return the maximum depth of each tree in the CBC random forest stored in `r`.
 """
-@inline get_max_depth(r::InTreesConfig{T}) where {T<:CBC} =
+@inline get_max_depth(r::InTreesConfig{T,S}) where {T<:CBC,S} =
     r.rule_selection.max_depth
