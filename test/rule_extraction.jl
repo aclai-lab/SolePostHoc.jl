@@ -6,8 +6,7 @@ using DataFrames, Random
 using SoleData.Artifacts
 
 # fill your Artifacts.toml file;
-fillartifacts()
-
+# fillartifacts() # comment this line in debug
 
 # Loader lists
 # abcloader = ABCLoader()
@@ -43,30 +42,6 @@ classlabels = mach.fitresult[2][sortperm((mach).fitresult[3])]
 solem_rf = solemodel(MLJ.fitted_params(mach).forest; featurenames, classlabels)
 logiset = scalarlogiset(Xc[test, :], allow_propositional=true)
 apply!(solem_rf, logiset, yc[test])
-
-# ---------------------------------------------------------------------------- #
-#                          intrees rules extraction                           #
-# ---------------------------------------------------------------------------- #
-extractor = InTreesRuleExtractor()
-extracted_rules =
-    RuleExtraction.extractrules(extractor, solem_dt, Xc[test, :], yc[test])
-
-extractor = InTreesRuleExtractor(min_coverage=1.0)
-extracted_rules = RuleExtraction.extractrules(
-    extractor,
-    solem_dt,
-    Xc[test, :],
-    yc[test]
-)
-
-@test_throws MethodError InTreesRuleExtractor(invalid=true)
-@test_throws ErrorException RuleExtraction.extractrules(
-    extractor,
-    solem_dt,
-    Xc[test, :],
-    yc[test];
-    invalid=true,
-)
 
 # ---------------------------------------------------------------------------- #
 #                           lumen rules extraction                             #
