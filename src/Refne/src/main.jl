@@ -113,10 +113,10 @@ function refne(
         rng=seed,
     )
 
-    println(model)
+    #println(model)
 
     f = solemodel(model)
-    println(f)
+    #println(f)
 
     return f
 end
