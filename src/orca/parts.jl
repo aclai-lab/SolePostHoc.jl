@@ -26,7 +26,7 @@ The helper `_segment` resolves the correct slice for each stage at runtime.
 - `core`         – evolutionary optimisation of the bitvector
 """
 
-
+import Random
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -433,8 +433,8 @@ function evaluate_bitvector(bitvec::BitVector, n_trees::Int,
         selected_forest, presence_mask = first_part(n_trees, original_f, bitvec, active_parts)
 
         # Edge-case: if no tree was selected the forest is useless → maximum penalty
-        if !any(presence_mask)
-            return 1.0, max_bits
+        if isempty(selected_forest.models)
+            return 1.0, sum(bitvec)
         end
     else
         # Stage 1 skipped: keep all trees
@@ -509,6 +509,7 @@ The fitness to minimise is:
 - `n_generations`   : Number of GA iterations               (default: 100).
 - `penalty_weight`  : Weight of the compression penalty     (default: 0.3).
 - `active_parts`    : Which stages to run — any non-empty subset of {1,2,3} (default: [1,2,3]).
+- `rng`             : Random number generator for reproducibility (default: `Random.default_rng()`).
 
 # Returns
 - `best_bitvector` : The winning `BitVector` found by the GA.
@@ -522,12 +523,7 @@ function core(
         population_size::Int      = 50,
         n_generations::Int        = 100,
         penalty_weight::Float64   = 0.3,
-        active_parts::Vector{Int} = [1,2,3],
-        seed::Union{Int, Nothing} = nothing)
-
-    if !isnothing(seed)
-        Random.seed!(seed)
-    end
+        active_parts::Vector{Int} = [1,2,3])
 
     # The bitvector only contains segments for the active stages
     n_bits = length(active_parts) * n_trees
@@ -550,7 +546,7 @@ function core(
     end
 
     # ── Initial population: random bitvectors ────────────────────────────────
-    initial_population = [BitVector(rand(Bool, n_bits)) for _ in 1:population_size]
+    initial_population = [BitVector(rand(rng, Bool, n_bits)) for _ in 1:population_size]
 
     # ── GA configuration ─────────────────────────────────────────────────────
     algo = GA(
@@ -563,8 +559,9 @@ function core(
     opts = Evolutionary.Options(
         iterations = n_generations,
         show_trace = true,
-        show_every = max(1, n_generations ÷ 10)   # print ~10 progress lines
-    )
+        show_every = max(1, n_generations ÷ 10),  # print ~10 progress lines
+        rng        = rng
+        )
 
     # ── Run optimisation ─────────────────────────────────────────────────────
     result = Evolutionary.optimize(fitness_fn, initial_population, algo, opts)

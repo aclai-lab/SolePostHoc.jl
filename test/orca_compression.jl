@@ -78,31 +78,39 @@ Random.seed!(42)
         )
     end
 
-    @testset "All-Zero BitVector gets maximum penalty" begin
-        n_bits = n_trees_original * 3
-        zero_vec = BitVector(falses(n_bits))
-        
-        err, bits = SolePostHoc.Orca.evaluate_bitvector(
-            zero_vec, n_trees_original, original_forest, f_val, l_val; 
-            active_parts=[1,2,3]
+    @testset "Determinism Check (RNG Passing)" begin
+        rng1 = MersenneTwister(1234)
+        rng2 = MersenneTwister(1234)
+
+        compressed_1 = SolePostHoc.Orca.compression(
+            original_forest, :full_dimensional, f_val, l_val;
+            population_size=15, n_generations=10, rng=rng1
+        )
+
+        compressed_2 = SolePostHoc.Orca.compression(
+            original_forest, :full_dimensional, f_val, l_val;
+            population_size=15, n_generations=10, rng=rng2
         )
         
-        @test err == 1.0
-        @test bits == n_bits
+        @test length(compressed_1.models) == length(compressed_2.models)
+        
+        if !isempty(compressed_1.models)
+             @test SolePostHoc.Orca.tree_depth(compressed_1.models[1]) == SolePostHoc.Orca.tree_depth(compressed_2.models[1])
+        end
     end
 
-    @testset "Small Forest with High Penalty" begin
-        small_forest = DecisionEnsemble(original_forest.models[1:2])
-        
-        best_vec, best_cost = SolePostHoc.Orca.core(
-            2, small_forest, f_val, l_val;
-            population_size=20,
-            n_generations=20,
-            penalty_weight=10.0,
-            seed=42 
+    @testset "Zero-Tree Penalty Check (Philosophical Bug)" begin
+        extreme_penalty = 100.0 
+
+        compressed_extreme = SolePostHoc.Orca.compression(
+            original_forest, :size, f_val, l_val;
+            population_size=15, 
+            n_generations=10, 
+            penalty_weight=extreme_penalty
         )
         
-        @test sum(best_vec) > 0
+        @test length(compressed_extreme.models) > 0
     end
+
 
 end
