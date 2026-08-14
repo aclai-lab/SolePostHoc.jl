@@ -26,7 +26,7 @@ The helper `_segment` resolves the correct slice for each stage at runtime.
 - `core`         – evolutionary optimisation of the bitvector
 """
 
-
+import Random
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -80,6 +80,11 @@ function first_part(n_trees, original_f, original_vec, active_parts=[1,2,3])
     # Extract the presence-segment bits: each bit indicates whether the
     # corresponding tree should be included (1) or excluded (0) from the new forest
     presence_mask = original_vec[_segment(1, n_trees, active_parts)]
+
+    if !any(presence_mask)
+
+        return original_f, presence_mask
+    end
 
     # Keep only the models (SoleTrees) whose presence bit is 1
     remaining_trees = original_f.models[presence_mask]
@@ -421,6 +426,8 @@ function evaluate_bitvector(bitvec::BitVector, n_trees::Int,
                              l_val::Vector{String};
                              active_parts::Vector{Int} = [1,2,3])
 
+    max_bits = length(bitvec)
+
     # ── Stage 1: tree selection ───────────────────────────────────────────────
     if 1 in active_parts
         selected_forest, presence_mask = first_part(n_trees, original_f, bitvec, active_parts)
@@ -437,8 +444,13 @@ function evaluate_bitvector(bitvec::BitVector, n_trees::Int,
 
     # ── Stage 2: tree pruning ─────────────────────────────────────────────────
     if 2 in active_parts
-        pruned_forest, _target_depth, _depth_mask =
+        pruned_forest, _target_depth, depth_mask =
             second_part(n_trees, presence_mask, original_f, bitvec, active_parts)
+
+        if !any(presence_mask .& depth_mask)
+            return 1.0, max_bits
+        end
+
     else
         # Stage 2 skipped: build a forest from the kept trees (no pruning)
         kept_indices  = findall(presence_mask)
@@ -447,8 +459,13 @@ function evaluate_bitvector(bitvec::BitVector, n_trees::Int,
 
     # ── Stage 3: alphabet modification ───────────────────────────────────────
     if 3 in active_parts
-        final_forest, _alphabet_table, _alphabet_mask =
+        final_forest, _alphabet_table, alphabet_mask =
             third_part(n_trees, presence_mask, pruned_forest, bitvec, active_parts)
+    
+        if !any(presence_mask .& alphabet_mask)
+            return 1.0, max_bits
+        end
+
     else
         # Stage 3 skipped: use as-is 
         final_forest = pruned_forest
@@ -492,6 +509,7 @@ The fitness to minimise is:
 - `n_generations`   : Number of GA iterations               (default: 100).
 - `penalty_weight`  : Weight of the compression penalty     (default: 0.3).
 - `active_parts`    : Which stages to run — any non-empty subset of {1,2,3} (default: [1,2,3]).
+- `rng`             : Random number generator for reproducibility (default: `Random.default_rng()`).
 
 # Returns
 - `best_bitvector` : The winning `BitVector` found by the GA.
@@ -528,7 +546,7 @@ function core(
     end
 
     # ── Initial population: random bitvectors ────────────────────────────────
-    initial_population = [BitVector(rand(Bool, n_bits)) for _ in 1:population_size]
+    initial_population = [BitVector(rand(rng, Bool, n_bits)) for _ in 1:population_size]
 
     # ── GA configuration ─────────────────────────────────────────────────────
     algo = GA(
@@ -541,8 +559,9 @@ function core(
     opts = Evolutionary.Options(
         iterations = n_generations,
         show_trace = true,
-        show_every = max(1, n_generations ÷ 10)   # print ~10 progress lines
-    )
+        show_every = max(1, n_generations ÷ 10),  # print ~10 progress lines
+        rng        = rng
+        )
 
     # ── Run optimisation ─────────────────────────────────────────────────────
     result = Evolutionary.optimize(fitness_fn, initial_population, algo, opts)

@@ -21,6 +21,7 @@ using SoleLogics
 using StatsBase: mode
 using Evolutionary
 using DataFrames
+using Random
 
 export compression
 
@@ -35,15 +36,16 @@ include("parts.jl")
 Run the compression pipeline on the inserted forest.
 
 ## Keyword arguments
-| Name              | Default   | Description                                                 |
-|-------------------|-----------|-------------------------------------------------------------|
-| `original_f`      | required  | The random forest that will be optimized                    |
-| `mode`            | required  | The stages of the compression pipeline that will be done    |
-| `f_val`           | required  | The features matrix that will be used to optimize the forest|
-| `l_val`           | required  | The labels vector that will be used to optimize the forest  |
-| `population_size` | 50        | GA population size                                          |
-| `n_generations`   | 100       | GA iterations                                               |
-| `penalty_weight`  | 0.3       | Compression-vs-accuracy trade-off for GA fitness            |
+| Name              | Default                | Description                                                 |
+|-------------------|------------------------|-------------------------------------------------------------|
+| `original_f`      | required               | The random forest that will be optimized                    |
+| `mode`            | required               | The stages of the compression pipeline that will be done    |
+| `f_val`           | required               | The features matrix that will be used to optimize the forest|
+| `l_val`           | required               | The labels vector that will be used to optimize the forest  |
+| `population_size` | 50                     | GA population size                                          |
+| `n_generations`   | 100                    | GA iterations                                               |
+| `penalty_weight`  | 0.3                    | Compression-vs-accuracy trade-off for GA fitness            |
+| `rng`             | `Random.default_rng()` | Random number generator for reproducible results            |
 
 ## `mode` examples
 - `[:size]`             – tree selection only (no pruning, no alhabet modification)
@@ -69,7 +71,8 @@ function compression(
         l_val::Vector{String};
         population_size::Int      = 50,
         n_generations::Int        = 100,
-        penalty_weight::Float64   = 0.3)
+        penalty_weight::Float64   = 0.3,
+        rng::AbstractRNG          = Random.default_rng())
 
 
     # ── Validate parts_to_run ─────────────────────────────────────────────────
@@ -100,7 +103,8 @@ function compression(
         population_size = population_size,
         n_generations   = n_generations,
         penalty_weight  = penalty_weight,
-        active_parts    = parts_to_run
+        active_parts    = parts_to_run,
+        rng               = rng
     )
 
 

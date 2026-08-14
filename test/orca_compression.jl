@@ -42,7 +42,8 @@ Random.seed!(42)
     @testset "Mode: :size (Tree Selection)" begin
         compressed_f = SolePostHoc.Orca.compression(
             original_forest, :size, f_val, l_val;
-            population_size=10, n_generations=5
+            population_size=10, n_generations=5,
+            seed=42 
         )
         
         @test compressed_f isa DecisionEnsemble
@@ -52,7 +53,8 @@ Random.seed!(42)
     @testset "Mode: :depth (Tree Pruning)" begin
         compressed_f = SolePostHoc.Orca.compression(
             original_forest, :depth, f_val, l_val;
-            population_size=10, n_generations=5
+            population_size=10, n_generations=5,
+            seed=42 
         )
         
         @test compressed_f isa DecisionEnsemble
@@ -62,7 +64,8 @@ Random.seed!(42)
     @testset "Mode: :full_dimensional (Full Pipeline)" begin
         compressed_f = SolePostHoc.Orca.compression(
             original_forest, :full_dimensional, f_val, l_val;
-            population_size=10, n_generations=5
+            population_size=10, n_generations=5,
+            seed=42 
         )
         
         @test compressed_f isa DecisionEnsemble
@@ -74,4 +77,40 @@ Random.seed!(42)
             original_forest, :modalita_inesistente, f_val, l_val
         )
     end
+
+    @testset "Determinism Check (RNG Passing)" begin
+        rng1 = MersenneTwister(1234)
+        rng2 = MersenneTwister(1234)
+
+        compressed_1 = SolePostHoc.Orca.compression(
+            original_forest, :full_dimensional, f_val, l_val;
+            population_size=15, n_generations=10, rng=rng1
+        )
+
+        compressed_2 = SolePostHoc.Orca.compression(
+            original_forest, :full_dimensional, f_val, l_val;
+            population_size=15, n_generations=10, rng=rng2
+        )
+        
+        @test length(compressed_1.models) == length(compressed_2.models)
+        
+        if !isempty(compressed_1.models)
+             @test SolePostHoc.Orca.tree_depth(compressed_1.models[1]) == SolePostHoc.Orca.tree_depth(compressed_2.models[1])
+        end
+    end
+
+    @testset "Zero-Tree Penalty Check (Philosophical Bug)" begin
+        extreme_penalty = 100.0 
+
+        compressed_extreme = SolePostHoc.Orca.compression(
+            original_forest, :size, f_val, l_val;
+            population_size=15, 
+            n_generations=10, 
+            penalty_weight=extreme_penalty
+        )
+        
+        @test length(compressed_extreme.models) > 0
+    end
+
+
 end
