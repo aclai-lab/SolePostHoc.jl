@@ -25,19 +25,15 @@ function bellatrex(
     rng::AbstractRNG = MersenneTwister(1),
     kwargs...,
 )
+    isensemble(m) || error("`bellatrex` requires an ensemble model.")
+
     ########################################################################################
     # Extract rules from each tree, obtain full ruleset
     ########################################################################################
     ftrees = trees(m)
     ndatasetinstances = ninstances(X)
     final_predictions = []
-    ruleset = begin
-        if isensemble(m)
-            unique([listrules(tree; use_shortforms = true) for tree in ftrees])
-        else
-            listrules(model)
-        end
-    end
+    ruleset = unique([listrules(tree; use_shortforms = true) for tree in ftrees])
 
     # 1) For each instance in X, we would extract the most adaptive rules for it
     for idx = 1:ndatasetinstances
