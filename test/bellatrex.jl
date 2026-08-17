@@ -1,23 +1,35 @@
-pwd()
-Pkg.activate()
-Pkg.add("PyCall")
-
-using PyCall
-@pyimport bellatrex
+using Test
+using SoleModels
+using SoleData
 using SolePostHoc
+using DataFrames
 
+@testset "BELLATREX" begin
+    # 1. Non-ensemble model (single DecisionTree)
+    t1 = SoleModels.DecisionTree(LeafModel("classA"))
+    t2 = SoleModels.DecisionTree(LeafModel("classB"))
+    df = DataFrame(feature1 = [1.0, 2.0], feature2 = [3.0, 4.0])
+    X = scalarlogiset(df, allow_propositional=true)
+    Y = ["classA", "classB"]
 
-const req_py_pkgs = ["bellatrex"]
-const fs = PyNULL()
+    @test !isensemble(t1)
 
-function __init__()
-    pypkgs = getindex.(PyCall.Conda.parseconda(`list`, PyCall.Conda.ROOTENV), "name")
-    needinstall = !all(p -> in(p, pypkgs), req_py_pkgs)
-
-    if (needinstall)
-        PyCall.Conda.pip_interop(true, PyCall.Conda.ROOTENV)
-        PyCall.Conda.add(req_py_pkgs)
+    # Regression test for Issue #95: bellatrex on a non-ensemble model must refuse with a clear error
+    # (previously raised UndefVarError: model not defined or MethodError on trees(m) before isensemble guard)
+    @test_throws ErrorException bellatrex(t1, X, Y)
+    try
+        bellatrex(t1, X, Y)
+    catch err
+        @test err isa ErrorException
+        @test contains(err.msg, "bellatrex")
+        @test contains(err.msg, "ensemble")
     end
 
-    copy!(fs, pyimport_conda("bellatrex.BellatrexExplain", "bellatrex"))
+    # Also test via extractrules interface with BellatrexRuleExtractor
+    @test_throws ErrorException extractrules(BellatrexRuleExtractor(), t1, X, Y)
+
+    # 2. Ensemble model (DecisionForest)
+    forest = SoleModels.DecisionForest([t1, t2])
+    @test isensemble(forest)
+    @test trees(forest) == [t1, t2]
 end
