@@ -175,4 +175,17 @@ function extractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
     return dsrulecosiplus
 end
 
+#===========================================================================================
+                                        BELLATREX
+===========================================================================================#
+export bellatrex, BellatrexRuleExtractor
+include("bellatrex.jl")
+
+"""$(_get_rule_extractor_docstring("BellatrexRuleExtractor", bellatrex))"""
+struct BellatrexRuleExtractor <: RuleExtractor end
+
+function extractrules(::BellatrexRuleExtractor, m, args...; kwargs...)
+    return bellatrex(m, args...; kwargs...)
+end
+
 end
