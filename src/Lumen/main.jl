@@ -14,8 +14,10 @@ using IterTools
 using ABC_jll
 
 include("config.jl")
+include("sequential_minimizer.jl")
 
-export lumen, LumenConfig, LumenResult
+export lumen, LumenConfig, LumenResult, lumen_sequential
+
 
 const Operators = Union{typeof(<),typeof(>),typeof(≤),typeof(≥)}
 const Float = Union{Float32,Float64}
@@ -608,7 +610,7 @@ function _truths_by_thresholds(thresholds::Vector{<:Float})
     ntruths = length(thresholds)
     truths = Vector{BitVector}(undef, ntruths + 1)
 
-    @inbounds for i = 1:ntruths+1
+    @inbounds for i = 1:(ntruths+1)
         truths[i] = BitVector(undef, ntruths)
         val = 2^(i - 1) - 1
         for j = 1:ntruths
@@ -859,8 +861,8 @@ function _product_columntable(
 
     names = Tuple(featurenames)
     cols = ntuple(j -> _ProductColumn{T,typeof(thrs_with_p)}(
-            thrs_with_p, lens, strides, j, nrows
-        ), n)
+        thrs_with_p, lens, strides, j, nrows
+    ), n)
 
     return NamedTuple{names}(cols)
 end
@@ -996,7 +998,7 @@ struct ExtractRulesData{
         # -------------------------------------------------------------------- #
         let unsupported = unique(
                 op for op in get_operator.(atoms)
-                if op ∉ _supported_operators
+                       if op ∉ _supported_operators
             )
             isempty(unsupported) || throw(ArgumentError(
                 "Only '<', '≥', '>', '≤' operators are currently supported. " *
@@ -1423,7 +1425,7 @@ Requires at least two terms to perform any pruning; single-term inputs are
 returned immediately.
 """
 function _refine_dnf(
-    terms::Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom},SyntaxStructure}}
+    terms
 )
     length(terms) ≤ 1 && return terms
 
@@ -1432,7 +1434,7 @@ function _refine_dnf(
     # find terms not strictly dominated by any other term
     keep_mask = map(enumerate(all_bounds)) do (i, bounds_i)
         !any(j -> i ≠ j && SD.strictly_dominates(
-                all_bounds[j], bounds_i), eachindex(all_bounds))
+            all_bounds[j], bounds_i), eachindex(all_bounds))
     end
 
     kept_terms = terms[keep_mask]
