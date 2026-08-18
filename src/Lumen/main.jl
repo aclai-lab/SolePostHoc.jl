@@ -475,7 +475,7 @@ end
 # ---------------------------------------------------------------------------- #
 """
     _extract_atoms_bfs_order(tree::SM.AbstractModel)
-        -> Vector{SL.Atom{SD.AbstractCondition}}
+        -> Vector{SL.Atom{SD.ScalarCondition}}
 
 Traverse a decision-tree model in breadth-first order and return the antecedent
 atoms encountered at each `Branch` node.
@@ -487,10 +487,22 @@ Only `SM.Branch` nodes contribute atoms; leaf nodes are silently skipped.
 - `tree::SM.AbstractModel`: Root of the decision tree (or sub-tree) to traverse.
 
 # Returns
-- `Vector{SL.Atom{SD.AbstractCondition}}`: Atoms in BFS visitation order.
+- `Vector{SL.Atom{SD.ScalarCondition}}`: Atoms in BFS visitation order, with a
+  CONCRETE element type (required so the result can be passed directly to
+  `Vector{<:Atom{<:ScalarCondition}}`-typed functions like
+  `_take_first_percentage` — see implementation note below).
 """
 function _extract_atoms_bfs_order(tree::SM.AbstractModel)
-    bfs_atoms = SL.Atom{SD.AbstractCondition}[]
+    # NOTE: must be declared with the CONCRETE `ScalarCondition` element type,
+    # not the abstract `AbstractCondition`. Julia's parametric container types
+    # are invariant: `Vector{Atom{AbstractCondition}}` is NOT a subtype of
+    # `Vector{<:Atom{<:ScalarCondition}}`, no matter what concrete elements
+    # are `push!`-ed into it at runtime. Declaring it abstract here silently
+    # poisons every downstream call that dispatches on
+    # `Vector{<:Atom{<:ScalarCondition}}` (e.g. `_take_first_percentage`,
+    # `_atoms_for_feature`), causing a MethodError even though every element
+    # inside is, in fact, a `ScalarCondition` atom.
+    bfs_atoms = SL.Atom{SD.ScalarCondition}[]
     queue = SM.AbstractModel[tree]
 
     while !isempty(queue)
@@ -978,8 +990,19 @@ struct ExtractRulesData{
         # DecisionList mixes operator families across its rules.
         # -------------------------------------------------------------------- #
         atoms = unique!(_normalize_atom.(if depth < 1.0
+            # NOTE: `init` must be concretely typed `Atom{ScalarCondition}[]`,
+            # NOT `Atom{AbstractCondition}[]`. Even after fixing
+            # `_extract_atoms_bfs_order` to return a concretely-typed vector,
+            # an abstractly-typed `init` here would still cause `vcat` to
+            # widen (typejoin) the accumulated result back to
+            # `Vector{Atom{AbstractCondition}}`, which would then make the
+            # `_normalize_atom.(...)` broadcast below fail with the same
+            # kind of MethodError (its signature also requires
+            # `Atom{<:ScalarCondition}`). Julia's parametric types are
+            # invariant, so this has to be fixed at every accumulator, not
+            # just at the source.
             mapreduce(
-                vcat, SM.models(model); init=SL.Atom{SD.AbstractCondition}[]
+                vcat, SM.models(model); init=SL.Atom{SD.ScalarCondition}[]
             ) do t
                 all_atoms_bfs = _extract_atoms_bfs_order(t)
                 _take_first_percentage(all_atoms_bfs, depth)

@@ -131,7 +131,15 @@ function _prepare_sequential_context(config::LumenConfig, model::SM.AbstractMode
     depth = get_depth(config)
 
     atoms = unique!(_normalize_atom.(if depth < 1.0
-        mapreduce(vcat, SM.models(model); init=SL.Atom{SD.AbstractCondition}[]) do t
+        # Same fix as in main.jl's `ExtractRulesData`: `init` must be
+        # concretely typed `Atom{ScalarCondition}[]`. `_extract_atoms_bfs_order`
+        # already returns a concretely-typed vector (fixed in main.jl), but an
+        # abstractly-typed `init` here would still widen the vcat'd result via
+        # typejoin back to `Vector{Atom{AbstractCondition}}`, breaking the
+        # `_normalize_atom.(...)` broadcast right below (invariance of
+        # parametric types — this has to be fixed at every accumulator, not
+        # just at the source).
+        mapreduce(vcat, SM.models(model); init=SL.Atom{SD.ScalarCondition}[]) do t
             _take_first_percentage(_extract_atoms_bfs_order(t), depth)
         end
     else
