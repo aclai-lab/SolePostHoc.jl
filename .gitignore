@@ -26,4 +26,4 @@ READMEc.md
 *.lof
 *.lot
 results_sequential_incremental.txt
-test/testseq.jl
+test/newlumen/*

@@ -429,7 +429,25 @@ function _fold_in!(buf::_SeqBuffer, scheme::Symbol, config::LumenConfig, M::Int)
     if !isempty(buf.raw)
         # Old formula (converted back to cube form) + everything new since
         # the last fold, fed to the minimizer as ONE combined table.
-        combined = vcat(_term_to_cube.(buf.terms), buf.raw)
+        #
+        # NOTE: must convert to Vector{Vector{SL.Atom}}, NOT leave it as
+        # whatever `vcat` infers. Julia's parametric types are invariant, so
+        # `vcat(_term_to_cube.(buf.terms), buf.raw)` ends up a `Vector{Any}`
+        # the moment `buf.terms` is empty (its first fold) or broadcast
+        # can't narrow the element type away from `buf.terms`'s own
+        # `Vector{Any}` container type -- even though every element already
+        # IS a concrete `Vector{SL.Atom}` at runtime. This is the exact
+        # invariance pitfall already flagged elsewhere in this file (see the
+        # original `_flush!`'s note about `Vector{SyntaxStructure}`), and
+        # it's what makes `run_minimization` -- which only has methods for
+        # `Vector{Vector{Atom}}`, not `Vector{Any}` -- fail with a
+        # MethodError. `convert` here does an element-wise copy-conversion
+        # (each element is already the right type, so it's just a container
+        # re-type), fixing the eltype back to what `run_minimization` expects.
+        combined = convert(
+            Vector{Vector{SL.Atom}},
+            vcat(_term_to_cube.(buf.terms), buf.raw)
+        )
         minimized = run_minimization(Val(scheme), config, combined)
 
         # REPLACE, don't append: buf.terms now IS the new (hopefully
