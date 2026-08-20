@@ -17,19 +17,13 @@
 #        genuinely different orders.
 #     2. Route each row's derived cube into the buffer of its predicted
 #        class.
-#     3. The moment a class' TOTAL occupancy (its CURRENT minimized formula
-#        `terms` PLUS everything collected since the last fold, `raw`)
-#        reaches the memory budget `M`, minimize immediately: call the
-#        minimizer over `terms ∪ raw`. The result REPLACES the current
-#        formula. Because minimization usually collapses many raw rows into
-#        fewer don't-care terms, this typically pulls the buffer back well
-#        under `M`, so enumeration continues; if `M` is hit again, we fold
-#        again.
-#        NOTE (patch): the trigger is on `length(terms) + length(raw) >= M`,
-#        NOT on `length(raw) >= M` alone. This guarantees the minimizer
-#        never receives more than `M` cubes in one call (previously,
-#        checking `raw` alone let `combined = terms + raw` grow up to
-#        `2M - 1` before folding).
+#     3. The moment a class buffer reaches the memory budget `M`, minimize
+#        immediately: call the minimizer over (that class' CURRENT
+#        minimized formula) + (everything collected since the last such
+#        call). The result REPLACES the current formula. Because
+#        minimization usually collapses many raw rows into fewer
+#        don't-care terms, this typically pulls the buffer back well under
+#        `M`, so enumeration continues; if `M` is hit again, we fold again.
 #     4. If a class' formula still can't be gotten under `M` even after
 #        folding, the whole restart is abandoned (too unlucky an order to
 #        fit the budget).
@@ -363,21 +357,6 @@ running formula yet, zero rows seen.
 """
 _SeqBuffer() = _SeqBuffer(Vector{Vector{SL.Atom}}(), Any[], 0)
 
-"""
-    _occupancy(buf::_SeqBuffer) -> Int
-
-TOTAL occupancy of a class buffer: `terms` (current minimized formula) PLUS
-`raw` (not-yet-folded cubes collected since the last fold).
-
-This is the quantity that is now compared against `M` for deciding when to
-fold (PATCH: previously only `length(buf.raw)` was checked, which let
-`combined = terms + raw`, the actual input handed to the minimizer inside
-`_fold_in!`, grow up to `2M - 1` before a fold was triggered). Centralizing
-it here also keeps `_sequential_pass`'s trigger check and its `room`
-computation for dynamic batch sizing consistent with each other.
-"""
-@inline _occupancy(buf::_SeqBuffer) = length(buf.terms) + length(buf.raw)
-
 
 # ---------------------------------------------------------------------------- #
 #                      generate-and-minimize fold-in logic                     #
@@ -417,11 +396,6 @@ If `buf.raw` is non-empty:
 1. Build `combined = (buf.terms converted back to cubes) ∪ buf.raw` -- i.e.
    the class' current formula PLUS everything collected since the last
    fold, all expressed as cubes.
-   PATCH: thanks to the new trigger in `_sequential_pass` (which now fires
-   on `_occupancy(buf) >= M`, i.e. `length(terms) + length(raw) >= M`,
-   instead of `length(raw) >= M` alone), `combined` is now guaranteed to
-   have at most `M` elements at the moment it reaches this function --
-   previously it could reach up to `2M - 1`.
 2. Run the minimizer (`run_minimization`, dispatching on `scheme`, so this
    is the exact same code path used for both `:abc` and `:mitespresso` --
    no backend-specific logic needed here) over `combined`.
@@ -487,21 +461,7 @@ Run exactly ONE restart: enumerate the whole combination space once, in the
 pseudo-random order given by `LazyPermutation(ctx.n_total; seed)`, routing
 each row's derived cube into the buffer of its predicted class, and folding
 (generate-and-minimize fused, see `_fold_in!`) a class buffer the instant
-its TOTAL occupancy (`terms` + `raw`, see `_occupancy`) reaches `M`.
-
-# PATCH: trigger now on total occupancy, not on `raw` alone
-Previously the fold trigger checked `length(buf.raw) >= M`, ignoring
-`buf.terms`. Since `_fold_in!` builds `combined = terms ∪ raw` and hands
-that whole thing to the minimizer, that meant `combined` could reach up to
-`2M - 1` elements before folding -- i.e. the minimizer could be asked to
-process up to roughly double the intended budget.
-
-Now the trigger is `_occupancy(buf) >= M`, i.e.
-`length(buf.terms) + length(buf.raw) >= M`. This guarantees `combined`
-never exceeds `M` elements at the moment `_fold_in!` is invoked, matching
-the "you stop and call the minimizer once you get close to your memory
-limit" behavior (checking the TOTAL table size, not just the newly
-generated part).
+it reaches `M` raw cubes.
 
 # Batch sizing (decode/apply efficiency, decoupled from the memory budget)
 Decoding one row and calling `apply` on it individually would be far too
@@ -509,23 +469,22 @@ slow, so rows are still decoded and passed to the model in batches. BUT
 unlike a fixed-size chunking scheme, the batch size after the first one is
 computed DYNAMICALLY every iteration as:
 
-    room = M - (TOTAL occupancy of the currently fullest class buffer)
+    room = M - (size of the currently fullest class' raw buffer)
     this_chunk = clamp(min(room, max_apply_batch, rows_left), 1, rows_left)
 
-i.e. "decode as many rows as still comfortably fit before SOME class
-buffer's total occupancy would need folding, but never more than
-`max_apply_batch` (a pure performance cap, unrelated to when folding
-actually happens) and never more than what's left to enumerate". This is
-what avoids "perforare sempre della stessa misura" (always poking a
-fixed-size hole): the batch shrinks as buffers fill up and grows again
-right after a fold frees up room.
+i.e. "decode as many rows as still comfortably fit before SOME class buffer
+would need folding, but never more than `max_apply_batch` (a pure
+performance cap, unrelated to when folding actually happens) and never more
+than what's left to enumerate". This is what avoids "perforare sempre della
+stessa misura" (always poking a fixed-size hole): the batch shrinks as
+buffers fill up and grows again right after a fold frees up room.
 
 Note: `room` is only an upper bound on how much can be decoded before
 POSSIBLY needing a fold -- the actual per-row check
-`_occupancy(buf) >= M` inside the inner loop is still what triggers
-`_fold_in!`. The dynamic batch sizing is purely about not over-decoding
-relative to `M`; it never changes WHEN a fold happens, only how many rows
-get decoded/applied together before that point.
+`length(buf.raw) >= M` inside the inner loop is still what triggers
+`_fold_in!`, exactly as before. The dynamic batch sizing is purely about
+not over-decoding relative to `M`; it never changes WHEN a fold happens,
+only how many rows get decoded/applied together before that point.
 
 # Arguments
 - `config`, `model`: as in `lumen_sequential`.
@@ -534,8 +493,7 @@ get decoded/applied together before that point.
   `run_minimization` via `_fold_in!`.
 - `seed`: seed for this restart's `LazyPermutation` -- different restarts
   pass different seeds here to get genuinely different enumeration orders.
-- `M`: memory budget (max TOTAL occupancy -- `terms` + `raw` -- per class
-  buffer before folding).
+- `M`: memory budget (max raw cubes per class buffer before folding).
 - `max_apply_batch`: performance cap on decode/apply batch size (see
   above) -- NOT a memory-budget parameter.
 
@@ -568,12 +526,11 @@ function _sequential_pass(
     i0 = 0
     while i0 < ctx.n_total
         # --- Dynamic chunk sizing (decode/apply efficiency only) ---------
-        # How full is the fullest class buffer right now, in TOTAL
-        # occupancy (terms + raw)? `room` is how many more rows could be
-        # decoded before SOME buffer would reach M (a per-row check inside
-        # the loop below still does the actual folding trigger -- this is
-        # only about not over-decoding).
-        room = M - maximum(_occupancy(b) for b in buffers; init=0)
+        # How full is the fullest class buffer right now? `room` is how
+        # many more rows could be decoded before SOME buffer would reach M
+        # (a per-row check inside the loop below still does the actual
+        # folding trigger -- this is only about not over-decoding).
+        room = M - maximum(length(b.raw) for b in buffers; init=0)
         this_chunk = clamp(min(room, max_apply_batch, ctx.n_total - i0), 1, ctx.n_total - i0)
 
         # --- Decode `this_chunk` pseudo-random rows, O(1) each ------------
@@ -618,10 +575,9 @@ function _sequential_pass(
             push!(buf.raw, cube)
             buf.n_rows_seen += 1
 
-            # This class' TOTAL occupancy (terms + raw) just hit the memory
-            # budget -- fold NOW (generate-and-minimize fused), before
-            # routing any more rows. PATCH: was `length(buf.raw) >= M`.
-            if _occupancy(buf) >= M
+            # This class' buffer just hit the memory budget -- fold NOW
+            # (generate-and-minimize fused), before routing any more rows.
+            if length(buf.raw) >= M
                 ok &= _fold_in!(buf, scheme, config, M)
             end
         end
@@ -665,14 +621,13 @@ restart produced the smallest total rule set.
       whole combination space.
    b. Run `_sequential_pass`: enumerate in that order, routing each row's
       cube into its predicted class' buffer, and the moment any class
-      buffer's TOTAL occupancy (`terms` + `raw`) reaches `M`, immediately
-      minimize (fold in) -- over that class' CURRENT formula plus
-      everything collected since the last fold -- replacing the formula
-      with the (usually smaller) result. This is exactly what makes it
-      "generate-and-minimize fused" rather than "generate everything, then
-      minimize": the minimizer never sees more than `M` cubes worth of
-      material at once (PATCH: guaranteed now, was up to `2M-1` before),
-      and the running formula itself never exceeds `M` terms either.
+      buffer reaches `M` raw cubes, immediately minimize (fold in) --
+      over that class' CURRENT formula plus everything collected since the
+      last fold -- replacing the formula with the (usually smaller) result.
+      This is exactly what makes it "generate-and-minimize fused" rather
+      than "generate everything, then minimize": the minimizer never sees
+      more than `M` cubes worth of "new" material at once, and the running
+      formula itself never exceeds `M` terms either.
    c. If any class' formula still can't fit under `M` even after folding,
       the whole restart is discarded (`ok = false`) and doesn't count as a
       candidate.
@@ -691,13 +646,12 @@ restart produced the smallest total rule set.
   actually designed around (repeated incremental re-minimization is
   off-label for `:abc`, which wants the whole PLA once).
 - `model::SM.AbstractModel`: the model to extract rules from.
-- `M::Int`: the ONE memory-budget knob. Maximum TOTAL occupancy
-  (`length(terms) + length(raw)`, see `_occupancy`) any single class'
-  buffer may reach before it MUST be folded (generate-and-minimize fused)
-  back down. Replaces what used to be TWO separate knobs (a flush
-  threshold and a results-growth threshold), because folding now replaces
-  the running formula in place instead of letting a separate "results
-  pool" grow across many flushes.
+- `M::Int`: the ONE memory-budget knob. Maximum number of raw cubes any
+  single class' buffer may accumulate before it MUST be folded
+  (generate-and-minimize fused) back down. Replaces what used to be TWO
+  separate knobs (a flush threshold and a results-growth threshold),
+  because folding now replaces the running formula in place instead of
+  letting a separate "results pool" grow across many flushes.
 - `N::Int`: number of independent random-order restarts to try; the
   smallest-total-terms restart (among those that stayed under `M`) is kept.
 - `max_apply_batch::Int`: PURELY a performance cap on how many rows are
