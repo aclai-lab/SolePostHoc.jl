@@ -41,14 +41,6 @@
 #   This is what lets `run_minimization` itself double as the "compaction"
 #   step -- no separate compaction routine is needed.
 #
-#   A note on minimization backends: this scheme is well-suited to Espresso
-#   (`:mitespresso`), which is fine being invoked repeatedly on a formula
-#   that keeps growing/shrinking incrementally (same results as calling it
-#   once on the full table, just marginally slower). ABC (`:abc`) is built
-#   around being handed the *complete* PLA once and doing global synthesis
-#   on it, so repeatedly re-feeding it "old minimized formula + a new
-#   window of rows" is off-label for it, even though the code path is
-#   shared. In practice: use `:mitespresso` for `lumen_sequential`.
 # ============================================================================ #
 
 
@@ -678,6 +670,25 @@ restart produced the smallest total rule set.
 `SM.DecisionSet` built from the best restart's per-class terms, in the same
 shape as `lumen`'s (batch pipeline's) output.
 
+**Type compatibility with `lumen()`**: the returned `DecisionSet`'s rule
+antecedents are constructed with the exact same wide element type
+(`Union{SL.LeftmostConjunctiveForm{SL.Atom{float_type}}, SyntaxStructure}`)
+that `lumen()` itself uses for its `formulas` container, before broadcasting
+`SL.LeftmostDisjunctiveForm.(...)` over it. This is not cosmetic: without it,
+`_SeqBuffer.terms` (a `Vector{Any}` internally, needed so a class' running
+formula can interchangeably hold raw cubes or minimizer output across folds)
+would leak its narrow, runtime-inferred element type into the final
+`LeftmostDisjunctiveForm`, causing it to match the stricter `DNF` type alias
+that `lumen()`'s wider-typed result never matches. That mismatch makes
+`check(::DefaultCheckAlgorithm, ::DNF, ...)` and
+`check(::DefaultCheckAlgorithm, ::LeftmostDisjunctiveForm, ...)` equally
+specific for the same call, and SoleLogics refuses to pick one
+(`MethodError: ... is ambiguous`) -- surfacing downstream, for instance, in
+`SoleModels.evaluaterule`/`calculate_decisionset_accuracy` calls on a
+`lumen_sequential`-produced `DecisionSet`, even though the exact same calls
+work fine on a `lumen()`-produced one. Forcing the wide type here keeps the
+two extractors' outputs structurally interchangeable everywhere downstream.
+
 # Throws
 - `ArgumentError` if `score` is anything other than `:n_terms`, or if `M`
   or `N` is not positive.
@@ -736,8 +747,41 @@ function lumen_sequential(
     # Drop classes that ended up with zero terms (i.e. the model never
     # predicted that class for any enumerated row in the winning restart).
     valid_mask = .!isempty.(best_terms)
-    formulas = best_terms[valid_mask]
     classes = ctx.classnames[valid_mask]
+
+    # ------------------------------------------------------------------ #
+    # IMPORTANT: force the same "wide" element type that `lumen()` uses for
+    # its own `formulas` container
+    # (`Union{LeftmostConjunctiveForm{Atom{float_type}}, SyntaxStructure}`),
+    # instead of letting `SL.LeftmostDisjunctiveForm.(...)` infer a
+    # narrower type from `best_terms`'s runtime elements.
+    #
+    # `_fold_in!` stores each class' running formula in `buf.terms::Vector{Any}`
+    # (needed internally so it can hold either bare cubes or minimizer output
+    # interchangeably across folds). By the time we get here every element is
+    # concretely a `LeftmostConjunctiveForm{Atom}` (or similar), but the
+    # container itself is still `Vector{Any}`.
+    #
+    # If we broadcast `SL.LeftmostDisjunctiveForm.(...)` directly over that,
+    # SoleLogics infers the resulting `LeftmostLinearForm`'s type parameter
+    # from the RUNTIME elements, not from the container's static type --
+    # producing a `LeftmostDisjunctiveForm{LeftmostConjunctiveForm{Atom}}`
+    # that (unlike `lumen()`'s Union-typed result) matches the narrower `DNF`
+    # alias. See the docstring above and `check`-dispatch ambiguity note for
+    # the full explanation of why that alone breaks
+    # `evaluaterule`/`calculate_decisionset_accuracy` downstream.
+    #
+    # Explicitly widening the container's eltype here (mirroring `lumen()`'s
+    # declared `formulas` type) keeps `lumen()` and `lumen_sequential()`
+    # producing bit-for-bit structurally compatible `DecisionSet`s, so
+    # anything downstream behaves identically regardless of which extractor
+    # produced the rules.
+    # ------------------------------------------------------------------ #
+    float_type = get_float_type(config)
+    formulas = Vector{Vector{Union{
+        SL.LeftmostConjunctiveForm{SL.Atom{float_type}},
+        SyntaxStructure
+    }}}(best_terms[valid_mask])
 
     return SM.DecisionSet(
         SM.Rule.(SL.LeftmostDisjunctiveForm.(formulas), classes)
