@@ -15,8 +15,10 @@ using ABC_jll
 
 include("config.jl")
 include("sequential_minimizer.jl")
+include("super_minimizer.jl")
+include("shannon_minimizer.jl")
 
-export lumen, LumenConfig, LumenResult, lumen_sequential
+export lumen, LumenConfig, LumenResult, lumen_sequential, lumen_shannon, super_lumen
 
 
 const Operators = Union{typeof(<),typeof(>),typeof(≤),typeof(≥)}
@@ -48,11 +50,13 @@ See also: [`setup_abc`](@ref), [`lumen`](@ref)
 """
 function setup_espresso()
     # auto setup espresso binary if not specified
-    espressobinary = try
-        joinpath(SD.load(SD.MITESPRESSOLoader()), "espresso")
-    catch e
-        error("Failed to setup espresso binary: $e")
-    end
+    espressobinary = "/Users/perry/espresso/build/./espresso"  # default path for local build
+
+    #try
+    #    joinpath(SD.load(SD.MITESPRESSOLoader()), "espresso")
+    #catch e
+    #    error("Failed to setup espresso binary: $e")
+    #end
 
     # verify that binary exists and is executable
     isfile(espressobinary) ||
@@ -1492,24 +1496,32 @@ applies [`_refine_dnf`](@ref) to remove dominated terms.
 function run_minimization(
     ::Val{:abc},
     extractor::LumenConfig,
-    atoms::Vector{Vector{SL.Atom}}
+    atoms::Vector{Vector{SL.Atom}},
+    universe_conditions::Vector{<:SD.AbstractScalarCondition}
 )
-    # minimized_formula =
-    #     SD.abc_minimize(
-    #         atoms,
-    #         get_binary(extractor);
-    #         fast=1,
-    #         depth=get_depth(extractor),
-    #         float_type=get_float_type(extractor)
-    #     )
-
-    # return _refine_dnf(minimized_formula)
-
     ABC_jll.abc() do binary
         minimized_formula = SD.abc_minimize(
             atoms,
             binary;
-            fast=1,
+            fast=3,
+            depth=get_depth(extractor),
+            float_type=get_float_type(extractor),
+            universe_conditions=universe_conditions,
+        )
+        return refine_dnf(minimized_formula)
+    end
+end
+
+function run_minimization(
+    ::Val{:abc},
+    extractor::LumenConfig,
+    atoms::Vector{Vector{SL.Atom}}
+)
+    ABC_jll.abc() do binary
+        minimized_formula = SD.abc_minimize(
+            atoms,
+            binary;
+            fast=3,
             depth=get_depth(extractor),
             float_type=get_float_type(extractor)
         )
@@ -1537,23 +1549,115 @@ applies [`_refine_dnf`](@ref) to remove dominated terms.
 # Returns
 - Minimized and refined vector of conjunctive terms.
 """
+#=
 function run_minimization(
     ::Val{:mitespresso},
     extractor::LumenConfig,
     atoms::Vector{Vector{SL.Atom}}
-    # TODO mitespresso_kwargs...
 )
+    n_in = length(atoms)
+    binary = get_binary(extractor)
+    println("[run_minimization:mitespresso] INPUT: ", n_in, " atom-vectors, binary=", binary)
+
+    binary === nothing && println("[run_minimization:mitespresso] ⚠ binary is NOTHING — espresso non puo' partire")
+
+    t0 = time()
     minimized_formula =
         SD.espresso_minimize(
             atoms,
-            get_binary(extractor);
+            binary;
             depth=get_depth(extractor),
             float_type=get_float_type(extractor)
         )
+    elapsed = time() - t0
 
-    return _refine_dnf(minimized_formula)
+    refined = _refine_dnf(minimized_formula)
+    println("[run_minimization:mitespresso] OUTPUT: ", length(minimized_formula),
+        " terms pre-refine, ", length(refined), " post-refine (was ", n_in,
+        "), elapsed=", round(elapsed, digits=4), "s")
+    if elapsed < 0.001
+        println("[run_minimization:mitespresso] ⚠ elapsed quasi zero: sospetto no-op")
+    end
+
+    return refined
 end
+=#
 
+# ============================================================================ #
+#  PATCH: run_minimization(::Val{:mitespresso}, ...) accetta offset opzionale  #
+#                                                                              #
+#  Firma ancora "compatibile all'indietro": chi chiama con 3 argomenti (come
+#  fa `lumen()` stesso) ottiene `offset=nothing` -> comportamento IDENTICO a
+#  prima. `super_lumen`'s `_fold_in!` (vedi file successivo) è l'unico
+#  chiamante che passerà `offset` esplicitamente.
+# ============================================================================ #
+
+"""
+    run_minimization(
+        ::Val{:mitespresso},
+        extractor::LumenConfig,
+        atoms::Vector{Vector{SL.Atom}};
+        offset::Union{Nothing,Vector{Vector{SL.Atom}}}=nothing
+    ) -> Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, SyntaxStructure}}
+
+Minimize the DNF formula encoded by `atoms` using the MIT Espresso minimizer.
+
+# `offset` (NEW)
+Cubes CONFIRMED to be off for this call (e.g., in `super_lumen`, cubes
+already routed to OTHER classes' buffers). Forwarded to
+`SD.espresso_minimize(atoms, binary; ..., offset)`, which in turn emits an
+explicit `.type fr` PLA (see `PLA.jl` patch): everything neither in `atoms`
+nor in `offset` is left as an IMPLICIT don't-care, instead of being folded
+into Espresso's default absolute-complement OFF-set. `nothing` (default)
+reproduces the exact previous behavior.
+
+Delegates to `SD.espresso_minimize` with the binary path from `extractor`,
+then applies [`_refine_dnf`](@ref) to remove dominated terms.
+
+# Arguments
+- `extractor::LumenConfig`: Provides the Espresso binary path and depth
+  parameter.
+- `atoms::Vector{Vector{SL.Atom}}`: Per-combination atom lists (the ON-set).
+- `offset`: see above.
+
+# Returns
+- Minimized and refined vector of conjunctive terms.
+"""
+function run_minimization(
+    ::Val{:mitespresso},
+    extractor::LumenConfig,
+    atoms::Vector{Vector{SL.Atom}};
+    offset::Union{Nothing,Vector{Vector{SL.Atom}}}=nothing
+)
+    n_in = length(atoms)
+    n_off = isnothing(offset) ? 0 : length(offset)
+    binary = get_binary(extractor)
+    println("[run_minimization:mitespresso] INPUT: ", n_in, " atom-vectors (ON), ",
+        n_off, " atom-vectors (OFF, explicit), binary=", binary)
+
+    binary === nothing && println("[run_minimization:mitespresso] ⚠ binary is NOTHING — espresso non puo' partire")
+
+    t0 = time()
+    minimized_formula =
+        SD.espresso_minimize(
+            atoms,
+            binary;
+            depth=get_depth(extractor),
+            float_type=get_float_type(extractor),
+            offset=offset
+        )
+    elapsed = time() - t0
+
+    refined = _refine_dnf(minimized_formula)
+    println("[run_minimization:mitespresso] OUTPUT: ", length(minimized_formula),
+        " terms pre-refine, ", length(refined), " post-refine (was ", n_in,
+        "), elapsed=", round(elapsed, digits=4), "s")
+    if elapsed < 0.001
+        println("[run_minimization:mitespresso] ⚠ elapsed quasi zero: sospetto no-op")
+    end
+
+    return refined
+end
 # ---------------------------------------------------------------------------- #
 #                                    lumen                                     #
 # ---------------------------------------------------------------------------- #

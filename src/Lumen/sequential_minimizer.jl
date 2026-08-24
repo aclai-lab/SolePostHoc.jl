@@ -38,6 +38,13 @@
 #        smallest total rule set. There's no guarantee any given restart
 #        finds even a local optimum -- but with a good-enough shuffle across
 #        `N` tries, results tend to land close to one.
+#     6. NEW: once the winning restart is picked, run ONE full-domain,
+#        linear (non-random) verification sweep (`_verify_and_repair_sensitivity`)
+#        that checks every row against its OWN predicted class' current φ,
+#        and repairs any class whose φ fails to cover rows the model
+#        assigns to it (false negatives -- i.e. lost sensitivity), caused
+#        by earlier folds generalizing before they had seen the whole
+#        domain. See the dedicated section below for the full rationale.
 #
 #   Why re-feeding an already-minimized term back into the minimizer is
 #   legal: a DNF term omitting the literal for some feature `f` IS exactly
@@ -45,7 +52,8 @@
 #   minimized term is already a perfectly valid "cube" and can be handed
 #   back to the minimizer, mixed with brand-new raw cubes, in the next call.
 #   This is what lets `run_minimization` itself double as the "compaction"
-#   step -- no separate compaction routine is needed.
+#   step -- no separate compaction routine is needed. It is also what makes
+#   the repair pass' targeted re-folds legal for exactly the same reason.
 #
 # ============================================================================ #
 
@@ -640,6 +648,274 @@ end
 
 
 # ---------------------------------------------------------------------------- #
+#                    sensitivity verification / repair pass                    #
+# ---------------------------------------------------------------------------- #
+#
+#   WHY THIS EXISTS
+#   ----------------
+#   Each intermediate `_fold_in!` during `_sequential_pass` minimizes a
+#   class' buffer having seen only the rows enumerated SO FAR for that
+#   class. At that moment the minimizer treats "not yet seen" as "don't
+#   care" -- but part of that unseen space will later turn out to belong to
+#   OTHER classes. A term folded early can therefore end up more general
+#   than it should be, and once frozen into `buf.terms` it is only ever
+#   re-minimized together with new raw cubes, never re-checked against the
+#   rest of the domain. The over-generalized term can end up overlapping a
+#   region that truly belongs to another class -- and when the final
+#   `DecisionSet` is evaluated, THAT other class loses sensitivity (its
+#   instances get contended/misclassified by the too-broad rule).
+#
+#   This pass runs ONCE, after the winning restart has been picked, over
+#   the FULL combination space (linear order this time -- no permutation
+#   needed, we want total coverage, not a random sample), and asks, for
+#   every row: "does this row's OWN predicted class' current φ actually
+#   cover it?" Any row where the answer is no is a false negative for that
+#   class -- exactly what erodes sensitivity -- and gets fed back into a
+#   targeted repair fold for that class only.
+#
+#   SCOPE: this only targets false negatives (a class' φ failing to cover
+#   rows the model assigns to it), which is what "losing sensitivity"
+#   means. It does NOT attempt to fix precision/specificity issues (a
+#   class' φ wrongly covering rows that belong to another class) -- that is
+#   a different failure mode and was not what was asked for here.
+#
+#   COST: one extra O(n_total) sweep with batched model-apply, same order
+#   of cost as a single restart's enumeration (actually cheaper, since it
+#   uses a plain linear index instead of `LazyPermutation`'s cycle-walking).
+#   Against `N` restarts already paid for, this is a ~1/N overhead -- and it
+#   is still fully batched/streamed, so it does not reintroduce the
+#   "materialize the whole product space" problem this file exists to
+#   avoid.
+#
+
+"""
+    _cube_to_formula(cube::Vector{<:SL.Atom}) -> SyntaxStructure
+
+Wrap a bare cube (vector of atoms/literals) into the conjunctive
+`SyntaxStructure` shape needed for `SL.check`. This is the same shape
+`run_minimization` normally hands back for a single term; used here only
+to check individual raw/repair cubes without invoking the minimizer.
+"""
+_cube_to_formula(cube::Vector{<:SL.Atom}) = SL.LeftmostConjunctiveForm(cube)
+
+"""
+    _class_formula(terms::Vector{Any}, float_type::Type) -> Union{Nothing,SyntaxStructure}
+
+Build the disjunctive formula for one class' current φ (`buf.terms`, a
+mix of bare cubes and minimizer-output elements -- see `_fold_in!`) so it
+can be checked against a logiset with `SL.check`, exactly the way the
+final `DecisionSet` will be checked downstream.
+
+Returns `nothing` for a class with zero terms (no row was ever routed to
+it in the winning restart) -- callers must treat "no formula" as "covers
+nothing", not as an error.
+
+# PATCH: forced wide element type (fixes a `check` dispatch ambiguity)
+If `conjunctions` is left to whatever type Julia infers from the list
+comprehension below, every element ends up concretely typed as e.g.
+`LeftmostConjunctiveForm{Atom{float_type}}` (they all came out of the same
+minimizer / `_cube_to_formula` path). `SL.LeftmostDisjunctiveForm(...)`
+then infers a NARROW type parameter from those concrete runtime elements,
+producing a `LeftmostDisjunctiveForm{LeftmostConjunctiveForm{Atom}}` that
+matches SoleLogics' stricter `DNF` type alias.
+
+That narrow match is exactly the trap already documented in
+`lumen_sequential`'s own docstring for the FINAL `DecisionSet`: with a
+`DNF`-matching formula, `check(::DefaultCheckAlgorithm, ::DNF, ::LogicalInstance, ...)`
+and `check(::DefaultCheckAlgorithm, ::LeftmostDisjunctiveForm, ::LogicalInstance, ...)`
+become EQUALLY specific for the same call, and SoleLogics raises a
+`MethodError: ... is ambiguous` instead of picking one. Previously this was
+only guarded against at the very end of `lumen_sequential` (when building
+the returned `DecisionSet`) -- but the repair pass calls `SL.check`
+*during* `_verify_and_repair_sensitivity`, on formulas built here, so the
+same guard is needed at this call site too.
+
+Fix: force `conjunctions` into the exact same WIDE element type
+(`Union{LeftmostConjunctiveForm{Atom{float_type}}, SyntaxStructure}`) that
+`lumen()` and the final `formulas` in `lumen_sequential` already use. A
+`Union`-typed container can never match the narrower `DNF` alias, so
+`check` unambiguously resolves to the `LeftmostDisjunctiveForm` method.
+"""
+function _class_formula(terms::Vector{Any}, float_type::Type)
+    isempty(terms) && return nothing
+    conjunctions = Vector{Union{
+        SL.LeftmostConjunctiveForm{SL.Atom{float_type}},
+        SyntaxStructure
+    }}([t isa Vector{<:SL.Atom} ? _cube_to_formula(t) : t for t in terms])
+    return SL.LeftmostDisjunctiveForm(conjunctions)
+end
+
+"""
+    _repair_fold(terms, raw, scheme, config) -> Vector{Any}
+
+Same merge-and-reminimize step as `_fold_in!` (old formula, converted back
+to cube form via `_term_to_cube`, unioned with new raw cubes, then
+re-minimized in a single call) -- but as a pure function returning the new
+`terms` instead of mutating a `_SeqBuffer`, and with NO `M`-budget check.
+
+The repair pass' job is correctness (sensitivity), not staying under the
+memory budget: it always folds, regardless of how large the result ends
+up. If a repair fold blows past what feels reasonable, that's a signal `M`
+was too tight for the winning restart, not something this pass should
+silently paper over.
+"""
+function _repair_fold(
+    terms::Vector{Any},
+    raw::Vector{Vector{SL.Atom}},
+    scheme::Symbol,
+    config::LumenConfig
+)
+    combined = convert(
+        Vector{Vector{SL.Atom}},
+        vcat(_term_to_cube.(terms), raw)
+    )
+    minimized = run_minimization(Val(scheme), config, combined)
+    return collect(Any, minimized)
+end
+
+"""
+    _verify_and_repair_sensitivity(
+        config, model, ctx, scheme, per_class_terms, classnames;
+        max_apply_batch, max_repair_rounds=3
+    ) -> Vector{Vector{Any}}
+
+Full-domain, linear (non-random) sweep that checks every row against its
+OWN predicted class' current φ, collects false negatives per class, and
+repairs each affected class with one targeted `_repair_fold`. Repeats up
+to `max_repair_rounds` times (a repair fold can, in principle, still leave
+-- or introduce -- a handful of uncovered rows; this is a fixed-point
+iteration, not a one-shot guarantee), emitting a `@warn` if it never fully
+converges.
+
+# Arguments
+- `config`, `model`, `scheme`: as elsewhere in this file.
+- `ctx`: from `_prepare_sequential_context` (same one used for the winning
+  restart).
+- `per_class_terms::Vector{Vector{Any}}`: the winning restart's per-class
+  φ, indexed the same way as `classnames` (i.e. `per_class_terms[i]`
+  belongs to `classnames[i]`).
+- `classnames`: `ctx.classnames`.
+- `max_apply_batch::Int`: batch size for the verification sweep's
+  decode/apply loop -- reuse the same value passed to `lumen_sequential`,
+  purely a performance knob, unrelated to correctness.
+- `max_repair_rounds::Int`: safety cap on repair iterations.
+
+# Returns
+The (possibly repaired) `per_class_terms`, same shape as the input.
+
+# Note on `SL.check`
+This assumes `SL.check(formula, d)` returns a per-instance `Bool`
+(or `BitVector`)-like collection when given a whole logiset `d`. If your
+SoleLogics version only exposes a per-instance signature
+(`SL.check(formula, d, i)`), replace the batched
+`covered[ci] = SL.check(formulas[ci], d)` line with a loop over `k`.
+"""
+function _verify_and_repair_sensitivity(
+    config::LumenConfig,
+    model::SM.AbstractModel,
+    ctx::NamedTuple,
+    scheme::Symbol,
+    per_class_terms::Vector{Vector{Any}},
+    classnames::AbstractVector;
+    max_apply_batch::Int,
+    max_repair_rounds::Int=3
+)
+    nclasses = length(classnames)
+    class_index = Dict(c => i for (i, c) in enumerate(classnames))
+    terms = deepcopy(per_class_terms)
+    # Needed by `_class_formula` to force the wide, non-`DNF`-matching
+    # element type -- see the dispatch-ambiguity note in its docstring.
+    float_type = get_float_type(config)
+
+    for round in 1:max_repair_rounds
+        formulas = [_class_formula(terms[i], float_type) for i in 1:nclasses]
+        repair_raw = [Vector{Vector{SL.Atom}}() for _ in 1:nclasses]
+        n_false_negatives = 0
+
+        i0 = 0
+        while i0 < ctx.n_total
+            this_chunk = clamp(min(max_apply_batch, ctx.n_total - i0), 1, ctx.n_total - i0)
+
+            # Plain linear decoding this time (no LazyPermutation): the
+            # repair pass needs to see EVERY row exactly once, not a random
+            # sample, so there is no need for (and no benefit from) the
+            # permutation's shuffling -- a linear index is cheaper too.
+            rows = Vector{NTuple{length(ctx.featurenames),eltype(ctx.thresholds[1])}}(undef, this_chunk)
+            @inbounds for k in 1:this_chunk
+                linidx = i0 + k - 1  # 0-based, sequential
+                rows[k] = _combo_at(ctx.thrs_with_p, ctx.lens, ctx.strides, linidx)
+            end
+            i0 += this_chunk
+
+            tbl = NamedTuple{Tuple(ctx.featurenames)}(
+                ntuple(j -> [r[j] for r in rows], length(ctx.featurenames))
+            )
+            d = PropositionalLogiset(tbl)
+            preds = get_apply_function(config)(
+                model, d;
+                use_multithreads=get_use_multithreads(config),
+                suppress_parity_warning=true
+            )
+
+            # Precompute, once per batch, which instances each class'
+            # CURRENT φ covers -- reusing the exact same `check` mechanism
+            # the final DecisionSet is evaluated with downstream, so
+            # "covered" here means exactly what "covered" will mean once
+            # these rules ship.
+            covered = Vector{Any}(undef, nclasses)
+            @inbounds for ci in 1:nclasses
+                covered[ci] = isnothing(formulas[ci]) ? nothing : SL.check(formulas[ci], d)
+            end
+
+            @inbounds for k in 1:this_chunk
+                ci = get(class_index, preds[k], nothing)
+                isnothing(ci) && continue  # defensive: unseen label, skip
+
+                is_covered = !isnothing(covered[ci]) && covered[ci][k]
+                is_covered && continue
+
+                # False negative: the model predicts `classnames[ci]` for
+                # this row, but that class' current φ doesn't cover it --
+                # almost always because an earlier fold, with an
+                # incomplete view of the domain, over-generalized a term
+                # (belonging to this class or another one) that ended up
+                # stealing the region. Feed the row back in as a fresh raw
+                # cube for a targeted repair fold.
+                n_false_negatives += 1
+                truths_row = _truths_by_thresholds(rows[k], ctx.thresholds)
+                cube = generate_disjunct(
+                    truths_row, ctx.thresholds, ctx.featurenames, ctx.op_families
+                )
+                push!(repair_raw[ci], cube)
+            end
+        end
+
+        n_false_negatives == 0 && break  # sensitivity fully recovered
+
+        # One targeted, per-class repair fold: merge the class' current
+        # (already minimized) φ with exactly the rows it was missing, and
+        # re-minimize. Classes with zero false negatives this round are
+        # left untouched.
+        @inbounds for ci in 1:nclasses
+            isempty(repair_raw[ci]) && continue
+            terms[ci] = _repair_fold(terms[ci], repair_raw[ci], scheme, config)
+        end
+
+        if round == max_repair_rounds
+            @warn(
+                "lumen_sequential: sensitivity repair did not fully " *
+                "converge after $max_repair_rounds round(s); " *
+                "$n_false_negatives row(s) still uncovered by their " *
+                "predicted class' φ. Consider raising max_repair_rounds."
+            )
+        end
+    end
+
+    return terms
+end
+
+
+# ---------------------------------------------------------------------------- #
 #                                public entry point                            #
 # ---------------------------------------------------------------------------- #
 """
@@ -647,12 +923,15 @@ end
                       M::Int=100_000,
                       N::Int=10,
                       max_apply_batch::Int=min(M, 4096),
-                      score::Symbol=:n_terms) -> SM.DecisionSet
+                      score::Symbol=:n_terms,
+                      repair_sensitivity::Bool=true,
+                      max_repair_rounds::Int=3) -> SM.DecisionSet
 
 Generate-and-minimize FUSED into a single online pass over the (possibly
 astronomically large) combination space, run `N` times with independent
 pseudo-random enumeration orders ("random restarts"), keeping whichever
-restart produced the smallest total rule set.
+restart produced the smallest total rule set, then running one full-domain
+sensitivity repair sweep on the winner.
 
 # How it works, end to end
 1. `_prepare_sequential_context` derives everything needed to decode
@@ -681,8 +960,24 @@ restart produced the smallest total rule set.
 3. If every single restart got discarded, raise an informative error
    (suggesting to raise `M` and/or `N`) rather than silently returning
    nothing.
-4. Build the final `SM.DecisionSet` from the best restart's per-class
-   terms, dropping any class that ended up with zero terms.
+4. NEW -- `_verify_and_repair_sensitivity`: on the WINNING restart's
+   per-class φ only, run one full-domain linear sweep checking every row
+   against its own predicted class' current φ. Any row the model assigns
+   to class `C` but that `C`'s current φ fails to cover is a false
+   negative (lost sensitivity) -- almost always caused by an earlier fold
+   generalizing a term before it had seen the whole domain. False
+   negatives are fed back into a targeted per-class repair fold
+   (`_repair_fold`), and the sweep repeats (up to `max_repair_rounds`
+   times) until no false negatives remain or the cap is hit (in which case
+   a `@warn` is emitted). This step only fixes coverage
+   (sensitivity/false-negatives); it does not address a class' φ being too
+   broad and wrongly covering another class' rows (a precision/specificity
+   concern, out of scope here). Can be disabled via
+   `repair_sensitivity=false` if you want the raw, unrepaired restart
+   output (e.g. for debugging or comparing against the old behavior).
+5. Build the final `SM.DecisionSet` from the (possibly repaired) winning
+   restart's per-class terms, dropping any class that ended up with zero
+   terms.
 
 # Arguments
 - `config::LumenConfig`: same config used by `lumen`; `minimization_scheme`
@@ -701,20 +996,28 @@ restart produced the smallest total rule set.
 - `N::Int`: number of independent random-order restarts to try; the
   smallest-total-terms restart (among those that stayed under `M`) is kept.
 - `max_apply_batch::Int`: PURELY a performance cap on how many rows are
-  decoded and `apply`'d together in one batch inside `_sequential_pass`.
-  It has NO effect on when folding happens -- that is governed only by
-  `M`. It exists only so a single `apply` call doesn't try to materialize
-  an unreasonably large number of rows at once when `M` itself is huge.
-  Defaults to `min(M, 4096)`.
+  decoded and `apply`'d together in one batch inside `_sequential_pass`
+  (and reused by the repair sweep). It has NO effect on when folding
+  happens -- that is governed only by `M`. It exists only so a single
+  `apply` call doesn't try to materialize an unreasonably large number of
+  rows at once when `M` itself is huge. Defaults to `min(M, 4096)`.
 - `score::Symbol`: currently only `:n_terms` (total term count summed
   across all classes) is implemented. A literal-count-based scoring scheme
   would need a reliable, cross-representation "count atoms in a term"
   accessor that isn't assumed to exist here, since minimized terms can come
   back as arbitrary `SyntaxStructure`, not necessarily flat conjunctions.
+- `repair_sensitivity::Bool`: whether to run the full-domain sensitivity
+  repair sweep (step 4 above) on the winning restart before building the
+  final `DecisionSet`. Default `true`. Set to `false` to skip it (e.g. to
+  reproduce the pre-repair behavior, or when `M` is large enough relative
+  to the model that early folds are rare/negligible and the extra sweep's
+  cost isn't worth it).
+- `max_repair_rounds::Int`: cap on repair-sweep iterations (see step 4
+  above). Default `3`.
 
 # Returns
-`SM.DecisionSet` built from the best restart's per-class terms, in the same
-shape as `lumen`'s (batch pipeline's) output.
+`SM.DecisionSet` built from the best restart's (possibly repaired)
+per-class terms, in the same shape as `lumen`'s (batch pipeline's) output.
 
 **Type compatibility with `lumen()`**: the returned `DecisionSet`'s rule
 antecedents are constructed with the exact same wide element type
@@ -748,7 +1051,9 @@ function lumen_sequential(
     M::Int=100_000,
     N::Int=10,
     max_apply_batch::Int=min(M, 4096),
-    score::Symbol=:n_terms
+    score::Symbol=:n_terms,
+    repair_sensitivity::Bool=true,
+    max_repair_rounds::Int=3
 )
     score === :n_terms || throw(ArgumentError(
         "Only score=:n_terms is currently supported."
@@ -789,6 +1094,17 @@ function lumen_sequential(
         "(M=$M) even after folding-in. Raise M, or increase N to give " *
         "more random orderings a chance to fold down under budget."
     )
+
+    # NEW: one full-domain, linear verification sweep on the winning
+    # restart only (see the dedicated section above for the full
+    # rationale). Fixes false negatives (sensitivity loss) caused by early
+    # folds that generalized a term before having seen the whole domain.
+    if repair_sensitivity
+        best_terms = _verify_and_repair_sensitivity(
+            config, model, ctx, scheme, best_terms, ctx.classnames;
+            max_apply_batch, max_repair_rounds
+        )
+    end
 
     # Drop classes that ended up with zero terms (i.e. the model never
     # predicted that class for any enumerated row in the winning restart).
