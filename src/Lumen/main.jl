@@ -50,7 +50,7 @@ See also: [`setup_abc`](@ref), [`lumen`](@ref)
 """
 function setup_espresso()
     # auto setup espresso binary if not specified
-    espressobinary = "/Users/perry/espresso/build/./espresso"  # default path for local build
+    #espressobinary = "/Users/perry/espresso/build/./espresso"  # default path for local build
 
     #try
     #    joinpath(SD.load(SD.MITESPRESSOLoader()), "espresso")
