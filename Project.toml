@@ -46,9 +46,13 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
-[sources]
-SoleData = {rev = "main", url = "https://github.com/aclai-lab/SoleData.jl"}
-SoleModels = {rev = "main", url = "https://github.com/aclai-lab/SoleModels.jl"}
+[sources.SoleData]
+rev = "main"
+url = "https://github.com/aclai-lab/SoleData.jl"
+
+[sources.SoleModels]
+rev = "main"
+url = "https://github.com/aclai-lab/SoleModels.jl"
 
 [compat]
 ABC_jll = "1.1"
@@ -66,7 +70,7 @@ Dates = "1"
 DecisionTree = "0.12"
 DelimitedFiles = "1"
 Downloads = "1"
-Evolutionary = "0.11"
+Evolutionary = "0.11, 0.12"
 Hyperopt = "0.5"
 IterTools = "1"
 JSON = "0.21, 1"
