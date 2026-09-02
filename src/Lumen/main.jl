@@ -16,9 +16,10 @@ using ABC_jll
 include("config.jl")
 include("sequential_minimizer.jl")
 include("super_minimizer.jl")
-include("shannon_minimizer.jl")
+include("lumen_shannon.jl")
 
-export lumen, LumenConfig, LumenResult, lumen_sequential, lumen_shannon, super_lumen
+
+export lumen, LumenConfig, LumenResult, lumen_sequential, super_lumen, lumen_shannon
 
 
 const Operators = Union{typeof(<),typeof(>),typeof(≤),typeof(≥)}
@@ -50,7 +51,7 @@ See also: [`setup_abc`](@ref), [`lumen`](@ref)
 """
 function setup_espresso()
     # auto setup espresso binary if not specified
-    #espressobinary = "/Users/perry/espresso/build/./espresso"  # default path for local build
+    espressobinary = "/Users/perry/espresso/build/./espresso"  # default path for local build
 
     #try
     #    joinpath(SD.load(SD.MITESPRESSOLoader()), "espresso")
