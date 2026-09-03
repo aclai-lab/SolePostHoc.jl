@@ -14,7 +14,7 @@ using IterTools
 using ABC_jll
 
 include("config.jl")
-include("sequential_minimizer.jl")
+# include("sequential_minimizer.jl")
 include("super_minimizer.jl")
 include("lumen_shannon.jl")
 
