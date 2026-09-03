@@ -84,7 +84,7 @@ function _leaf_extract(
             ntuple(j -> [r[j] for r in rows], nfeat)
         )
         d = PropositionalLogiset(tbl)
-        preds = get_apply_function(config)(
+        preds = config.apply_function(
             model, d;
             use_multithreads=false,
             suppress_parity_warning=true
@@ -265,14 +265,13 @@ function lumen_shannon(
 )
     M >= 1 || throw(ArgumentError("M must be positive, got $M"))
 
-    scheme = get_minimization_scheme(config)
     ctx = _prepare_sequential_context(config, model)
 
     lo = ones(Int, length(ctx.lens))
     hi = copy(ctx.lens)
 
     per_class_terms = _shannon_extract(
-        config, model, ctx, lo, hi, scheme;
+        config, model, ctx, lo, hi, config.minimization_scheme;
         M, max_apply_batch
     )
 

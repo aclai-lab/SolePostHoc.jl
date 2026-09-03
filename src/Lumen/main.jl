@@ -1523,7 +1523,7 @@ function run_minimization(
             atoms,
             binary;
             fast=3,
-            depth=get_depth(extractor),
+            depth=extractor.depth,
             float_type=T
         )
         return refine_dnf(minimized_formula)

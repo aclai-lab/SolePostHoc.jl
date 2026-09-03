@@ -172,7 +172,7 @@ function _prepare_sequential_context(
     config::LumenConfig{T},
     model::SM.AbstractModel
 ) where {T<:AbstractFloat}
-    depth = get_depth(config)
+    depth = config.depth
 
     atoms = unique!(_normalize_atom.(if depth < 1.0
         mapreduce(vcat, SM.models(model); init=SL.Atom{SD.ScalarCondition}[]) do t
