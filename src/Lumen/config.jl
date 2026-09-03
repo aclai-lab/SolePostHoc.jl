@@ -93,7 +93,7 @@ struct LumenConfig{T<:AbstractFloat} <: AbstractConfig
     minimization_kwargs::NamedTuple
     filt_alphabet::Base.Callable
     apply_function::Base.Callable
-    importance::Vector
+    importance::Vector{T}
     check_opt::Bool
     check_alphabet::Bool
 
@@ -108,7 +108,7 @@ struct LumenConfig{T<:AbstractFloat} <: AbstractConfig
         importance::Vector=Float64[],
         check_opt::Bool=false,
         check_alphabet::Bool=false,
-        float_resolution::Type=Float64
+        float_resolution::Type=Float32
     )
         # validate coverage parameters - must be positive and ≤ 1.0
         # these parameters control the proportion of instances

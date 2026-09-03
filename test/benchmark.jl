@@ -36,6 +36,8 @@ lumen = SP.Lumen.lumen_shannon(config, solem, M=5000);
 # 2.416 s (15192236 allocations: 801.31 MiB)
 # avoid get method for internal use
 # 2.395 s (15192236 allocations: 801.31 MiB)
+# config Float32 by default (but propably it doesn't pass)
+# 2.452 s (15192236 allocations: 801.31 MiB)
 @code_warntype SP.Lumen.lumen_shannon(config, solem, M=5000)
 result = @report_opt SP.Lumen.lumen_shannon(config, solem, M=5000)
 open("jet_report.txt", "w") do io
