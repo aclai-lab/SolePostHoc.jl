@@ -86,7 +86,7 @@ function _leaf_extract(
         d = PropositionalLogiset(tbl)
         preds = get_apply_function(config)(
             model, d;
-            use_multithreads=get_use_multithreads(config),
+            use_multithreads=false,
             suppress_parity_warning=true
         )
 
@@ -206,14 +206,13 @@ for why this widening is required to avoid a `DNF` vs
 function _finalize_decision_set(
     ctx::NamedTuple,
     per_class_terms::Vector{Vector{Any}},
-    config::LumenConfig
-)
+    config::LumenConfig{T}
+) where {T<:AbstractFloat}
     valid_mask = .!isempty.(per_class_terms)
     classes = ctx.classnames[valid_mask]
 
-    float_type = get_float_type(config)
     formulas = Vector{Vector{Union{
-        SL.LeftmostConjunctiveForm{SL.Atom{float_type}},
+        SL.LeftmostConjunctiveForm{SL.Atom{T}},
         SyntaxStructure
     }}}(per_class_terms[valid_mask])
 

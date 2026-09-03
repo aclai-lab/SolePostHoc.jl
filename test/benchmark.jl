@@ -29,13 +29,13 @@ solem = modelc.sole[1]
 # SP.Lumen.super_lumen(config, solem, M=100000, N=10);
 
 config = SP.Lumen.LumenConfig(; minimization_scheme=:abc)
+lumen = SP.Lumen.lumen_shannon(config, solem, M=5000);
 @btime SP.Lumen.lumen_shannon(config, solem, M=5000);
 # 3.915 s (15192644 allocations: 801.34 MiB)
+# typed float_type in config
+# 2.416 s (15192236 allocations: 801.31 MiB)
 @code_warntype SP.Lumen.lumen_shannon(config, solem, M=5000)
-@report_opt SP.Lumen.lumen_shannon(config, solem, M=5000)
-
 result = @report_opt SP.Lumen.lumen_shannon(config, solem, M=5000)
-
 open("jet_report.txt", "w") do io
     show(io, MIME"text/plain"(), result)
 end

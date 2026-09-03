@@ -1515,16 +1515,16 @@ end
 
 function run_minimization(
     ::Val{:abc},
-    extractor::LumenConfig,
+    extractor::LumenConfig{T},
     atoms::Vector{Vector{SL.Atom}}
-)
+) where {T<:AbstractFloat}
     ABC_jll.abc() do binary
         minimized_formula = SD.abc_minimize(
             atoms,
             binary;
             fast=3,
             depth=get_depth(extractor),
-            float_type=get_float_type(extractor)
+            float_type=T
         )
         return refine_dnf(minimized_formula)
     end

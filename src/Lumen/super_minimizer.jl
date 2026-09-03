@@ -168,7 +168,10 @@ end
 # ---------------------------------------------------------------------------- #
 #                       shared threshold/family derivation                     #
 # ---------------------------------------------------------------------------- #
-function _prepare_sequential_context(config::LumenConfig, model::SM.AbstractModel)
+function _prepare_sequential_context(
+    config::LumenConfig{T},
+    model::SM.AbstractModel
+) where {T<:AbstractFloat}
     depth = get_depth(config)
 
     atoms = unique!(_normalize_atom.(if depth < 1.0
@@ -190,14 +193,13 @@ function _prepare_sequential_context(config::LumenConfig, model::SM.AbstractMode
     featurenames = SM.info(model, :featurenames)
     classnames = unique!(SM.info(model, :supporting_labels))
 
-    type = get_float_type(config)
-    thresholds = Vector{Vector{type}}(undef, length(featurenames))
+    thresholds = Vector{Vector{T}}(undef, length(featurenames))
     op_families = Vector{Symbol}(undef, length(featurenames))
 
     @inbounds for i in eachindex(featurenames)
         idx = findfirst(f -> f == featurenames[i], features)
         if isnothing(idx)
-            thresholds[i] = type[]
+            thresholds[i] = T[]
             op_families[i] = :lt
         else
             family = _feature_op_family(atoms, features[idx])
