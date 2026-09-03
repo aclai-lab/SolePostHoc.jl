@@ -96,6 +96,8 @@ struct LumenConfig{T<:AbstractFloat} <: AbstractConfig
     importance::Vector{T}
     check_opt::Bool
     check_alphabet::Bool
+    M::Int
+    max_apply_batch::Int
 
     function LumenConfig(;
         minimization_scheme::Symbol=:abc,
@@ -108,6 +110,8 @@ struct LumenConfig{T<:AbstractFloat} <: AbstractConfig
         importance::Vector=Float64[],
         check_opt::Bool=false,
         check_alphabet::Bool=false,
+        M::Int=20_000,
+        max_apply_batch::Int=min(M, 4096),
         float_resolution::Type=Float32
     )
         # validate coverage parameters - must be positive and ≤ 1.0
@@ -143,6 +147,8 @@ struct LumenConfig{T<:AbstractFloat} <: AbstractConfig
             ))
         end
 
+        M >= 1 || throw(ArgumentError("M must be positive, got $M"))
+
         binary = valid_schemes[minimization_scheme]
 
         new{float_resolution}(
@@ -156,7 +162,9 @@ struct LumenConfig{T<:AbstractFloat} <: AbstractConfig
             apply_function,
             importance,
             check_opt,
-            check_alphabet
+            check_alphabet,
+            M,
+            max_apply_batch
         )
     end
 end

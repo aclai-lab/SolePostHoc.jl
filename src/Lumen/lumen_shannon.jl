@@ -53,14 +53,13 @@ is only in how sibling leaves/subtrees get combined afterwards (see
 `_combine_cofactors` below), not in how a single leaf is computed.
 """
 function _leaf_extract(
-    config::LumenConfig,
+    config::LumenConfig{T},
     model::SM.AbstractModel,
     ctx::NamedTuple,
     lo::Vector{Int},
     hi::Vector{Int},
-    scheme::Symbol;
-    max_apply_batch::Int
-)
+    scheme::Symbol
+) where {T<:AbstractFloat}
     nfeat = length(ctx.featurenames)
     nclasses = length(ctx.classnames)
     class_index = Dict(c => i for (i, c) in enumerate(ctx.classnames))
@@ -72,7 +71,7 @@ function _leaf_extract(
 
     i0 = 1
     @inbounds while i0 <= total
-        this_chunk = min(max_apply_batch, total - i0 + 1)
+        this_chunk = min(config.max_apply_batch, total - i0 + 1)
         chunk = @view all_idx[i0:(i0 + this_chunk - 1)]
 
         rows = Vector{NTuple{nfeat,eltype(ctx.thresholds[1])}}(undef, this_chunk)
@@ -160,19 +159,17 @@ each split strictly shrinks the widest dimension and the total size is
 finite (worst-case depth `O(log2(n_total / M))`).
 """
 function _shannon_extract(
-    config::LumenConfig,
+    config::LumenConfig{T},
     model::SM.AbstractModel,
     ctx::NamedTuple,
     lo::Vector{Int},
     hi::Vector{Int},
-    scheme::Symbol;
-    M::Int,
-    max_apply_batch::Int
-)
+    scheme::Symbol
+) where {T<:AbstractFloat}
     rect_size = prod(hi .- lo .+ 1)
 
-    if rect_size <= M
-        return _leaf_extract(config, model, ctx, lo, hi, scheme; max_apply_batch)
+    if rect_size <= config.M
+        return _leaf_extract(config, model, ctx, lo, hi, scheme)
     end
 
     jstar = argmax(hi .- lo .+ 1)
@@ -184,8 +181,8 @@ function _shannon_extract(
     lo_high, hi_high = copy(lo), copy(hi)
     lo_high[jstar] = t + 1
 
-    terms_low = _shannon_extract(config, model, ctx, lo_low, hi_low, scheme; M, max_apply_batch)
-    terms_high = _shannon_extract(config, model, ctx, lo_high, hi_high, scheme; M, max_apply_batch)
+    terms_low = _shannon_extract(config, model, ctx, lo_low, hi_low, scheme)
+    terms_high = _shannon_extract(config, model, ctx, lo_high, hi_high, scheme)
 
     return _combine_cofactors(terms_low, terms_high)
 end
@@ -259,20 +256,15 @@ compacted).
 """
 function lumen_shannon(
     config::LumenConfig,
-    model::SM.AbstractModel;
-    M::Int=20_000,
-    max_apply_batch::Int=min(M, 4096)
+    model::SM.AbstractModel
 )
-    M >= 1 || throw(ArgumentError("M must be positive, got $M"))
-
     ctx = _prepare_sequential_context(config, model)
 
     lo = ones(Int, length(ctx.lens))
     hi = copy(ctx.lens)
 
     per_class_terms = _shannon_extract(
-        config, model, ctx, lo, hi, config.minimization_scheme;
-        M, max_apply_batch
+        config, model, ctx, lo, hi, config.minimization_scheme
     )
 
     return _finalize_decision_set(ctx, per_class_terms, config)

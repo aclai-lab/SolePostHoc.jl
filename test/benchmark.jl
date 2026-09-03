@@ -28,9 +28,9 @@ solem = modelc.sole[1]
 # config = SP.Lumen.LumenConfig(; minimization_scheme=:mitespresso)
 # SP.Lumen.super_lumen(config, solem, M=100000, N=10);
 
-config = SP.Lumen.LumenConfig(; minimization_scheme=:abc)
-lumen = SP.Lumen.lumen_shannon(config, solem, M=5000);
-@btime SP.Lumen.lumen_shannon(config, solem, M=5000);
+config = SP.Lumen.LumenConfig(; minimization_scheme=:abc, M=5000)
+lumen = SP.Lumen.lumen_shannon(config, solem);
+@btime SP.Lumen.lumen_shannon(config, solem);
 # 3.915 s (15192644 allocations: 801.34 MiB)
 # typed float_type in config
 # 2.416 s (15192236 allocations: 801.31 MiB)
@@ -38,8 +38,10 @@ lumen = SP.Lumen.lumen_shannon(config, solem, M=5000);
 # 2.395 s (15192236 allocations: 801.31 MiB)
 # config Float32 by default (but propably it doesn't pass)
 # 2.452 s (15192236 allocations: 801.31 MiB)
-@code_warntype SP.Lumen.lumen_shannon(config, solem, M=5000)
-result = @report_opt SP.Lumen.lumen_shannon(config, solem, M=5000)
+# M and max_apply_batch in config
+# 2.410 s (15208042 allocations: 798.60 MiB)
+@code_warntype SP.Lumen.lumen_shannon(config, solem)
+result = @report_opt SP.Lumen.lumen_shannon(config, solem)
 open("jet_report.txt", "w") do io
     show(io, MIME"text/plain"(), result)
 end

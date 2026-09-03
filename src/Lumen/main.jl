@@ -479,7 +479,7 @@ end
 #                                 depth utils                                  #
 # ---------------------------------------------------------------------------- #
 """
-    _extract_atoms_bfs_order(tree::SM.AbstractModel)
+    _extract_atoms_bfs_order(tree::SM.DecisionEnsemble)
         -> Vector{SL.Atom{SD.ScalarCondition}}
 
 Traverse a decision-tree model in breadth-first order and return the antecedent
@@ -489,7 +489,7 @@ The traversal visits left (positive) and right (negative) sub-trees in BFS order
 Only `SM.Branch` nodes contribute atoms; leaf nodes are silently skipped.
 
 # Arguments
-- `tree::SM.AbstractModel`: Root of the decision tree (or sub-tree) to traverse.
+- `tree::SM.DecisionEnsemble`: Root of the decision tree (or sub-tree) to traverse.
 
 # Returns
 - `Vector{SL.Atom{SD.ScalarCondition}}`: Atoms in BFS visitation order, with a
@@ -497,7 +497,7 @@ Only `SM.Branch` nodes contribute atoms; leaf nodes are silently skipped.
   `Vector{<:Atom{<:ScalarCondition}}`-typed functions like
   `_take_first_percentage` — see implementation note below).
 """
-function _extract_atoms_bfs_order(tree::SM.AbstractModel)
+function _extract_atoms_bfs_order(tree::SM.DecisionEnsemble)
     # NOTE: must be declared with the CONCRETE `ScalarCondition` element type,
     # not the abstract `AbstractCondition`. Julia's parametric container types
     # are invariant: `Vector{Atom{AbstractCondition}}` is NOT a subtype of
@@ -508,7 +508,7 @@ function _extract_atoms_bfs_order(tree::SM.AbstractModel)
     # `_atoms_for_feature`), causing a MethodError even though every element
     # inside is, in fact, a `ScalarCondition` atom.
     bfs_atoms = SL.Atom{SD.ScalarCondition}[]
-    queue = SM.AbstractModel[tree]
+    queue = SM.DecisionEnsemble[tree]
 
     while !isempty(queue)
         current = popfirst!(queue)
@@ -913,7 +913,7 @@ minimize per-class DNF formulas.
 ExtractRulesData(grp_truths, thresholds, features, classnames, op_families)
 
 # High-level constructor: derive everything from a LumenConfig and a model.
-ExtractRulesData(extractor::LumenConfig, model::SM.AbstractModel)
+ExtractRulesData(extractor::LumenConfig, model::SM.DecisionEnsemble)
 ```
 
 The high-level constructor:
@@ -958,7 +958,7 @@ struct ExtractRulesData{
         predictions, combinations, thresholds, featurenames, classnames, op_families
     )
 
-    function ExtractRulesData(extractor::LumenConfig, model::SM.AbstractModel)
+    function ExtractRulesData(extractor::LumenConfig, model::SM.DecisionEnsemble)
         # -------------------------------------------------------------------- #
         # STEP 1 — Read the depth parameter from the configuration.
         # `depth ∈ (0, 1]`: if < 1.0, only atoms from the upper levels of the
@@ -1663,7 +1663,7 @@ end
 #                                    lumen                                     #
 # ---------------------------------------------------------------------------- #
 """
-    lumen(config::LumenConfig, model::SM.AbstractModel) -> SM.DecisionSet
+    lumen(config::LumenConfig, model::SM.DecisionEnsemble) -> SM.DecisionSet
 
 Core single-model entry point for the LUMEN algorithm.
 
@@ -1681,28 +1681,28 @@ encoded in `config`.
 # Arguments
 - `config::LumenConfig`: Algorithm configuration
   (minimization scheme, depth, etc.).
-- `model::SM.AbstractModel`: A single decision-tree model.
+- `model::SM.DecisionEnsemble`: A single decision-tree model.
 
 # Returns
 - `SM.DecisionSet`: The minimized rule set.
 
 ---
 
-    lumen(config::LumenConfig, model::Vector{SM.AbstractModel}) -> LumenResult
+    lumen(config::LumenConfig, model::Vector{SM.DecisionEnsemble}) -> LumenResult
 
 Batch variant: applies `lumen(config, m)` to every model in the vector and
 collects the results into a [`LumenResult`](@ref).
 
 ---
 
-    lumen(model::SM.AbstractModel, args...; kwargs...) -> SM.DecisionSet
+    lumen(model::SM.DecisionEnsemble, args...; kwargs...) -> SM.DecisionSet
 
 Convenience wrapper: constructs a `LumenConfig` from keyword arguments and
 delegates to `lumen(config, model)`.
 
 ---
 
-    lumen(model::Vector{SM.AbstractModel}, args...; kwargs...) -> LumenResult
+    lumen(model::Vector{SM.DecisionEnsemble}, args...; kwargs...) -> LumenResult
 
 Convenience wrapper for vector of models: constructs `LumenConfig` from keyword
 arguments and maps over the vector.
@@ -1728,7 +1728,7 @@ See also: [`LumenConfig`](@ref), [`LumenResult`](@ref),
 """
 function lumen(
     config::LumenConfig,
-    model::SM.AbstractModel
+    model::SM.DecisionEnsemble
 )
     float_type = get_float_type(config)
 
@@ -1763,7 +1763,7 @@ end
 
 function lumen(
     config::LumenConfig,
-    model::Vector{SM.AbstractModel}
+    model::Vector{SM.DecisionEnsemble}
 )
     ds = map(model) do m
         lumen(config, m)
@@ -1773,7 +1773,7 @@ function lumen(
 end
 
 function lumen(
-    model::SM.AbstractModel,
+    model::SM.DecisionEnsemble,
     args...;
     kwargs...
 )
@@ -1781,7 +1781,7 @@ function lumen(
 end
 
 function lumen(
-    model::Vector{SM.AbstractModel},
+    model::Vector{SM.DecisionEnsemble},
     args...;
     kwargs...
 )
