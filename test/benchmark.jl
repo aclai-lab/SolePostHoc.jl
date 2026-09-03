@@ -11,6 +11,9 @@ using RDatasets
 using DataFrames
 using Random
 
+using InteractiveUtils
+using JET
+
 # ---------------------------------------------------------------------------- #
 #                                 iris test                                    #
 # ---------------------------------------------------------------------------- #
@@ -18,12 +21,24 @@ iris_df = dataset("datasets", "iris")
 y = String.(iris_df.Species)
 Xdf = select(iris_df, Not(:Species))
 
-dsc = setup_dataset(Xdf, y; model=SX.RandomForestClassifier(n_trees=20), rng=42)
+dsc = setup_dataset(Xdf, y; model=SX.RandomForestClassifier(n_trees=20, max_depth=5), rng=42)
 modelc = solexplorer(dsc)
 solem = modelc.sole[1]
 
-config = SP.Lumen.LumenConfig(minimization_scheme=:mitespresso)
-SP.Lumen.super_lumen(config, solem, M=10000, N=10)
+# config = SP.Lumen.LumenConfig(; minimization_scheme=:mitespresso)
+# SP.Lumen.super_lumen(config, solem, M=100000, N=10);
+
+config = SP.Lumen.LumenConfig(; minimization_scheme=:abc)
+@btime SP.Lumen.lumen_shannon(config, solem, M=5000);
+# 3.915 s (15192644 allocations: 801.34 MiB)
+@code_warntype SP.Lumen.lumen_shannon(config, solem, M=5000)
+@report_opt SP.Lumen.lumen_shannon(config, solem, M=5000)
+
+result = @report_opt SP.Lumen.lumen_shannon(config, solem, M=5000)
+
+open("jet_report.txt", "w") do io
+    show(io, MIME"text/plain"(), result)
+end
 
 # # ---------------------------------------------------------------------------- #
 # #                                caravan test                                  #
