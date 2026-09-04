@@ -11,6 +11,8 @@ using CategoricalArrays
 using DataFrames
 using IterTools
 
+using StatsBase: countmap
+
 using ABC_jll
 
 include("config.jl")

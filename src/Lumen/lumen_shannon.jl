@@ -62,6 +62,7 @@ function _leaf_extract(
 ) where {S<:SM.Label,T<:AbstractFloat}
     nfeat = length(ctx.featurenames)
     nclasses = length(ctx.classnames)
+    ntrees = length(trees)
     class_index = Dict(c => i for (i, c) in enumerate(ctx.classnames))
     raw = [Vector{Vector{SL.Atom}}() for _ in 1:nclasses]
 
@@ -70,11 +71,11 @@ function _leaf_extract(
     total = length(all_idx)
 
     i0 = 1
-    @inbounds while i0 <= total
+    @inbounds while i0 ≤ total
         this_chunk = min(config.max_apply_batch, total - i0 + 1)
         chunk = @view all_idx[i0:(i0 + this_chunk - 1)]
 
-        rows = Vector{NTuple{nfeat,eltype(ctx.thresholds[1])}}(undef, this_chunk)
+        rows = Vector{NTuple{nfeat,T}}(undef, this_chunk)
         for (k, ci) in enumerate(chunk)
             rows[k] = ntuple(j -> ctx.thrs_with_p[j][ci[j]], nfeat)
         end
@@ -83,11 +84,24 @@ function _leaf_extract(
             ntuple(j -> [r[j] for r in rows], nfeat)
         )
         d = PropositionalLogiset(tbl)
-        preds = config.apply_function(
-            trees[1], d;
-            use_multithreads=false,
-            suppress_parity_warning=true
-        )
+        # apply every tree of the forest, then majority-vote per row
+
+        all_preds = Matrix{S}(undef, this_chunk, ntrees)
+
+        for i in 1:ntrees
+            all_preds[:, i] = config.apply_function(
+                trees[i], d;
+                use_multithreads=false,
+                suppress_parity_warning=true
+            )
+        end
+
+        preds = Vector{S}(undef, this_chunk)
+
+        for i in 1:this_chunk
+            frequencies = countmap(view(all_preds, i, :))
+            preds[i] = argmax(frequencies)
+        end
 
         for k in 1:this_chunk
             ci_class = get(class_index, preds[k], nothing)
@@ -168,7 +182,7 @@ function _shannon_extract(
 ) where {S<:SM.Label,T<:AbstractFloat}
     rect_size = prod(hi .- lo .+ 1)
 
-    if rect_size <= config.M
+    if rect_size ≤ config.M
         return _leaf_extract(config, trees, ctx, lo, hi, scheme)
     end
 
