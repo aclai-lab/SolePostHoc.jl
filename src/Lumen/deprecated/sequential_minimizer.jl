@@ -266,7 +266,10 @@ A `NamedTuple` with:
 - `op_families::Vector{Symbol}`
 - `lens::Vector{Int}`, `strides::Vector{Int}`, `n_total::Int`
 """
-function _prepare_sequential_context(config::LumenConfig, model::SM.AbstractModel)
+function _prepare_sequential_context(
+    config::LumenConfig{T},
+    trees::Vector{SM.Branch{S}}
+) where {T<:AbstractFloat,S<:SM.Label}
     depth = get_depth(config)
 
     atoms = unique!(_normalize_atom.(if depth < 1.0
@@ -278,11 +281,11 @@ function _prepare_sequential_context(config::LumenConfig, model::SM.AbstractMode
         # `_normalize_atom.(...)` broadcast right below (invariance of
         # parametric types -- this has to be fixed at every accumulator, not
         # just at the source).
-        mapreduce(vcat, SM.models(model); init=SL.Atom{SD.ScalarCondition}[]) do t
+        mapreduce(vcat, trees; init=SL.Atom{SD.ScalarCondition}[]) do t
             _take_first_percentage(_extract_atoms_bfs_order(t), depth)
         end
     else
-        SL.atoms(SM.alphabet(model, false))
+        collect(Iterators.flatten(SM.alphabet.(trees, false)))
     end))
 
     # Fail fast if the model contains any comparison operator we don't know

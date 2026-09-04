@@ -170,16 +170,18 @@ end
 # ---------------------------------------------------------------------------- #
 function _prepare_sequential_context(
     config::LumenConfig{T},
-    model::SM.AbstractModel
-) where {T<:AbstractFloat}
+    trees::Vector{SM.Branch{S}},
+    featurenames::Vector{String},
+    classnames::Vector{String}
+) where {T<:AbstractFloat,S<:SM.Label}
     depth = config.depth
 
     atoms = unique!(_normalize_atom.(if depth < 1.0
-        mapreduce(vcat, SM.models(model); init=SL.Atom{SD.ScalarCondition}[]) do t
+        mapreduce(vcat, trees; init=SL.Atom{SD.ScalarCondition}[]) do t
             _take_first_percentage(_extract_atoms_bfs_order(t), depth)
         end
     else
-        SL.atoms(SM.alphabet(model, false))
+        collect(Iterators.flatten(SM.alphabet.(trees, false)))
     end))
 
     let unsupported = unique(op for op in get_operator.(atoms) if op ∉ _supported_operators)
@@ -189,9 +191,7 @@ function _prepare_sequential_context(
         ))
     end
 
-    features = SM.featurename.(unique!(get_feature.(atoms)))
-    featurenames = SM.info(model, :featurenames)
-    classnames = unique!(SM.info(model, :supporting_labels))
+    features = String.(SM.featurename.(unique!(get_feature.(atoms))))
 
     thresholds = Vector{Vector{T}}(undef, length(featurenames))
     op_families = Vector{Symbol}(undef, length(featurenames))
@@ -224,7 +224,6 @@ function _prepare_sequential_context(
         classnames, op_families, lens, strides, n_total
     )
 end
-
 
 # ---------------------------------------------------------------------------- #
 #                             per-class raw buffer                             #

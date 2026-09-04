@@ -54,12 +54,12 @@ is only in how sibling leaves/subtrees get combined afterwards (see
 """
 function _leaf_extract(
     config::LumenConfig{T},
-    model::SM.AbstractModel,
+    trees::Vector{SM.Branch{S}},
     ctx::NamedTuple,
     lo::Vector{Int},
     hi::Vector{Int},
     scheme::Symbol
-) where {T<:AbstractFloat}
+) where {S<:SM.Label,T<:AbstractFloat}
     nfeat = length(ctx.featurenames)
     nclasses = length(ctx.classnames)
     class_index = Dict(c => i for (i, c) in enumerate(ctx.classnames))
@@ -84,7 +84,7 @@ function _leaf_extract(
         )
         d = PropositionalLogiset(tbl)
         preds = config.apply_function(
-            model, d;
+            trees[1], d;
             use_multithreads=false,
             suppress_parity_warning=true
         )
@@ -160,16 +160,16 @@ finite (worst-case depth `O(log2(n_total / M))`).
 """
 function _shannon_extract(
     config::LumenConfig{T},
-    model::SM.AbstractModel,
+    trees::Vector{SM.Branch{S}},
     ctx::NamedTuple,
     lo::Vector{Int},
     hi::Vector{Int},
     scheme::Symbol
-) where {T<:AbstractFloat}
+) where {S<:SM.Label,T<:AbstractFloat}
     rect_size = prod(hi .- lo .+ 1)
 
     if rect_size <= config.M
-        return _leaf_extract(config, model, ctx, lo, hi, scheme)
+        return _leaf_extract(config, trees, ctx, lo, hi, scheme)
     end
 
     jstar = argmax(hi .- lo .+ 1)
@@ -181,8 +181,8 @@ function _shannon_extract(
     lo_high, hi_high = copy(lo), copy(hi)
     lo_high[jstar] = t + 1
 
-    terms_low = _shannon_extract(config, model, ctx, lo_low, hi_low, scheme)
-    terms_high = _shannon_extract(config, model, ctx, lo_high, hi_high, scheme)
+    terms_low = _shannon_extract(config, trees, ctx, lo_low, hi_low, scheme)
+    terms_high = _shannon_extract(config, trees, ctx, lo_high, hi_high, scheme)
 
     return _combine_cofactors(terms_low, terms_high)
 end
@@ -254,18 +254,33 @@ compacted).
 # Throws
 - `ArgumentError` if `M` is not positive.
 """
+
 function lumen_shannon(
-    config::LumenConfig,
-    model::SM.AbstractModel
-)
-    ctx = _prepare_sequential_context(config, model)
+    config::LumenConfig{T},
+    trees::Vector{SM.Branch{S}};
+    featurenames::Vector{String},
+    classnames::Vector{String}
+) where {S<:SM.Label,T<:AbstractFloat}
+    ctx = _prepare_sequential_context(config, trees, featurenames, classnames)
 
     lo = ones(Int, length(ctx.lens))
     hi = copy(ctx.lens)
 
     per_class_terms = _shannon_extract(
-        config, model, ctx, lo, hi, config.minimization_scheme
+        config, trees, ctx, lo, hi, config.minimization_scheme
     )
 
     return _finalize_decision_set(ctx, per_class_terms, config)
+end
+
+function lumen_shannon(
+    config::LumenConfig{T},
+    model::SM.AbstractModel
+) where T<:AbstractFloat
+    lumen_shannon(
+        config,
+        SM.models(model);
+        featurenames=String.(SM.info(model, :featurenames)),
+        classnames=String.(unique!(SM.info(model, :supporting_labels)))
+    )
 end

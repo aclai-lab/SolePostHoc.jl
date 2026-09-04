@@ -399,7 +399,7 @@ Inspects all atoms whose feature name matches `feat` and returns:
 """
 function _feature_op_family(
     atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
-    feat::Symbol
+    feat::String
 )
     feat_atoms = _atoms_for_feature(atoms, feat)
     ops = unique(get_operator.(feat_atoms))
@@ -571,8 +571,8 @@ Filter `atoms` to only those whose feature name matches `feat`.
 """
 @inline _atoms_for_feature(
     atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
-    feat::Symbol
-) = filter(a -> SM.featurename(get_feature(a)) == feat, atoms)
+    feat::String
+) = filter(a -> String(SM.featurename(get_feature(a))) == feat, atoms)
 
 """
     _truths_by_thresholds(thresholds::Vector{Float64}) -> Vector{BitVector}
