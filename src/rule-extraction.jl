@@ -47,34 +47,35 @@ featurenames(s::AbstractModel) = s.info.featurenames
 # ---------------------------------------------------------------------------------------- #
 #                                  InTrees                                                 #
 # ---------------------------------------------------------------------------------------- #
-export intrees, InTrees
-export InTreesRuleExtractor
+# TODO commented for Lumen debug
+# export intrees, InTrees
+# export InTreesRuleExtractor
 
-include("intrees/main.jl")
-@reexport using .InTrees
+# include("intrees/main.jl")
+# @reexport using .InTrees
 
-"""$(_get_rule_extractor_docstring("InTreesRuleExtractor", InTrees))"""
-struct InTreesRuleExtractor <: RuleExtractor end
+# """$(_get_rule_extractor_docstring("InTreesRuleExtractor", InTrees))"""
+# struct InTreesRuleExtractor <: RuleExtractor end
 
-function extractrules(config::InTreesConfig, m, args...)::DecisionSet
-    dl = intrees(config, m, args...)
-    ll = listrules(dl, use_shortforms=false)
-    return if get_dns(config)
-        rules_obj = convert_classif_rules(dl, ll)
-        DecisionSet(rules_obj)
-    else
-        DecisionSet(ll)
-    end
-end
+# function extractrules(config::InTreesConfig, m, args...)::DecisionSet
+#     dl = intrees(config, m, args...)
+#     ll = listrules(dl, use_shortforms=false)
+#     return if get_dns(config)
+#         rules_obj = convert_classif_rules(dl, ll)
+#         DecisionSet(rules_obj)
+#     else
+#         DecisionSet(ll)
+#     end
+# end
 
-function extractrules(
-    ::Type{InTreesRuleExtractor},
-    args...;
-    kwargs...
-)::DecisionSet
-    config = InTreesConfig(; kwargs...)
-    extractrules(config, args...)
-end
+# function extractrules(
+#     ::Type{InTreesRuleExtractor},
+#     args...;
+#     kwargs...
+# )::DecisionSet
+#     config = InTreesConfig(; kwargs...)
+#     extractrules(config, args...)
+# end
 
 #===========================================================================================
                                         Lumen
@@ -100,79 +101,82 @@ end
 #===========================================================================================
                                         Batrees
 ===========================================================================================#
+# TODO commented for Lumen debug
+# export batrees, BATrees
+# export BATreesRuleExtractor
 
-export batrees, BATrees
-export BATreesRuleExtractor
-
-include("BA-Trees/src/main.jl")
-@reexport using .BATrees
+# include("BA-Trees/src/main.jl")
+# @reexport using .BATrees
 
 
-"""$(_get_rule_extractor_docstring("BATreesRuleExtractor", batrees))"""
-struct BATreesRuleExtractor <: RuleExtractor end
+# """$(_get_rule_extractor_docstring("BATreesRuleExtractor", batrees))"""
+# struct BATreesRuleExtractor <: RuleExtractor end
 
-function extractrules(::BATreesRuleExtractor, m, args...; kwargs...)
-    dsbatrees = batrees(m, dsOutput=true, args...; kwargs...)
-    return dsbatrees
-end
+# function extractrules(::BATreesRuleExtractor, m, args...; kwargs...)
+#     dsbatrees = batrees(m, dsOutput=true, args...; kwargs...)
+#     return dsbatrees
+# end
 
 #===========================================================================================
                                         Refne
 ===========================================================================================#
-export REFNERuleExtractor
+# TODO commented for Lumen debug
+# export REFNERuleExtractor
 
-include("Refne/src/main.jl")
-include("Refne/src/apiREFNESole.jl")
-@reexport using .REFNE
+# include("Refne/src/main.jl")
+# include("Refne/src/apiREFNESole.jl")
+# @reexport using .REFNE
 
 
-"""$(_get_rule_extractor_docstring("REFNERuleExtractor", REFNE))"""
-struct REFNERuleExtractor <: RuleExtractor end
+# """$(_get_rule_extractor_docstring("REFNERuleExtractor", REFNE))"""
+# struct REFNERuleExtractor <: RuleExtractor end
 
-function extractrules(::REFNERuleExtractor, m, args...; kwargs...)
-    dl = refne(m, args...; kwargs...)
-    ds = make_decisionset(dl)
-    return ds
-end
+# function extractrules(::REFNERuleExtractor, m, args...; kwargs...)
+#     dl = refne(m, args...; kwargs...)
+#     ds = make_decisionset(dl)
+#     return ds
+# end
 
 #===========================================================================================
                                         TrePan
 ===========================================================================================#
-export TREPANRuleExtractor
+# TODO commented for Lumen debug
+# export TREPANRuleExtractor
 
-include("Trepan/src/main.jl")
-# include("Trepan/src/apiTREPANSole.jl")
-@reexport using .TREPAN
+# include("Trepan/src/main.jl")
+# # include("Trepan/src/apiTREPANSole.jl")
+# @reexport using .TREPAN
 
 
-"""$(_get_rule_extractor_docstring("TREPANRuleExtractor", TREPAN))"""
-struct TREPANRuleExtractor <: RuleExtractor end
+# """$(_get_rule_extractor_docstring("TREPANRuleExtractor", TREPAN))"""
+# struct TREPANRuleExtractor <: RuleExtractor end
 
-function extractrules(::TREPANRuleExtractor, m, args...; kwargs...)
-    dl = trepan(m, args...; kwargs...)
-    ds = make_decisionset(dl)
-    return ds
-end
+# function extractrules(::TREPANRuleExtractor, m, args...; kwargs...)
+#     dl = trepan(m, args...; kwargs...)
+#     ds = make_decisionset(dl)
+#     return ds
+# end
 
 #===========================================================================================
                                         RULECOSIPLUS
 ===========================================================================================#
-export RULECOSIPLUSRuleExtractor
+# TODO commented for Lumen debug
+# export RULECOSIPLUSRuleExtractor
 
-include("RuleCosiplus/src/main.jl")
-include("RuleCosiplus/src/apiRuleCosi.jl")
-@reexport using .RULECOSIPLUS
+# include("RuleCosiplus/src/main.jl")
+# include("RuleCosiplus/src/apiRuleCosi.jl")
+# @reexport using .RULECOSIPLUS
 
 
-"""$(_get_rule_extractor_docstring("RULECOSIPLUSRuleExtractor", RULECOSIPLUS))"""
-struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
+# """$(_get_rule_extractor_docstring("RULECOSIPLUSRuleExtractor", RULECOSIPLUS))"""
+# struct RULECOSIPLUSRuleExtractor <: RuleExtractor end
 
-function extractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
-    dl = rulecosiplus(m, args...; kwargs...) # decision list
-    ll = listrules(dl, use_shortforms=false) # decision list to list of rules
-    rules_obj = convert_classif_rules(dl, ll)
-    dsrulecosiplus = DecisionSet(rules_obj)
-    return dsrulecosiplus
-end
+# function extractrules(::RULECOSIPLUSRuleExtractor, m, args...; kwargs...)
+#     dl = rulecosiplus(m, args...; kwargs...) # decision list
+#     ll = listrules(dl, use_shortforms=false) # decision list to list of rules
+#     rules_obj = convert_classif_rules(dl, ll)
+#     dsrulecosiplus = DecisionSet(rules_obj)
+#     return dsrulecosiplus
+# end
 
 end

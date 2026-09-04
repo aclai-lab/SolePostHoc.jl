@@ -84,20 +84,20 @@ cfg = LumenConfig(
 
 See also: [`lumen`](@ref), [`LumenResult`](@ref), [`AbstractConfig`](@ref)
 """
-struct LumenConfig <: AbstractConfig
+struct LumenConfig{T<:AbstractFloat} <: AbstractConfig
     minimization_scheme::Symbol
     binary::Union{Nothing,String}
-    depth::Float64
-    vertical::Float64
-    horizontal::Float64
+    depth::T
+    vertical::T
+    horizontal::T
     minimization_kwargs::NamedTuple
     filt_alphabet::Base.Callable
     apply_function::Base.Callable
-    importance::Vector
+    importance::Vector{T}
     check_opt::Bool
     check_alphabet::Bool
-    use_multithreads::Bool
-    float_type::Type
+    M::Int
+    max_apply_batch::Int
 
     function LumenConfig(;
         minimization_scheme::Symbol=:abc,
@@ -110,8 +110,9 @@ struct LumenConfig <: AbstractConfig
         importance::Vector=Float64[],
         check_opt::Bool=false,
         check_alphabet::Bool=false,
-        use_multithreads::Bool=true,
-        float_type::Type=Float64
+        M::Int=20_000,
+        max_apply_batch::Int=min(M, 4096),
+        float_resolution::Type=Float32
     )
         # validate coverage parameters - must be positive and ≤ 1.0
         # these parameters control the proportion of instances
@@ -146,9 +147,11 @@ struct LumenConfig <: AbstractConfig
             ))
         end
 
+        M >= 1 || throw(ArgumentError("M must be positive, got $M"))
+
         binary = valid_schemes[minimization_scheme]
 
-        new(
+        new{float_resolution}(
             minimization_scheme,
             binary,
             depth,
@@ -160,8 +163,8 @@ struct LumenConfig <: AbstractConfig
             importance,
             check_opt,
             check_alphabet,
-            use_multithreads,
-            float_type
+            M,
+            max_apply_batch
         )
     end
 end
@@ -169,88 +172,121 @@ end
 # ---------------------------------------------------------------------------- #
 #                                  methods                                     #
 # ---------------------------------------------------------------------------- #
-"""
-    get_minimization_scheme(r::LumenConfig) -> Symbol
+# """
+#     get_minimization_scheme(r::LumenConfig) -> Symbol
 
-Return the DNF minimization algorithm identifier stored in `r`.
-"""
-@inline get_minimization_scheme(r::LumenConfig) = r.minimization_scheme
+# Return the DNF minimization algorithm identifier stored in `r`.
+# """
+# @inline get_minimization_scheme(r::LumenConfig) = r.minimization_scheme
 
-"""
-    get_binary(r::LumenConfig) -> String
+# """
+#     get_binary(r::LumenConfig) -> String
 
-Return the absolute path to the minimizer executable stored in `r`.
-"""
-@inline get_binary(r::LumenConfig) = r.binary
+# Return the absolute path to the minimizer executable stored in `r`.
+# """
+# @inline get_binary(r::LumenConfig) = r.binary
 
-"""
-    get_depth(r::LumenConfig) -> Float64
+# """
+#     get_depth(r::LumenConfig) -> Float64
 
-Return the depth coverage parameter δ ∈ (0, 1] stored in `r`.
-"""
-@inline get_depth(r::LumenConfig) = r.depth
+# Return the depth coverage parameter δ ∈ (0, 1] stored in `r`.
+# """
+# @inline get_depth(r::LumenConfig) = r.depth
 
-"""
-    get_vertical(r::LumenConfig) -> Float64
+# """
+#     get_vertical(r::LumenConfig) -> Float64
 
-Return the instance-coverage parameter α ∈ (0, 1] stored in `r`.
-"""
-@inline get_vertical(r::LumenConfig) = r.vertical
+# Return the instance-coverage parameter α ∈ (0, 1] stored in `r`.
+# """
+# @inline get_vertical(r::LumenConfig) = r.vertical
 
-"""
-    get_horizontal(r::LumenConfig) -> Float64
+# """
+#     get_horizontal(r::LumenConfig) -> Float64
 
-Return the feature-coverage parameter β ∈ (0, 1] stored in `r`.
-"""
-@inline get_horizontal(r::LumenConfig) = r.horizontal
+# Return the feature-coverage parameter β ∈ (0, 1] stored in `r`.
+# """
+# @inline get_horizontal(r::LumenConfig) = r.horizontal
 
-"""
-    get_minimization_kwargs(r::LumenConfig) -> NamedTuple
+# """
+#     get_minimization_kwargs(r::LumenConfig) -> NamedTuple
 
-Return the extra keyword arguments forwarded to the minimizer stored in `r`.
-"""
-@inline get_minimization_kwargs(r::LumenConfig) = r.minimization_kwargs
+# Return the extra keyword arguments forwarded to the minimizer stored in `r`.
+# """
+# @inline get_minimization_kwargs(r::LumenConfig) = r.minimization_kwargs
 
-"""
-    get_filt_alphabet(r::LumenConfig) -> Base.Callable
+# """
+#     get_filt_alphabet(r::LumenConfig) -> Base.Callable
 
-Return the alphabet-filter callback stored in `r`.
-"""
-@inline get_filt_alphabet(r::LumenConfig) = r.filt_alphabet
+# Return the alphabet-filter callback stored in `r`.
+# """
+# @inline get_filt_alphabet(r::LumenConfig) = r.filt_alphabet
 
-"""
-    get_apply_function(r::LumenConfig) -> Base.Callable
+# """
+#     get_apply_function(r::LumenConfig) -> Base.Callable
 
-Return the model-application function stored in `r`.
-"""
-@inline get_apply_function(r::LumenConfig) = r.apply_function
+# Return the model-application function stored in `r`.
+# """
+# @inline get_apply_function(r::LumenConfig) = r.apply_function
 
-"""
-    get_importance(r::LumenConfig) -> Vector
+# """
+#     get_importance(r::LumenConfig) -> Vector
 
-Return the feature-importance weight vector stored in `r`.
-"""
-@inline get_importance(r::LumenConfig) = r.importance
+# Return the feature-importance weight vector stored in `r`.
+# """
+# @inline get_importance(r::LumenConfig) = r.importance
 
-"""
-    get_check_opt(r::LumenConfig) -> Bool
+# """
+#     get_check_opt(r::LumenConfig) -> Bool
 
-Return `true` if OTT-optimisation validation is enabled in `r`.
-"""
-@inline get_check_opt(r::LumenConfig) = r.check_opt
+# Return `true` if OTT-optimisation validation is enabled in `r`.
+# """
+# @inline get_check_opt(r::LumenConfig) = r.check_opt
 
-"""
-    get_check_alphabet(r::LumenConfig) -> Bool
+# """
+#     get_check_alphabet(r::LumenConfig) -> Bool
 
-Return `true` if alphabet-analysis diagnostics are enabled in `r`.
-"""
-@inline get_check_alphabet(r::LumenConfig) = r.check_alphabet
+# Return `true` if alphabet-analysis diagnostics are enabled in `r`.
+# """
+# @inline get_check_alphabet(r::LumenConfig) = r.check_alphabet
 
-@inline get_use_multithreads(r::LumenConfig) = r.use_multithreads
+function get_universe_conditions(model)
+    thresholds_per_feature = Dict{Any,Set{Float64}}()
 
-"""
-    get_float_type(r::LumenConfig) -> Type
+    function traverse(node)
+        if node isa Branch
+            # Estrai la condizione dal nodo (di solito un Atom)
+            cond = node.condition
+            if cond isa SL.Atom
+                scalar_cond = SL.value(cond)
+                feat = SD.feature(scalar_cond)
+                # Estrai la soglia (usa SD.threshold se esiste, altrimenti il campo .threshold)
+                t = SD.threshold(scalar_cond)
+                push!(get!(thresholds_per_feature, feat, Set{Float64}()), t)
+            end
+            # Ricorri sui figli
+            traverse(node.then_branch)   # oppure node.true_branch
+            traverse(node.else_branch)   # oppure node.false_branch
+        elseif node isa Leaf
+            # Foglia: nessuna condizione
+        elseif node isa DecisionEnsemble
+            for tree in node.trees
+                traverse(tree)
+            end
+        elseif node isa AbstractVector
+            for t in node
+                traverse(t)
+            end
+        end
+    end
 
-Return the floating-point type stored in `r`.
-"""
-@inline get_float_type(r::LumenConfig) = r.float_type
+    traverse(model)
+
+    conds = SD.ScalarCondition[]
+    for (feat, thresholds) in thresholds_per_feature
+        for t in sort!(collect(thresholds))
+            push!(conds, SD.ScalarCondition(feat, (>=), t))
+            push!(conds, SD.ScalarCondition(feat, (<), t))
+        end
+    end
+    return conds
+end

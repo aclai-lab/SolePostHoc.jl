@@ -6,11 +6,11 @@ end
 function minimizza_dnf(
     ::Val{:mitespresso},
     formula::TwoLevelDNFFormula;
-    silent = true,
-    horizontal = 1.0,
-    vertical = 1.0,
-    depth = 1.0,
-    vetImportance = [],
+    silent=false,
+    horizontal=1.0,
+    vertical=1.0,
+    depth=1.0,
+    vetImportance=[],
     mitespresso_kwargs...,
 )
     formula = convert(SoleLogics.DNF, formula)
@@ -28,7 +28,7 @@ end
 function minimizza_dnf(
     ::Val{:boom},
     formula::TwoLevelDNFFormula;
-    silent = true,
+    silent=true,
     boom_kwargs...,
 )
     formula = convert(SoleLogics.DNF, formula)
@@ -44,10 +44,10 @@ end
 function minimizza_dnf(
     ::Val{:abc},
     formula::TwoLevelDNFFormula;
-    silent = true,
-    horizontal = 1.0,
-    vertical = 1.0,
-    vetImportance = [],
+    silent=true,
+    horizontal=1.0,
+    vertical=1.0,
+    vetImportance=[],
     boom_kwargs...,
 )
     return _abc_minimize_dnf_logic(
@@ -64,10 +64,10 @@ end
 function minimizza_dnf(
     ::Val{:abc_balanced},
     formula::TwoLevelDNFFormula;
-    silent = true,
-    horizontal = 1.0,
-    vertical = 1.0,
-    vetImportance = [],
+    silent=true,
+    horizontal=1.0,
+    vertical=1.0,
+    vetImportance=[],
     boom_kwargs...,
 )
     return _abc_minimize_dnf_logic(
@@ -84,10 +84,10 @@ end
 function minimizza_dnf(
     ::Val{:abc_thorough},
     formula::TwoLevelDNFFormula;
-    silent = true,
-    horizontal = 1.0,
-    vertical = 1.0,
-    vetImportance = [],
+    silent=true,
+    horizontal=1.0,
+    vertical=1.0,
+    vetImportance=[],
     boom_kwargs...,
 )
     return _abc_minimize_dnf_logic(
@@ -104,10 +104,10 @@ end
 function _abc_minimize_dnf_logic(
     formula::TwoLevelDNFFormula,
     fast_level::Int;
-    silent = true,
-    horizontal = 1.0,
-    vertical = 1.0,
-    vetImportance = [],
+    silent=true,
+    horizontal=1.0,
+    vertical=1.0,
+    vetImportance=[],
     boom_kwargs...,
 )
     formula = convert(SoleLogics.DNF, formula)
@@ -126,7 +126,7 @@ function _abc_minimize_dnf_logic(
     silent || println("post rc comparison: ", dnf(formula))
     silent || println("||====================||")
 
-    formula = SoleData.abc_minimize(formula, silent; fast = fast_level, boom_kwargs...)
+    formula = SoleData.abc_minimize(formula, silent; fast=fast_level, boom_kwargs...)
 
     silent || (println(); @show formula)
 
@@ -264,11 +264,11 @@ with exhaustive search for the optimal solution.
 function minimizza_dnf(
     ::Val{:quine_naive},
     formula::TwoLevelDNFFormula;
-    silent = true,
-    horizontal = 1.0,
-    vertical = 1.0,
-    depth = 1.0,
-    vetImportance = [],
+    silent=true,
+    horizontal=1.0,
+    vertical=1.0,
+    depth=1.0,
+    vetImportance=[],
     kwargs...,  # Captures any other parameters
 )
 
@@ -517,7 +517,7 @@ function minimizza_dnf(
                 )
 
                 # Keep only the most promising products
-                sort!(current_sop, by = p -> length(p.primes))
+                sort!(current_sop, by=p -> length(p.primes))
                 current_sop = current_sop[1:min(10000, length(current_sop))]
                 current_sop = simplify_sop(current_sop)
             end
@@ -663,11 +663,11 @@ OPP:    V3 < 2.45                                  # redundancy eliminated!
 function minimizza_dnf(
     ::Val{:quine},
     formula::TwoLevelDNFFormula;
-    silent = true,
-    horizontal = 1.0,
-    vertical = 1.0,
-    depth = 1.0,
-    vetImportance = [],
+    silent=true,
+    horizontal=1.0,
+    vertical=1.0,
+    depth=1.0,
+    vetImportance=[],
     kwargs...,
 )
 
@@ -852,7 +852,7 @@ function minimizza_dnf(
             current_sop = multiply_sop(current_sop, minterm_sum)
 
             if length(current_sop) > 50000
-                sort!(current_sop, by = p -> length(p.primes))
+                sort!(current_sop, by=p -> length(p.primes))
                 current_sop = current_sop[1:min(10000, length(current_sop))]
                 current_sop = simplify_sop(current_sop)
             end
@@ -969,7 +969,7 @@ function minimizza_dnf(
         end
 
         # Merge and sort ranges
-        sorted_ranges = sort(ranges, by = r -> r[1])
+        sorted_ranges = sort(ranges, by=r -> r[1])
 
         # Check if there's a range from -Inf to +Inf
         for (lower, upper, _) in sorted_ranges
