@@ -168,30 +168,56 @@ end
 # ---------------------------------------------------------------------------- #
 #                       shared threshold/family derivation                     #
 # ---------------------------------------------------------------------------- #
+struct Ctx{R,T}
+    featurenames::Vector{Symbol}
+    classnames::Vector{Symbol}
+    thresholds::Vector{Vector{T}}
+    thrs_with_p::Vector{Vector{T}}
+    op_families::Vector{Symbol}
+    lens::Vector{R}
+    strides::Vector{R}
+    n_total::R
+
+    function Ctx{R,T}(
+        featurenames::Vector{Symbol},
+        classnames::Vector{Symbol},
+        thresholds::Vector{<:Vector{TH}},
+        thrs_with_p::Vector{<:Vector{TH}},
+        op_families::Vector{Symbol},
+        lens::Vector{Int},
+        strides::Vector{Int},
+        n_total::Int
+    ) where {R<:Unsigned, T<:AbstractFloat, TH<:AbstractFloat}
+        new{R,T}(
+            featurenames,
+            classnames,
+            thresholds,
+            thrs_with_p,
+            op_families,
+            lens,
+            strides,
+            n_total
+        )
+    end
+end
+
 function _prepare_sequential_context(
-    config::LumenConfig{T},
-    trees::Vector{SM.Branch{S}},
-    featurenames::Vector{String},
-    classnames::Vector{String}
-) where {T<:AbstractFloat,S<:SM.Label}
+    config::LumenConfig{R,T},
+    atoms::Vector{A},
+    featurenames::Vector{Symbol},
+    classnames::Vector{Symbol}
+) where {A<:SM.Atom,R<:Unsigned,T<:AbstractFloat}
     depth = config.depth
 
-    atoms = unique!(_normalize_atom.(if depth < 1.0
-        mapreduce(vcat, trees; init=SL.Atom{SD.ScalarCondition}[]) do t
-            _take_first_percentage(_extract_atoms_bfs_order(t), depth)
-        end
-    else
-        collect(Iterators.flatten(SM.alphabet.(trees, false)))
-    end))
+    depth < 1.0 && (atoms = _take_first_percentage(atoms, depth)) # TODO check it!
 
-    let unsupported = unique(op for op in get_operator.(atoms) if op ∉ _supported_operators)
-        isempty(unsupported) || throw(ArgumentError(
-            "Only '<', '≥', '>', '≤' operators are currently supported. " *
-            "Found unsupported operators: $(unsupported)."
-        ))
+    features = Vector{Symbol}(undef, length(atoms))
+    @inbounds for i in eachindex(atoms)
+        @assert get_operator(atoms[i]) ∈ _supported_operators "Only" *
+            "'<', '≥', '>', '≤' operators are currently supported."
+        features[i] = SM.featurename(get_feature(atoms[i]))
     end
-
-    features = String.(SM.featurename.(unique!(get_feature.(atoms))))
+    features = unique!(features)
 
     thresholds = Vector{Vector{T}}(undef, length(featurenames))
     op_families = Vector{Symbol}(undef, length(featurenames))
@@ -216,12 +242,15 @@ function _prepare_sequential_context(
     strides = _strides(lens)
     n_total = prod(lens)
 
-    _dbg("context prepared: n_total=", n_total, " nfeatures=", length(featurenames),
-        " nclasses=", length(classnames), " lens=", lens)
-
-    return (;
-        thresholds, thrs_with_p, featurenames=Symbol.(featurenames),
-        classnames, op_families, lens, strides, n_total
+    return Ctx{R,T}(
+        featurenames,
+        classnames,
+        thresholds,
+        thrs_with_p,
+        op_families,
+        lens,
+        strides,
+        n_total
     )
 end
 

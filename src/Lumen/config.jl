@@ -84,7 +84,7 @@ cfg = LumenConfig(
 
 See also: [`lumen`](@ref), [`LumenResult`](@ref), [`AbstractConfig`](@ref)
 """
-struct LumenConfig{T<:AbstractFloat} <: AbstractConfig
+struct LumenConfig{R<:Unsigned,T<:AbstractFloat} <: AbstractConfig
     minimization_scheme::Symbol
     binary::Union{Nothing,String}
     depth::T
@@ -96,8 +96,8 @@ struct LumenConfig{T<:AbstractFloat} <: AbstractConfig
     importance::Vector{T}
     check_opt::Bool
     check_alphabet::Bool
-    M::Int
-    max_apply_batch::Int
+    M::R
+    max_apply_batch::R
 
     function LumenConfig(;
         minimization_scheme::Symbol=:abc,
@@ -112,6 +112,7 @@ struct LumenConfig{T<:AbstractFloat} <: AbstractConfig
         check_alphabet::Bool=false,
         M::Int=20_000,
         max_apply_batch::Int=min(M, 4096),
+        internal_resolution::Type=UInt32,
         float_resolution::Type=Float32
     )
         # validate coverage parameters - must be positive and ≤ 1.0
@@ -151,7 +152,7 @@ struct LumenConfig{T<:AbstractFloat} <: AbstractConfig
 
         binary = valid_schemes[minimization_scheme]
 
-        new{float_resolution}(
+        new{internal_resolution,float_resolution}(
             minimization_scheme,
             binary,
             depth,
@@ -168,86 +169,6 @@ struct LumenConfig{T<:AbstractFloat} <: AbstractConfig
         )
     end
 end
-
-# ---------------------------------------------------------------------------- #
-#                                  methods                                     #
-# ---------------------------------------------------------------------------- #
-# """
-#     get_minimization_scheme(r::LumenConfig) -> Symbol
-
-# Return the DNF minimization algorithm identifier stored in `r`.
-# """
-# @inline get_minimization_scheme(r::LumenConfig) = r.minimization_scheme
-
-# """
-#     get_binary(r::LumenConfig) -> String
-
-# Return the absolute path to the minimizer executable stored in `r`.
-# """
-# @inline get_binary(r::LumenConfig) = r.binary
-
-# """
-#     get_depth(r::LumenConfig) -> Float64
-
-# Return the depth coverage parameter δ ∈ (0, 1] stored in `r`.
-# """
-# @inline get_depth(r::LumenConfig) = r.depth
-
-# """
-#     get_vertical(r::LumenConfig) -> Float64
-
-# Return the instance-coverage parameter α ∈ (0, 1] stored in `r`.
-# """
-# @inline get_vertical(r::LumenConfig) = r.vertical
-
-# """
-#     get_horizontal(r::LumenConfig) -> Float64
-
-# Return the feature-coverage parameter β ∈ (0, 1] stored in `r`.
-# """
-# @inline get_horizontal(r::LumenConfig) = r.horizontal
-
-# """
-#     get_minimization_kwargs(r::LumenConfig) -> NamedTuple
-
-# Return the extra keyword arguments forwarded to the minimizer stored in `r`.
-# """
-# @inline get_minimization_kwargs(r::LumenConfig) = r.minimization_kwargs
-
-# """
-#     get_filt_alphabet(r::LumenConfig) -> Base.Callable
-
-# Return the alphabet-filter callback stored in `r`.
-# """
-# @inline get_filt_alphabet(r::LumenConfig) = r.filt_alphabet
-
-# """
-#     get_apply_function(r::LumenConfig) -> Base.Callable
-
-# Return the model-application function stored in `r`.
-# """
-# @inline get_apply_function(r::LumenConfig) = r.apply_function
-
-# """
-#     get_importance(r::LumenConfig) -> Vector
-
-# Return the feature-importance weight vector stored in `r`.
-# """
-# @inline get_importance(r::LumenConfig) = r.importance
-
-# """
-#     get_check_opt(r::LumenConfig) -> Bool
-
-# Return `true` if OTT-optimisation validation is enabled in `r`.
-# """
-# @inline get_check_opt(r::LumenConfig) = r.check_opt
-
-# """
-#     get_check_alphabet(r::LumenConfig) -> Bool
-
-# Return `true` if alphabet-analysis diagnostics are enabled in `r`.
-# """
-# @inline get_check_alphabet(r::LumenConfig) = r.check_alphabet
 
 function get_universe_conditions(model)
     thresholds_per_feature = Dict{Any,Set{Float64}}()

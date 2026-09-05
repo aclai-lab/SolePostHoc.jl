@@ -34,6 +34,46 @@
 #   `get_float_type`, `get_minimization_scheme`.
 # ============================================================================ #
 
+# ---------------------------------------------------------------------------- #
+#              flat compiled tree: allocation-free evaluation                  #
+# ---------------------------------------------------------------------------- #
+struct FlatTree{T<:AbstractFloat}
+    feat::Vector{Int32}      # feature index; 0 ⟹ leaf
+    thr::Vector{T}
+    left::Vector{Int32}
+    right::Vector{Int32}
+    cls::Vector{Int32}       # class index at leaves
+end
+
+function _compile_tree(root::SM.Branch, featidx::Dict{Symbol,Int}, class_index::Dict{String,Int}, ::Type{T}) where {T}
+    ft = FlatTree{T}(Int32[], T[], Int32[], Int32[], Int32[])
+    function build(node)
+        push!(ft.feat, 0); push!(ft.thr, zero(T))
+        push!(ft.left, 0); push!(ft.right, 0); push!(ft.cls, 0)
+        i = length(ft.feat)
+        if node isa SM.Branch
+            cond = SL.value(SM.antecedent(node))
+            v = SD.i_variable(SD.feature(cond))
+            ft.feat[i] = v isa Integer ? Int32(v) : Int32(featidx[Symbol(v)])
+            ft.thr[i]  = T(SD.threshold(cond))
+            ft.left[i]  = build(SM.posconsequent(node))
+            ft.right[i] = build(SM.negconsequent(node))
+        else
+            ft.cls[i] = Int32(class_index[String(SM.outcome(node))])
+        end
+        return Int32(i)
+    end
+    build(root)
+    return ft
+end
+
+@inline function _eval_flat(ft::FlatTree{T}, row::AbstractVector{T})::Int where {T}
+    i = 1
+    @inbounds while ft.feat[i] != 0
+        i = row[ft.feat[i]] < ft.thr[i] ? ft.left[i] : ft.right[i]
+    end
+    return Int(@inbounds ft.cls[i])
+end
 
 # ---------------------------------------------------------------------------- #
 #                                  leaf routine                                #
@@ -52,6 +92,17 @@ genuinely SOP-optimal for their own sub-rectangle; the change in this file
 is only in how sibling leaves/subtrees get combined afterwards (see
 `_combine_cofactors` below), not in how a single leaf is computed.
 """
+# @inline function _eval_tree(node::SM.Branch, row::NTuple{N,T}, featidx::Dict{Symbol,Int}) where {N,T}
+#     while node isa SM.Branch
+#         cond = SL.value(SM.antecedent(node))            # ScalarCondition
+#         v    = SD.i_variable(SD.feature(cond))
+#         j    = v isa Integer ? Int(v) : featidx[Symbol(v)]
+#         node = SD.test_operator(cond)(row[j], SD.threshold(cond)) ?
+#             SM.posconsequent(node) : SM.negconsequent(node)
+#     end
+#     return SM.outcome(node)                             # ConstantModel leaf
+# end
+
 function _leaf_extract(
     config::LumenConfig{T},
     trees::Vector{SM.Branch{S}},
@@ -69,45 +120,29 @@ function _leaf_extract(
     dims = ntuple(j -> lo[j]:hi[j], nfeat)
     all_idx = vec(CartesianIndices(dims))
     total = length(all_idx)
+    featidx = Dict(Symbol(f) => j for (j, f) in enumerate(ctx.featurenames))
+    class_index = Dict(String(c) => i for (i, c) in enumerate(ctx.classnames))
+    flats = [_compile_tree(t, featidx, class_index, T) for t in trees]
+    counts = Vector{Int}(undef, nclasses)
+    row = Vector{T}(undef, nfeat)                 # reused row buffer
 
     i0 = 1
     @inbounds while i0 ≤ total
         this_chunk = min(config.max_apply_batch, total - i0 + 1)
         chunk = @view all_idx[i0:(i0 + this_chunk - 1)]
 
-        rows = Vector{NTuple{nfeat,T}}(undef, this_chunk)
-        for (k, ci) in enumerate(chunk)
-            rows[k] = ntuple(j -> ctx.thrs_with_p[j][ci[j]], nfeat)
-        end
+        for ci in chunk
+            for j in 1:nfeat
+                row[j] = ctx.thrs_with_p[j][ci[j]]
+            end
 
-        tbl = NamedTuple{Tuple(ctx.featurenames)}(
-            ntuple(j -> [r[j] for r in rows], nfeat)
-        )
-        d = PropositionalLogiset(tbl)
-        # apply every tree of the forest, then majority-vote per row
+            fill!(counts, 0)
+            for ft in flats
+                counts[_eval_flat(ft, row)] += 1
+            end
+            ci_class = argmax(counts)
 
-        all_preds = Matrix{S}(undef, this_chunk, ntrees)
-
-        for i in 1:ntrees
-            all_preds[:, i] = config.apply_function(
-                trees[i], d;
-                use_multithreads=false,
-                suppress_parity_warning=true
-            )
-        end
-
-        preds = Vector{S}(undef, this_chunk)
-
-        for i in 1:this_chunk
-            frequencies = countmap(view(all_preds, i, :))
-            preds[i] = argmax(frequencies)
-        end
-
-        for k in 1:this_chunk
-            ci_class = get(class_index, preds[k], nothing)
-            isnothing(ci_class) && continue  # defensive: unseen label, skip
-
-            truths_row = _truths_by_thresholds(rows[k], ctx.thresholds)
+            truths_row = _truths_by_thresholds(row, ctx.thresholds)
             cube = generate_disjunct(
                 truths_row, ctx.thresholds, ctx.featurenames, ctx.op_families
             )
@@ -173,17 +208,18 @@ each split strictly shrinks the widest dimension and the total size is
 finite (worst-case depth `O(log2(n_total / M))`).
 """
 function _shannon_extract(
-    config::LumenConfig{T},
-    trees::Vector{SM.Branch{S}},
-    ctx::NamedTuple,
+    # config::LumenConfig{T},
+    # trees::Vector{SM.Branch{S}},
+    # ctx::NamedTuple,
     lo::Vector{Int},
     hi::Vector{Int},
     scheme::Symbol
 ) where {S<:SM.Label,T<:AbstractFloat}
     rect_size = prod(hi .- lo .+ 1)
 
-    if rect_size ≤ config.M
-        return _leaf_extract(config, trees, ctx, lo, hi, scheme)
+    if rect_size ≤ 5000
+        # return _leaf_extract(config, trees, ctx, lo, hi, scheme)
+        return "gino"
     end
 
     jstar = argmax(hi .- lo .+ 1)
@@ -195,10 +231,13 @@ function _shannon_extract(
     lo_high, hi_high = copy(lo), copy(hi)
     lo_high[jstar] = t + 1
 
-    terms_low = _shannon_extract(config, trees, ctx, lo_low, hi_low, scheme)
-    terms_high = _shannon_extract(config, trees, ctx, lo_high, hi_high, scheme)
+    # terms_low = _shannon_extract(config, trees, ctx, lo_low, hi_low, scheme)
+    # terms_high = _shannon_extract(config, trees, ctx, lo_high, hi_high, scheme)
 
-    return _combine_cofactors(terms_low, terms_high)
+    terms_low = _shannon_extract(lo_low, hi_low, scheme)
+    terms_high = _shannon_extract(lo_high, hi_high, scheme)
+
+    # return _combine_cofactors(terms_low, terms_high)
 end
 
 
@@ -270,31 +309,34 @@ compacted).
 """
 
 function lumen_shannon(
-    config::LumenConfig{T},
-    trees::Vector{SM.Branch{S}};
-    featurenames::Vector{String},
-    classnames::Vector{String}
-) where {S<:SM.Label,T<:AbstractFloat}
-    ctx = _prepare_sequential_context(config, trees, featurenames, classnames)
+    config::LumenConfig{R,T},
+    atoms::Vector{A};
+    featurenames::Vector{Symbol},
+    classnames::Vector{Symbol}
+) where {A<:SM.Atom,R<:Unsigned,T<:AbstractFloat}
+    ctx = _prepare_sequential_context(config, atoms, featurenames, classnames)
 
-    lo = ones(Int, length(ctx.lens))
+    lo = ones(R, length(ctx.lens))
     hi = copy(ctx.lens)
 
-    per_class_terms = _shannon_extract(
-        config, trees, ctx, lo, hi, config.minimization_scheme
-    )
+    # per_class_terms = _shannon_extract(
+    #     config, trees, ctx, lo, hi, config.minimization_scheme
+    # )
+    # per_class_terms = _shannon_extract(
+    #     lo, hi, config.minimization_scheme
+    # )
 
-    return _finalize_decision_set(ctx, per_class_terms, config)
+    # return _finalize_decision_set(ctx, per_class_terms, config)
 end
 
 function lumen_shannon(
-    config::LumenConfig{T},
+    config::LumenConfig{R,T},
     model::SM.AbstractModel
-) where T<:AbstractFloat
+) where {R<:Unsigned,T<:AbstractFloat}
     lumen_shannon(
         config,
-        SM.models(model);
-        featurenames=String.(SM.info(model, :featurenames)),
-        classnames=String.(unique!(SM.info(model, :supporting_labels)))
+        SM.antecedent.(SM.models(model));
+        featurenames=SM.info(model, :featurenames),
+        classnames=Symbol.(unique!(SM.info(model, :supporting_labels)))   
     )
 end
