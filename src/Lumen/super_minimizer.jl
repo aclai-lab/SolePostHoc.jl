@@ -206,7 +206,7 @@ function _prepare_sequential_context(
     atoms::Vector{A},
     featurenames::Vector{Symbol},
     class_idxs::Vector{R}
-) where {A<:SM.Atom,R<:Unsigned,T<:AbstractFloat}
+) where {B<:SM.ScalarCondition,A<:SM.Atom{B},R<:Unsigned,T<:AbstractFloat}
     depth = config.depth
 
     depth < 1.0 && (atoms = _take_first_percentage(atoms, depth)) # TODO check it!
@@ -224,7 +224,6 @@ function _prepare_sequential_context(
 
     @inbounds for i in eachindex(featurenames)
         idx = findfirst(f -> f == featurenames[i], features)
-        @show idx
         if isnothing(idx)
             thresholds[i] = T[]
             op_families[i] = :lt
@@ -237,7 +236,6 @@ function _prepare_sequential_context(
             )
         end
     end
-    gino
 
     thrs_with_p = _thrs_with_boundary(thresholds, op_families)
     lens = length.(thrs_with_p)

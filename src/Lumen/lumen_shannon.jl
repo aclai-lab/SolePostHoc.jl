@@ -280,8 +280,9 @@ function lumen_shannon(
     config::LumenConfig{R,T},
     atoms::Vector{A},
     featurenames::Vector{Symbol},
+    classnames::Vector{String},
     class_idxs::Vector{R}
-) where {A<:SM.Atom,R<:Unsigned,T<:AbstractFloat}
+) where {B<:SM.ScalarCondition,A<:SM.Atom{B},R<:Unsigned,T<:AbstractFloat}
     ctx = _prepare_sequential_context(config, atoms, featurenames, class_idxs)
 
     lo = ones(R, length(ctx.lens))
@@ -296,15 +297,16 @@ end
 
 function lumen_shannon(
     config::LumenConfig{R,T},
-    model::SM.AbstractModel
-) where {R<:Unsigned,T<:AbstractFloat}
-    _, class_idxs = assign(R, unique!(SM.info(model, :supporting_labels)))
+    model::SM.DecisionEnsemble{R,B}
+) where {R<:Unsigned,T<:AbstractFloat,B<:SM.Branch}
+    classnames, class_idxs = assign(R, unique!(SM.info(model, :supporting_labels)))
     featurenames = SM.info(model, :featurenames)
 
     lumen_shannon(
         config,
         _extract_atoms_bfs_order(model),
         featurenames,
+        classnames,
         class_idxs
     )
 end
