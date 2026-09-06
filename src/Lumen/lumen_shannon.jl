@@ -34,46 +34,6 @@
 #   `get_float_type`, `get_minimization_scheme`.
 # ============================================================================ #
 
-# ---------------------------------------------------------------------------- #
-#              flat compiled tree: allocation-free evaluation                  #
-# ---------------------------------------------------------------------------- #
-struct FlatTree{T<:AbstractFloat}
-    feat::Vector{Int32}      # feature index; 0 ⟹ leaf
-    thr::Vector{T}
-    left::Vector{Int32}
-    right::Vector{Int32}
-    cls::Vector{Int32}       # class index at leaves
-end
-
-function _compile_tree(root::SM.Branch, featidx::Dict{Symbol,Int}, class_index::Dict{String,Int}, ::Type{T}) where {T}
-    ft = FlatTree{T}(Int32[], T[], Int32[], Int32[], Int32[])
-    function build(node)
-        push!(ft.feat, 0); push!(ft.thr, zero(T))
-        push!(ft.left, 0); push!(ft.right, 0); push!(ft.cls, 0)
-        i = length(ft.feat)
-        if node isa SM.Branch
-            cond = SL.value(SM.antecedent(node))
-            v = SD.i_variable(SD.feature(cond))
-            ft.feat[i] = v isa Integer ? Int32(v) : Int32(featidx[Symbol(v)])
-            ft.thr[i]  = T(SD.threshold(cond))
-            ft.left[i]  = build(SM.posconsequent(node))
-            ft.right[i] = build(SM.negconsequent(node))
-        else
-            ft.cls[i] = Int32(class_index[String(SM.outcome(node))])
-        end
-        return Int32(i)
-    end
-    build(root)
-    return ft
-end
-
-@inline function _eval_flat(ft::FlatTree{T}, row::AbstractVector{T})::Int where {T}
-    i = 1
-    @inbounds while ft.feat[i] != 0
-        i = row[ft.feat[i]] < ft.thr[i] ? ft.left[i] : ft.right[i]
-    end
-    return Int(@inbounds ft.cls[i])
-end
 
 # ---------------------------------------------------------------------------- #
 #                                  leaf routine                                #
@@ -104,45 +64,49 @@ is only in how sibling leaves/subtrees get combined afterwards (see
 # end
 
 function _leaf_extract(
-    config::LumenConfig{T},
-    trees::Vector{SM.Branch{S}},
-    ctx::NamedTuple,
-    lo::Vector{Int},
-    hi::Vector{Int},
-    scheme::Symbol
-) where {S<:SM.Label,T<:AbstractFloat}
+    config::LumenConfig{R,T},
+    ctx::Ctx{R,T},
+    atoms::Vector{A},
+    lo::Vector{R},
+    hi::Vector{R}
+) where {A<:SM.Atom,R<:Unsigned,T<:AbstractFloat}
     nfeat = length(ctx.featurenames)
-    nclasses = length(ctx.classnames)
-    ntrees = length(trees)
-    class_index = Dict(c => i for (i, c) in enumerate(ctx.classnames))
-    raw = [Vector{Vector{SL.Atom}}() for _ in 1:nclasses]
+    nclasses = length(ctx.class_idxs)
+    raw = [Vector{Vector{SM.Atom}}() for _ in 1:nclasses]
 
     dims = ntuple(j -> lo[j]:hi[j], nfeat)
     all_idx = vec(CartesianIndices(dims))
     total = length(all_idx)
-    featidx = Dict(Symbol(f) => j for (j, f) in enumerate(ctx.featurenames))
-    class_index = Dict(String(c) => i for (i, c) in enumerate(ctx.classnames))
-    flats = [_compile_tree(t, featidx, class_index, T) for t in trees]
-    counts = Vector{Int}(undef, nclasses)
-    row = Vector{T}(undef, nfeat)                 # reused row buffer
 
     i0 = 1
-    @inbounds while i0 ≤ total
+    while i0 ≤ total
         this_chunk = min(config.max_apply_batch, total - i0 + 1)
         chunk = @view all_idx[i0:(i0 + this_chunk - 1)]
 
-        for ci in chunk
-            for j in 1:nfeat
-                row[j] = ctx.thrs_with_p[j][ci[j]]
-            end
+        @show ctx.thrs_with_p
 
-            fill!(counts, 0)
-            for ft in flats
-                counts[_eval_flat(ft, row)] += 1
-            end
-            ci_class = argmax(counts)
+        rows = Vector{NTuple{nfeat,T}}(undef, this_chunk)
+        @inbounds for (k, ci) in enumerate(chunk)
+            rows[k] = ntuple(j -> ctx.thrs_with_p[j][ci[j]], nfeat)
+        end
 
-            truths_row = _truths_by_thresholds(row, ctx.thresholds)
+        tbl = NamedTuple{Tuple(ctx.featurenames)}(
+            ntuple(j -> [r[j] for r in rows], nfeat)
+        )
+
+        d = PropositionalLogiset(tbl)
+        
+        preds = [config.apply_function(config)(
+            a, d;
+            # use_multithreads=get_use_multithreads(config),
+            suppress_parity_warning=true
+        ) for a in atoms]
+
+        for k in 1:this_chunk
+            ci_class = get(ctx.class_idxs, preds[k], nothing)
+            isnothing(ci_class) && continue  # defensive: unseen label, skip
+
+            truths_row = _truths_by_thresholds(rows[k], ctx.thresholds)
             cube = generate_disjunct(
                 truths_row, ctx.thresholds, ctx.featurenames, ctx.op_families
             )
@@ -158,6 +122,7 @@ function _leaf_extract(
             terms[c] = Any[]
         else
             minimized = run_minimization(Val(scheme), config, raw[c])
+            @show typeof(minimized)
             terms[c] = collect(Any, minimized)
         end
     end
@@ -208,34 +173,29 @@ each split strictly shrinks the widest dimension and the total size is
 finite (worst-case depth `O(log2(n_total / M))`).
 """
 function _shannon_extract(
-    # config::LumenConfig{T},
-    # trees::Vector{SM.Branch{S}},
-    # ctx::NamedTuple,
-    lo::Vector{Int},
-    hi::Vector{Int},
-    scheme::Symbol
-) where {S<:SM.Label,T<:AbstractFloat}
-    rect_size = prod(hi .- lo .+ 1)
+    config::LumenConfig{R,T},
+    ctx::Ctx{R,T},
+    atoms::Vector{A},
+    lo::Vector{R},
+    hi::Vector{R}
+) where {A<:SM.Atom,R<:Unsigned,T<:AbstractFloat}
+    rect_size = prod(hi .- lo .+ one(R))
 
-    if rect_size ≤ 5000
-        # return _leaf_extract(config, trees, ctx, lo, hi, scheme)
-        return "gino"
+    if rect_size ≤ config.M
+        return _leaf_extract(config, ctx, atoms, lo, hi)
     end
 
     jstar = argmax(hi .- lo .+ 1)
-    t = lo[jstar] + (hi[jstar] - lo[jstar]) ÷ 2  # midpoint cut
+    t = lo[jstar] + (hi[jstar] - lo[jstar]) >> 1  # midpoint cut
 
     lo_low, hi_low = copy(lo), copy(hi)
     hi_low[jstar] = t
 
     lo_high, hi_high = copy(lo), copy(hi)
-    lo_high[jstar] = t + 1
+    lo_high[jstar] = t + one(R)
 
-    # terms_low = _shannon_extract(config, trees, ctx, lo_low, hi_low, scheme)
-    # terms_high = _shannon_extract(config, trees, ctx, lo_high, hi_high, scheme)
-
-    terms_low = _shannon_extract(lo_low, hi_low, scheme)
-    terms_high = _shannon_extract(lo_high, hi_high, scheme)
+    terms_low = _shannon_extract(config, ctx, atoms, lo_low, hi_low)
+    terms_high = _shannon_extract(config, ctx, atoms, lo_high, hi_high)
 
     # return _combine_cofactors(terms_low, terms_high)
 end
@@ -259,7 +219,7 @@ function _finalize_decision_set(
     config::LumenConfig{T}
 ) where {T<:AbstractFloat}
     valid_mask = .!isempty.(per_class_terms)
-    classes = ctx.classnames[valid_mask]
+    classes = ctx.class_idxs[valid_mask]
 
     formulas = Vector{Vector{Union{
         SL.LeftmostConjunctiveForm{SL.Atom{T}},
@@ -308,23 +268,28 @@ compacted).
 - `ArgumentError` if `M` is not positive.
 """
 
+# map categorical labels onto unsigned integer of type `R`
+# sort classlabels
+function assign(::Type{R}, y::AbstractVector{S}) where {R,S}
+    classlabels = sort!(unique(y))
+    dict = Dict{S,R}(v => i for (i, v) in enumerate(classlabels))
+    return string.(classlabels), [dict[t] for t in y]
+end
+
 function lumen_shannon(
     config::LumenConfig{R,T},
-    atoms::Vector{A};
+    atoms::Vector{A},
     featurenames::Vector{Symbol},
-    classnames::Vector{Symbol}
+    class_idxs::Vector{R}
 ) where {A<:SM.Atom,R<:Unsigned,T<:AbstractFloat}
-    ctx = _prepare_sequential_context(config, atoms, featurenames, classnames)
+    ctx = _prepare_sequential_context(config, atoms, featurenames, class_idxs)
 
     lo = ones(R, length(ctx.lens))
     hi = copy(ctx.lens)
 
-    # per_class_terms = _shannon_extract(
-    #     config, trees, ctx, lo, hi, config.minimization_scheme
-    # )
-    # per_class_terms = _shannon_extract(
-    #     lo, hi, config.minimization_scheme
-    # )
+    return (config, ctx, atoms, lo, hi)
+
+    per_class_terms = _shannon_extract(config, ctx, atoms, lo, hi)
 
     # return _finalize_decision_set(ctx, per_class_terms, config)
 end
@@ -333,10 +298,16 @@ function lumen_shannon(
     config::LumenConfig{R,T},
     model::SM.AbstractModel
 ) where {R<:Unsigned,T<:AbstractFloat}
+    _, class_idxs = assign(R, unique!(SM.info(model, :supporting_labels)))
+    featurenames = SM.info(model, :featurenames)
+
     lumen_shannon(
         config,
-        SM.antecedent.(SM.models(model));
-        featurenames=SM.info(model, :featurenames),
-        classnames=Symbol.(unique!(SM.info(model, :supporting_labels)))   
+        _extract_atoms_bfs_order(model),
+        featurenames,
+        class_idxs
     )
 end
+
+# 121.091 μs (2147 allocations: 87.37 KiB)
+# 127.895 μs (1308 allocations: 61.16 KiB)

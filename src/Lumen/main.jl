@@ -499,7 +499,9 @@ Only `SM.Branch` nodes contribute atoms; leaf nodes are silently skipped.
   `Vector{<:Atom{<:ScalarCondition}}`-typed functions like
   `_take_first_percentage` — see implementation note below).
 """
-function _extract_atoms_bfs_order(tree::SM.DecisionEnsemble)
+function _extract_atoms_bfs_order(
+    model::SM.DecisionEnsemble{R,B}
+) where {R,B<:SM.Branch}
     # NOTE: must be declared with the CONCRETE `ScalarCondition` element type,
     # not the abstract `AbstractCondition`. Julia's parametric container types
     # are invariant: `Vector{Atom{AbstractCondition}}` is NOT a subtype of
@@ -509,20 +511,22 @@ function _extract_atoms_bfs_order(tree::SM.DecisionEnsemble)
     # `Vector{<:Atom{<:ScalarCondition}}` (e.g. `_take_first_percentage`,
     # `_atoms_for_feature`), causing a MethodError even though every element
     # inside is, in fact, a `ScalarCondition` atom.
-    bfs_atoms = SL.Atom{SD.ScalarCondition}[]
-    queue = SM.DecisionEnsemble[tree]
+    bfs_atoms = SM.Atom{SM.ScalarCondition}[]
+    queue = SM.models(model)
 
     while !isempty(queue)
         current = popfirst!(queue)
 
         if current isa SM.Branch
             push!(bfs_atoms, antecedent(current))
-            push!(queue, SM.posconsequent(current))
-            push!(queue, SM.negconsequent(current))
+            pos = SM.posconsequent(current)
+            neg = SM.negconsequent(current)
+            pos isa SM.Branch{T} where T<:SM.Label && push!(queue, pos)
+            neg isa SM.Branch{T} where T<:SM.Label && push!(queue, neg)
         end
     end
 
-    return bfs_atoms
+    return unique!(bfs_atoms)
 end
 
 """

@@ -170,7 +170,7 @@ end
 # ---------------------------------------------------------------------------- #
 struct Ctx{R,T}
     featurenames::Vector{Symbol}
-    classnames::Vector{Symbol}
+    class_idxs::Vector{R}
     thresholds::Vector{Vector{T}}
     thrs_with_p::Vector{Vector{T}}
     op_families::Vector{Symbol}
@@ -180,7 +180,7 @@ struct Ctx{R,T}
 
     function Ctx{R,T}(
         featurenames::Vector{Symbol},
-        classnames::Vector{Symbol},
+        class_idxs::Vector{R},
         thresholds::Vector{<:Vector{TH}},
         thrs_with_p::Vector{<:Vector{TH}},
         op_families::Vector{Symbol},
@@ -190,7 +190,7 @@ struct Ctx{R,T}
     ) where {R<:Unsigned, T<:AbstractFloat, TH<:AbstractFloat}
         new{R,T}(
             featurenames,
-            classnames,
+            class_idxs,
             thresholds,
             thrs_with_p,
             op_families,
@@ -205,7 +205,7 @@ function _prepare_sequential_context(
     config::LumenConfig{R,T},
     atoms::Vector{A},
     featurenames::Vector{Symbol},
-    classnames::Vector{Symbol}
+    class_idxs::Vector{R}
 ) where {A<:SM.Atom,R<:Unsigned,T<:AbstractFloat}
     depth = config.depth
 
@@ -224,6 +224,7 @@ function _prepare_sequential_context(
 
     @inbounds for i in eachindex(featurenames)
         idx = findfirst(f -> f == featurenames[i], features)
+        @show idx
         if isnothing(idx)
             thresholds[i] = T[]
             op_families[i] = :lt
@@ -236,6 +237,7 @@ function _prepare_sequential_context(
             )
         end
     end
+    gino
 
     thrs_with_p = _thrs_with_boundary(thresholds, op_families)
     lens = length.(thrs_with_p)
@@ -244,7 +246,7 @@ function _prepare_sequential_context(
 
     return Ctx{R,T}(
         featurenames,
-        classnames,
+        class_idxs,
         thresholds,
         thrs_with_p,
         op_families,
