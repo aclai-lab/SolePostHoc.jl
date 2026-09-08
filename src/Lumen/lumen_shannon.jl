@@ -63,13 +63,28 @@ is only in how sibling leaves/subtrees get combined afterwards (see
 #     return SM.outcome(node)                             # ConstantModel leaf
 # end
 
+function checkcondition(
+    atom::Atom{B},
+    tbl::NamedTuple{T}
+)::BitVector where {B<:ScalarCondition,T}
+    cond = SL.value(atom)
+
+    cond_threshold = SD.threshold(cond)
+    cond_operator = SD.test_operator(cond)
+    cond_feature = SD.feature(cond)
+
+    col = SD.i_variable(cond_feature)
+
+    return cond_operator.(tbl[col], cond_threshold)
+end
+
 function _leaf_extract(
     config::LumenConfig{R,T},
     ctx::Ctx{R,T},
-    atoms::Vector{A},
+    model::SM.DecisionEnsemble{R,B},
     lo::Vector{R},
     hi::Vector{R}
-) where {A<:SM.Atom,R<:Unsigned,T<:AbstractFloat}
+) where {B<:SM.Branch,R<:Unsigned,T<:AbstractFloat}
     nfeat = length(ctx.featurenames)
     nclasses = length(ctx.class_idxs)
     raw = [Vector{Vector{SM.Atom}}() for _ in 1:nclasses]
@@ -83,30 +98,21 @@ function _leaf_extract(
         this_chunk = min(config.max_apply_batch, total - i0 + 1)
         chunk = @view all_idx[i0:(i0 + this_chunk - 1)]
 
-        @show ctx.thrs_with_p
-
-        rows = Vector{NTuple{nfeat,T}}(undef, this_chunk)
-        @inbounds for (k, ci) in enumerate(chunk)
-            rows[k] = ntuple(j -> ctx.thrs_with_p[j][ci[j]], nfeat)
+        tbl = Matrix{T}(undef, this_chunk, nfeat)
+        @inbounds for k in 1:this_chunk
+            ci = chunk[k]
+            for j in 1:nfeat
+                tbl[k, j] = ctx.thrs_with_p[j][ci[j]]
+            end
         end
 
-        tbl = NamedTuple{Tuple(ctx.featurenames)}(
-            ntuple(j -> [r[j] for r in rows], nfeat)
-        )
+        preds = apply(model, tbl)
 
-        d = PropositionalLogiset(tbl)
-        
-        preds = [config.apply_function(config)(
-            a, d;
-            # use_multithreads=get_use_multithreads(config),
-            suppress_parity_warning=true
-        ) for a in atoms]
+        @inbounds for k in 1:this_chunk
+            label = String(preds[k])
+            ci_class = searchsortedfirst(ctx.classnames, label)
 
-        for k in 1:this_chunk
-            ci_class = get(ctx.class_idxs, preds[k], nothing)
-            isnothing(ci_class) && continue  # defensive: unseen label, skip
-
-            truths_row = _truths_by_thresholds(rows[k], ctx.thresholds)
+            truths_row = _truths_by_thresholds(tbl[k,:], ctx.thresholds)
             cube = generate_disjunct(
                 truths_row, ctx.thresholds, ctx.featurenames, ctx.op_families
             )
@@ -116,16 +122,13 @@ function _leaf_extract(
         i0 += this_chunk
     end
 
-    terms = Vector{Vector{Any}}(undef, nclasses)
-    for c in 1:nclasses
-        if isempty(raw[c])
-            terms[c] = Any[]
-        else
-            minimized = run_minimization(Val(scheme), config, raw[c])
-            @show typeof(minimized)
-            terms[c] = collect(Any, minimized)
-        end
+    terms = Vector{Vector{SM.SyntaxStructure}}(undef, nclasses)
+    @inbounds for c in 1:nclasses
+        terms[c] = isempty(raw[c]) ?
+            SM.SyntaxStructure[] :
+            run_minimization(Val(config.minimization_scheme), config, raw[c])
     end
+
     return terms
 end
 
@@ -148,8 +151,8 @@ This is intentionally the ONLY combination strategy available in this file
 sensitivity regression that motivated this file can't silently come back.
 """
 function _combine_cofactors(
-    terms_low::Vector{Vector{Any}},
-    terms_high::Vector{Vector{Any}}
+    terms_low::Vector{Vector{SL.SyntaxStructure}},
+    terms_high::Vector{Vector{SL.SyntaxStructure}}
 )
     nclasses = length(terms_low)
     return [vcat(terms_low[c], terms_high[c]) for c in 1:nclasses]
@@ -175,29 +178,38 @@ finite (worst-case depth `O(log2(n_total / M))`).
 function _shannon_extract(
     config::LumenConfig{R,T},
     ctx::Ctx{R,T},
-    atoms::Vector{A},
+    model::SM.DecisionEnsemble{R,B},
     lo::Vector{R},
     hi::Vector{R}
-) where {A<:SM.Atom,R<:Unsigned,T<:AbstractFloat}
+) where {B<:SM.Branch,R<:Unsigned,T<:AbstractFloat}
     rect_size = prod(hi .- lo .+ one(R))
 
     if rect_size ≤ config.M
-        return _leaf_extract(config, ctx, atoms, lo, hi)
+        return _leaf_extract(config, ctx, model, lo, hi)
     end
 
     jstar = argmax(hi .- lo .+ 1)
-    t = lo[jstar] + (hi[jstar] - lo[jstar]) >> 1  # midpoint cut
+    # t = lo[jstar] + (hi[jstar] - lo[jstar]) >> 1  # midpoint cut
 
-    lo_low, hi_low = copy(lo), copy(hi)
-    hi_low[jstar] = t
+    # lo_low, hi_low = copy(lo), copy(hi)
+    # hi_low[jstar] = t
 
-    lo_high, hi_high = copy(lo), copy(hi)
-    lo_high[jstar] = t + one(R)
+    # lo_high, hi_high = copy(lo), copy(hi)
+    # lo_high[jstar] = t + one(R)
 
-    terms_low = _shannon_extract(config, ctx, atoms, lo_low, hi_low)
-    terms_high = _shannon_extract(config, ctx, atoms, lo_high, hi_high)
+    # terms_low = _shannon_extract(config, ctx, model, lo_low, hi_low)
+    # terms_high = _shannon_extract(config, ctx, model, lo_high, hi_high)
 
-    # return _combine_cofactors(terms_low, terms_high)
+    t = lo[jstar] + (hi[jstar] - lo[jstar]) >> 1
+    old_hi = hi[jstar]; hi[jstar] = t
+    terms_low = _shannon_extract(config, ctx, model, lo, hi)
+    hi[jstar] = old_hi
+
+    old_lo = lo[jstar]; lo[jstar] = t + one(R)
+    terms_high = _shannon_extract(config, ctx, model, lo, hi)
+    lo[jstar] = old_lo
+
+    return _combine_cofactors(terms_low, terms_high)
 end
 
 
@@ -214,10 +226,10 @@ for why this widening is required to avoid a `DNF` vs
 `LeftmostDisjunctiveForm` dispatch ambiguity downstream).
 """
 function _finalize_decision_set(
-    ctx::NamedTuple,
-    per_class_terms::Vector{Vector{Any}},
-    config::LumenConfig{T}
-) where {T<:AbstractFloat}
+    ctx::Ctx{R,T},
+    per_class_terms::Vector{Vector{SM.SyntaxStructure}},
+    config::LumenConfig{R,T}
+) where {R,T<:AbstractFloat}
     valid_mask = .!isempty.(per_class_terms)
     classes = ctx.class_idxs[valid_mask]
 
@@ -278,38 +290,18 @@ end
 
 function lumen_shannon(
     config::LumenConfig{R,T},
-    atoms::Vector{A},
-    featurenames::Vector{Symbol},
-    classnames::Vector{String},
-    class_idxs::Vector{R}
-) where {B<:SM.ScalarCondition,A<:SM.Atom{B},R<:Unsigned,T<:AbstractFloat}
-    ctx = _prepare_sequential_context(config, atoms, featurenames, class_idxs)
+    model::SM.DecisionEnsemble{R,B},
+) where {B<:SM.Branch,R<:Unsigned,T<:AbstractFloat}
+    classnames, class_idxs = assign(R, unique!(SM.info(model, :supporting_labels)))
+    featurenames = SM.info(model, :featurenames)
+    atoms = _extract_atoms_bfs_order(model)
+
+    ctx = _prepare_sequential_context(config, atoms, featurenames, classnames, class_idxs)
 
     lo = ones(R, length(ctx.lens))
     hi = copy(ctx.lens)
 
-    return (config, ctx, atoms, lo, hi)
+    per_class_terms = _shannon_extract(config, ctx, model, lo, hi)
 
-    per_class_terms = _shannon_extract(config, ctx, atoms, lo, hi)
-
-    # return _finalize_decision_set(ctx, per_class_terms, config)
+    return _finalize_decision_set(ctx, per_class_terms, config)
 end
-
-function lumen_shannon(
-    config::LumenConfig{R,T},
-    model::SM.DecisionEnsemble{R,B}
-) where {R<:Unsigned,T<:AbstractFloat,B<:SM.Branch}
-    classnames, class_idxs = assign(R, unique!(SM.info(model, :supporting_labels)))
-    featurenames = SM.info(model, :featurenames)
-
-    lumen_shannon(
-        config,
-        _extract_atoms_bfs_order(model),
-        featurenames,
-        classnames,
-        class_idxs
-    )
-end
-
-# 121.091 μs (2147 allocations: 87.37 KiB)
-# 127.895 μs (1308 allocations: 61.16 KiB)

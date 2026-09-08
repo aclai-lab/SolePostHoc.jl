@@ -170,6 +170,7 @@ end
 # ---------------------------------------------------------------------------- #
 struct Ctx{R,T}
     featurenames::Vector{Symbol}
+    classnames::Vector{String}
     class_idxs::Vector{R}
     thresholds::Vector{Vector{T}}
     thrs_with_p::Vector{Vector{T}}
@@ -180,6 +181,7 @@ struct Ctx{R,T}
 
     function Ctx{R,T}(
         featurenames::Vector{Symbol},
+        classnames::Vector{String},
         class_idxs::Vector{R},
         thresholds::Vector{<:Vector{TH}},
         thrs_with_p::Vector{<:Vector{TH}},
@@ -190,6 +192,7 @@ struct Ctx{R,T}
     ) where {R<:Unsigned, T<:AbstractFloat, TH<:AbstractFloat}
         new{R,T}(
             featurenames,
+            classnames,
             class_idxs,
             thresholds,
             thrs_with_p,
@@ -205,6 +208,7 @@ function _prepare_sequential_context(
     config::LumenConfig{R,T},
     atoms::Vector{A},
     featurenames::Vector{Symbol},
+    classnames::Vector{String},
     class_idxs::Vector{R}
 ) where {B<:SM.ScalarCondition,A<:SM.Atom{B},R<:Unsigned,T<:AbstractFloat}
     depth = config.depth
@@ -244,6 +248,7 @@ function _prepare_sequential_context(
 
     return Ctx{R,T}(
         featurenames,
+        classnames,
         class_idxs,
         thresholds,
         thrs_with_p,

@@ -16,6 +16,7 @@ using StatsBase: countmap
 using ABC_jll
 
 include("config.jl")
+include("apply.jl")
 # include("sequential_minimizer.jl")
 include("super_minimizer.jl")
 include("lumen_shannon.jl")
@@ -502,32 +503,31 @@ Only `SM.Branch` nodes contribute atoms; leaf nodes are silently skipped.
 function _extract_atoms_bfs_order(
     model::SM.DecisionEnsemble{R,B}
 ) where {R,B<:SM.Branch}
-    # NOTE: must be declared with the CONCRETE `ScalarCondition` element type,
-    # not the abstract `AbstractCondition`. Julia's parametric container types
-    # are invariant: `Vector{Atom{AbstractCondition}}` is NOT a subtype of
-    # `Vector{<:Atom{<:ScalarCondition}}`, no matter what concrete elements
-    # are `push!`-ed into it at runtime. Declaring it abstract here silently
-    # poisons every downstream call that dispatches on
-    # `Vector{<:Atom{<:ScalarCondition}}` (e.g. `_take_first_percentage`,
-    # `_atoms_for_feature`), causing a MethodError even though every element
-    # inside is, in fact, a `ScalarCondition` atom.
+    # NOTE: must be declared with the CONCRETE `ScalarCondition` element type.
     bfs_atoms = SM.Atom{SM.ScalarCondition}[]
-    queue = SM.models(model)
 
-    while !isempty(queue)
-        current = popfirst!(queue)
-
-        if current isa SM.Branch
-            push!(bfs_atoms, antecedent(current))
-            pos = SM.posconsequent(current)
-            neg = SM.negconsequent(current)
-            pos isa SM.Branch{T} where T<:SM.Label && push!(queue, pos)
-            neg isa SM.Branch{T} where T<:SM.Label && push!(queue, neg)
-        end
+    @inbounds for m in SM.models(model)
+        m isa SM.Branch && _extract_atoms_bfs_order!(bfs_atoms, m)
     end
 
     return unique!(bfs_atoms)
 end
+
+function _extract_atoms_bfs_order!(
+    bfs_atoms::Vector{<:SM.Atom{SM.ScalarCondition}},
+    model::SM.Branch{T}
+) where T<:SM.Label
+    push!(bfs_atoms, antecedent(model))
+    _extract_atoms_bfs_order!(bfs_atoms, SM.posconsequent(model))
+    _extract_atoms_bfs_order!(bfs_atoms, SM.negconsequent(model))
+
+    return nothing
+end
+
+@inline _extract_atoms_bfs_order!(
+    ::Vector{<:SM.Atom{SM.ScalarCondition}},
+    ::SM.LeafModel{T}
+) where T<:SM.Label = nothing
 
 """
     _take_first_percentage(
@@ -656,6 +656,11 @@ function _truths_by_thresholds(value::Float, thresholds::Vector{<:Float})
            falses(length(thresholds)) :
            _truths_by_thresholds(thresholds)[idx]
 end
+
+@inline _truths_by_thresholds(
+    values::Vector{<:Float},
+    thresholds::Vector{T}
+) where {T<:Vector{<:Float}} = _truths_by_thresholds.(values, thresholds)
 
 @inline _truths_by_thresholds(
     values::Tuple{Vararg{<:Float}},
@@ -1521,9 +1526,9 @@ end
 
 function run_minimization(
     ::Val{:abc},
-    extractor::LumenConfig{T},
+    extractor::LumenConfig{U,T},
     atoms::Vector{Vector{SL.Atom}}
-) where {T<:AbstractFloat}
+) where {U,T<:AbstractFloat}
     ABC_jll.abc() do binary
         minimized_formula = SD.abc_minimize(
             atoms,
