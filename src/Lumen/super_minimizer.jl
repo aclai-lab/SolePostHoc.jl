@@ -206,11 +206,12 @@ end
 
 function _prepare_sequential_context(
     config::LumenConfig{R,T},
-    atoms::Vector{A},
+    # atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
+    atoms::Vector{SM.Atom},
     featurenames::Vector{Symbol},
     classnames::Vector{String},
     class_idxs::Vector{R}
-) where {B<:SM.ScalarCondition,A<:SM.Atom{B},R<:Unsigned,T<:AbstractFloat}
+) where {R<:Unsigned,T<:AbstractFloat}
     depth = config.depth
 
     depth < 1.0 && (atoms = _take_first_percentage(atoms, depth)) # TODO check it!

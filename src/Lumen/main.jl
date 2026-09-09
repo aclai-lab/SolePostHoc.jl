@@ -15,6 +15,9 @@ using StatsBase: countmap
 
 using ABC_jll
 
+include("minimizations.jl")
+export Abc, MitEspresso
+
 include("config.jl")
 include("apply.jl")
 # include("sequential_minimizer.jl")
@@ -401,7 +404,8 @@ Inspects all atoms whose feature name matches `feat` and returns:
   the threshold encoding ambiguous.
 """
 function _feature_op_family(
-    atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
+    # atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
+    atoms::Vector{SL.Atom},
     feat::Symbol
 )
     feat_atoms = _atoms_for_feature(atoms, feat)
@@ -501,33 +505,33 @@ Only `SM.Branch` nodes contribute atoms; leaf nodes are silently skipped.
   `_take_first_percentage` — see implementation note below).
 """
 function _extract_atoms_bfs_order(
-    model::SM.DecisionEnsemble{R,B}
-) where {R,B<:SM.Branch}
-    # NOTE: must be declared with the CONCRETE `ScalarCondition` element type.
-    bfs_atoms = SM.Atom{SM.ScalarCondition}[]
+    model::SM.DecisionEnsemble{R,SM.Branch{S}}
+)::Vector{SM.Atom} where {R,S<:CategoricalValue}
+    bfs_atoms = SL.Atom{<:SD.ScalarCondition}[]
 
     @inbounds for m in SM.models(model)
         m isa SM.Branch && _extract_atoms_bfs_order!(bfs_atoms, m)
     end
 
-    return unique!(bfs_atoms)
+    # narrow eltype at runtime: if all conditions share one concrete
+    # ScalarCondition{U,FT,M}, downstream code specializes on it
+    return identity.(unique!(bfs_atoms))
 end
 
 function _extract_atoms_bfs_order!(
-    bfs_atoms::Vector{<:SM.Atom{SM.ScalarCondition}},
-    model::SM.Branch{T}
-) where T<:SM.Label
+    bfs_atoms::Vector{<:SL.Atom},
+    model::SM.Branch{S}
+) where {S<:CategoricalValue}
     push!(bfs_atoms, antecedent(model))
     _extract_atoms_bfs_order!(bfs_atoms, SM.posconsequent(model))
     _extract_atoms_bfs_order!(bfs_atoms, SM.negconsequent(model))
-
     return nothing
 end
 
 @inline _extract_atoms_bfs_order!(
-    ::Vector{<:SM.Atom{SM.ScalarCondition}},
-    ::SM.LeafModel{T}
-) where T<:SM.Label = nothing
+    ::Vector{<:SL.Atom},
+    ::SM.LeafModel{S}
+) where {S<:CategoricalValue} = nothing
 
 """
     _take_first_percentage(
@@ -576,7 +580,7 @@ Filter `atoms` to only those whose feature name matches `feat`.
 - Sub-vector of atoms whose feature matches `feat`.
 """
 @inline _atoms_for_feature(
-    atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
+    atoms::Vector{SL.Atom},
     feat::Symbol
 ) = filter(a -> SM.featurename(get_feature(a)) == feat, atoms)
 
@@ -1487,7 +1491,7 @@ end
 # ---------------------------------------------------------------------------- #
 """
     run_minimization(
-        ::Val{:abc},
+        ::Type{Abc},
         extractor::LumenConfig,
         atoms::Vector{Vector{SL.Atom}}
     ) -> Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, SyntaxStructure}}
@@ -1506,11 +1510,11 @@ applies [`_refine_dnf`](@ref) to remove dominated terms.
 - Minimized and refined vector of conjunctive terms.
 """
 function run_minimization(
-    ::Val{:abc},
+    ::Type{Abc},
     extractor::LumenConfig,
     atoms::Vector{Vector{SL.Atom}},
     universe_conditions::Vector{<:SD.AbstractScalarCondition}
-)
+)::Vector{TERM}
     ABC_jll.abc() do binary
         minimized_formula = SD.abc_minimize(
             atoms,
@@ -1520,15 +1524,15 @@ function run_minimization(
             float_type=get_float_type(extractor),
             universe_conditions=universe_conditions,
         )
-        return refine_dnf(minimized_formula)
+        return _as_terms(refine_dnf(minimized_formula))
     end
 end
 
 function run_minimization(
-    ::Val{:abc},
+    ::Type{Abc},
     extractor::LumenConfig{U,T},
     atoms::Vector{Vector{SL.Atom}}
-) where {U,T<:AbstractFloat}
+)::Vector{TERM} where {U,T<:AbstractFloat}
     ABC_jll.abc() do binary
         minimized_formula = SD.abc_minimize(
             atoms,
@@ -1537,7 +1541,7 @@ function run_minimization(
             depth=extractor.depth,
             float_type=T
         )
-        return refine_dnf(minimized_formula)
+        return _as_terms(refine_dnf(minimized_formula))
     end
 end
 
@@ -1640,7 +1644,7 @@ function run_minimization(
     extractor::LumenConfig,
     atoms::Vector{Vector{SL.Atom}};
     offset::Union{Nothing,Vector{Vector{SL.Atom}}}=nothing
-)
+)::Vector{TERM}
     n_in = length(atoms)
     n_off = isnothing(offset) ? 0 : length(offset)
     binary = get_binary(extractor)

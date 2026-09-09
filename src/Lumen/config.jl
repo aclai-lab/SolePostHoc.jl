@@ -84,8 +84,8 @@ cfg = LumenConfig(
 
 See also: [`lumen`](@ref), [`LumenResult`](@ref), [`AbstractConfig`](@ref)
 """
-struct LumenConfig{R<:Unsigned,T<:AbstractFloat} <: AbstractConfig
-    minimization_scheme::Symbol
+struct LumenConfig{R<:Unsigned,T<:AbstractFloat,MS} <: AbstractConfig
+    minimization_scheme::Type{MS}
     binary::Union{Nothing,String}
     depth::T
     vertical::T
@@ -100,7 +100,7 @@ struct LumenConfig{R<:Unsigned,T<:AbstractFloat} <: AbstractConfig
     max_apply_batch::R
 
     function LumenConfig(;
-        minimization_scheme::Symbol=:abc,
+        minimization_scheme::Type{MS}=Abc,
         depth::Float64=1.0,
         vertical::Float64=1.0,
         horizontal::Float64=1.0,
@@ -114,7 +114,7 @@ struct LumenConfig{R<:Unsigned,T<:AbstractFloat} <: AbstractConfig
         max_apply_batch::Int=min(M, 4096),
         internal_resolution::Type=UInt32,
         float_resolution::Type=Float32
-    )
+    ) where MS<:AbstractMinimization
         # validate coverage parameters - must be positive and ≤ 1.0
         # these parameters control the proportion of instances
         # that must be covered by rules
@@ -131,28 +131,20 @@ struct LumenConfig{R<:Unsigned,T<:AbstractFloat} <: AbstractConfig
 
         # validate minimization scheme
         valid_schemes = Dict(
-            :mitespresso => setup_espresso(),
-            :boom => setup_boom(),
-            :abc => setup_abc(),
-            :abc_balanced => setup_abc(),
-            :abc_thorough => setup_abc(),
-            :quine => setup_quine(),
-            :quine_naive => setup_quine()
+            MitEspresso => setup_espresso(),
+            # :boom => setup_boom(),
+            Abc => setup_abc(),
+            # :abc_balanced => setup_abc(),
+            # :abc_thorough => setup_abc(),
+            # :quine => setup_quine(),
+            # :quine_naive => setup_quine()
         )
-
-        if minimization_scheme ∉ keys(valid_schemes)
-            throw(ArgumentError(
-                "minimization_scheme must be one of: " *
-                "$(keys(valid_schemes) |> collect). " *
-                "Got: $(minimization_scheme)."
-            ))
-        end
 
         M >= 1 || throw(ArgumentError("M must be positive, got $M"))
 
         binary = valid_schemes[minimization_scheme]
 
-        new{internal_resolution,float_resolution}(
+        new{internal_resolution,float_resolution,minimization_scheme}(
             minimization_scheme,
             binary,
             depth,

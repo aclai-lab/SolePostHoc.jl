@@ -33,7 +33,11 @@
 #   `PropositionalLogiset`, `get_apply_function`, `get_use_multithreads`,
 #   `get_float_type`, `get_minimization_scheme`.
 # ============================================================================ #
+const TERM = SM.LeftmostConjunctiveForm{<:SM.Atom}
 
+_as_terms(x::SM.LeftmostDisjunctiveForm)::Vector{TERM} = collect(TERM, SL.disjuncts(x))
+_as_terms(x::AbstractVector)::Vector{TERM} = collect(TERM, x)
+_as_terms(::SL.Truth)::Vector{TERM} = TERM[]   # ⊤ / empty PLA
 
 # ---------------------------------------------------------------------------- #
 #                                  leaf routine                                #
@@ -89,20 +93,24 @@ function _leaf_extract(
     nclasses = length(ctx.class_idxs)
     raw = [Vector{Vector{SM.Atom}}() for _ in 1:nclasses]
 
-    dims = ntuple(j -> lo[j]:hi[j], nfeat)
-    all_idx = vec(CartesianIndices(dims))
-    total = length(all_idx)
+    widths = Vector{Int}(undef, nfeat)
+    @inbounds for j in 1:nfeat
+        widths[j] = Int(hi[j]) - Int(lo[j]) + 1
+    end
+    total = prod(widths)
+    batch = Int(config.max_apply_batch)
 
     i0 = 1
     while i0 ≤ total
-        this_chunk = min(config.max_apply_batch, total - i0 + 1)
-        chunk = @view all_idx[i0:(i0 + this_chunk - 1)]
-
+        this_chunk = min(batch, total - i0 + 1)
         tbl = Matrix{T}(undef, this_chunk, nfeat)
+
         @inbounds for k in 1:this_chunk
-            ci = chunk[k]
+            r = i0 + k - 2
             for j in 1:nfeat
-                tbl[k, j] = ctx.thrs_with_p[j][ci[j]]
+                off = r % widths[j]
+                r   = r ÷ widths[j]
+                tbl[k, j] = ctx.thrs_with_p[j][Int(lo[j]) + off]
             end
         end
 
@@ -122,11 +130,11 @@ function _leaf_extract(
         i0 += this_chunk
     end
 
-    terms = Vector{Vector{SM.SyntaxStructure}}(undef, nclasses)
+    terms = Vector{Vector{TERM}}(undef, nclasses)
     @inbounds for c in 1:nclasses
         terms[c] = isempty(raw[c]) ?
-            SM.SyntaxStructure[] :
-            run_minimization(Val(config.minimization_scheme), config, raw[c])
+            TERM[] :
+            run_minimization(config.minimization_scheme, config, raw[c])
     end
 
     return terms
@@ -151,8 +159,8 @@ This is intentionally the ONLY combination strategy available in this file
 sensitivity regression that motivated this file can't silently come back.
 """
 function _combine_cofactors(
-    terms_low::Vector{Vector{SL.SyntaxStructure}},
-    terms_high::Vector{Vector{SL.SyntaxStructure}}
+    terms_low::Vector{Vector{SM.LeftmostConjunctiveForm{<:SM.Atom}}},
+    terms_high::Vector{Vector{SM.LeftmostConjunctiveForm{<:SM.Atom}}}
 )
     nclasses = length(terms_low)
     return [vcat(terms_low[c], terms_high[c]) for c in 1:nclasses]
@@ -189,16 +197,6 @@ function _shannon_extract(
     end
 
     jstar = argmax(hi .- lo .+ 1)
-    # t = lo[jstar] + (hi[jstar] - lo[jstar]) >> 1  # midpoint cut
-
-    # lo_low, hi_low = copy(lo), copy(hi)
-    # hi_low[jstar] = t
-
-    # lo_high, hi_high = copy(lo), copy(hi)
-    # lo_high[jstar] = t + one(R)
-
-    # terms_low = _shannon_extract(config, ctx, model, lo_low, hi_low)
-    # terms_high = _shannon_extract(config, ctx, model, lo_high, hi_high)
 
     t = lo[jstar] + (hi[jstar] - lo[jstar]) >> 1
     old_hi = hi[jstar]; hi[jstar] = t
@@ -227,20 +225,19 @@ for why this widening is required to avoid a `DNF` vs
 """
 function _finalize_decision_set(
     ctx::Ctx{R,T},
-    per_class_terms::Vector{Vector{SM.SyntaxStructure}},
+    per_class_terms::Vector{Vector{SM.LeftmostConjunctiveForm{<:SM.Atom}}},
     config::LumenConfig{R,T}
 ) where {R,T<:AbstractFloat}
     valid_mask = .!isempty.(per_class_terms)
     classes = ctx.class_idxs[valid_mask]
+    formulas = per_class_terms[valid_mask]
 
-    formulas = Vector{Vector{Union{
-        SL.LeftmostConjunctiveForm{SL.Atom{T}},
-        SyntaxStructure
-    }}}(per_class_terms[valid_mask])
+    rules = SM.Rule{R}[
+        SM.Rule(SL.LeftmostDisjunctiveForm(f), c)
+        for (f, c) in zip(formulas, classes)
+    ]
 
-    return SM.DecisionSet(
-        SM.Rule.(SL.LeftmostDisjunctiveForm.(formulas), classes)
-    )
+    return SM.DecisionSet{R}(rules)::SM.DecisionSet{R}
 end
 
 
@@ -282,7 +279,10 @@ compacted).
 
 # map categorical labels onto unsigned integer of type `R`
 # sort classlabels
-function assign(::Type{R}, y::AbstractVector{S}) where {R,S}
+function assign(
+    ::Type{R},
+    y::Vector{S}
+) where {R<:Unsigned,S<:CategoricalValue}
     classlabels = sort!(unique(y))
     dict = Dict{S,R}(v => i for (i, v) in enumerate(classlabels))
     return string.(classlabels), [dict[t] for t in y]
@@ -290,16 +290,15 @@ end
 
 function lumen_shannon(
     config::LumenConfig{R,T},
-    model::SM.DecisionEnsemble{R,B},
-) where {B<:SM.Branch,R<:Unsigned,T<:AbstractFloat}
+    model::SM.DecisionEnsemble{R,SM.Branch{S}},
+) where {S<:CategoricalValue,R<:Unsigned,T<:AbstractFloat}
     classnames, class_idxs = assign(R, unique!(SM.info(model, :supporting_labels)))
     featurenames = SM.info(model, :featurenames)
-    atoms = _extract_atoms_bfs_order(model)
 
-    ctx = _prepare_sequential_context(config, atoms, featurenames, classnames, class_idxs)
+    ctx = _prepare_sequential_context(config, _extract_atoms_bfs_order(model), featurenames, classnames, class_idxs)
 
     lo = ones(R, length(ctx.lens))
-    hi = copy(ctx.lens)
+    hi = ctx.lens
 
     per_class_terms = _shannon_extract(config, ctx, model, lo, hi)
 

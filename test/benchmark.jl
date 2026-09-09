@@ -17,6 +17,8 @@ using Random
 using InteractiveUtils
 using JET
 
+using CategoricalArrays
+
 # ---------------------------------------------------------------------------- #
 #                                 iris test                                    #
 # ---------------------------------------------------------------------------- #
@@ -31,17 +33,31 @@ solem = modelc.sole[1]
 # config = SP.Lumen.LumenConfig(; minimization_scheme=:mitespresso)
 # SP.Lumen.super_lumen(config, solem, M=100000, N=10);
 
-config = SP.Lumen.LumenConfig(; minimization_scheme=:abc, M=5000)
-lumen = SP.Lumen.lumen_shannon(config, solem)
+config = SP.Lumen.LumenConfig(; minimization_scheme=Abc, M=5000)
+lumen = SP.Lumen.lumen_shannon(config, solem);
 @btime SP.Lumen.lumen_shannon(config, solem);
 # 3.915 s (15192644 allocations: 801.34 MiB)
-# 3.772 s (15228233 allocations: 756.09 MiB) a pile!
+# 2.043 s (15223660 allocations: 755.99 MiB)
+# 2.087 s (14735030 allocations: 745.08 MiB)
+# 2.059 s (14733296 allocations: 745.04 MiB)
+# 2.054 s (14772318 allocations: 744.97 MiB)
+# 2.064 s (14759051 allocations: 744.59 MiB)
+# 2.057 s (14759046 allocations: 744.59 MiB)
 
 @code_warntype SP.Lumen.lumen_shannon(config, solem)
 result = @report_opt SP.Lumen.lumen_shannon(config, solem)
 open("jet_report.txt", "w") do io
     show(io, MIME"text/plain"(), result)
 end
+
+ctx, per_class_terms, config = SP.Lumen.lumen_shannon(config, solem);
+
+@code_warntype SP.Lumen._finalize_decision_set(ctx, per_class_terms, config)
+result = @report_opt SP.Lumen._extract_atoms_bfs_order(model)
+open("jet_report.txt", "w") do io
+    show(io, MIME"text/plain"(), result)
+end
+
 
 # # ---------------------------------------------------------------------------- #
 # #                                caravan test                                  #
