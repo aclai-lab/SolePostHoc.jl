@@ -85,10 +85,10 @@ end
 function _leaf_extract(
     config::LumenConfig{R,T},
     ctx::Ctx{R,T},
-    model::SM.DecisionEnsemble{R,B},
+    model::FlatForest{TT,U},
     lo::Vector{R},
     hi::Vector{R}
-) where {B<:SM.Branch,R<:Unsigned,T<:AbstractFloat}
+) where {B<:SM.Branch,R<:Unsigned,T<:AbstractFloat,U,TT<:AbstractFloat}
     nfeat = length(ctx.featurenames)
     nclasses = length(ctx.class_idxs)
     raw = [Vector{Vector{SM.Atom}}() for _ in 1:nclasses]
@@ -186,10 +186,10 @@ finite (worst-case depth `O(log2(n_total / M))`).
 function _shannon_extract(
     config::LumenConfig{R,T},
     ctx::Ctx{R,T},
-    model::SM.DecisionEnsemble{R,B},
+    model::FlatForest{TT,U},
     lo::Vector{R},
     hi::Vector{R}
-) where {B<:SM.Branch,R<:Unsigned,T<:AbstractFloat}
+) where {R<:Unsigned,T<:AbstractFloat,U,TT<:AbstractFloat}
     rect_size = prod(hi .- lo .+ one(R))
 
     if rect_size ≤ config.M
@@ -292,6 +292,7 @@ function lumen_shannon(
     config::LumenConfig{R,T},
     model::SM.DecisionEnsemble{R,SM.Branch{S}},
 ) where {S<:CategoricalValue,R<:Unsigned,T<:AbstractFloat}
+    flatmodel = flatten(model)
     classnames, class_idxs = assign(R, unique!(SM.info(model, :supporting_labels)))
     featurenames = SM.info(model, :featurenames)
 
@@ -300,7 +301,7 @@ function lumen_shannon(
     lo = ones(R, length(ctx.lens))
     hi = ctx.lens
 
-    per_class_terms = _shannon_extract(config, ctx, model, lo, hi)
+    per_class_terms = _shannon_extract(config, ctx, flatmodel, lo, hi)
 
     return _finalize_decision_set(ctx, per_class_terms, config)
 end
