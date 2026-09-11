@@ -87,55 +87,84 @@ function _leaf_extract(
     ctx::Ctx{R,T},
     model::FlatForest{TT,U},
     lo::Vector{R},
-    hi::Vector{R}
+    hi::Vector{R},
+    cache::RegionCache
 ) where {R<:Unsigned,T<:AbstractFloat,U,TT<:AbstractFloat}
-    nfeat = length(ctx.featurenames)
+    parts, regidx, plen = cache.parts, cache.regidx, cache.plen
+
+    nfeat    = length(ctx.featurenames)
     nclasses = length(ctx.class_idxs)
-    raw = [Vector{Vector{SM.Atom}}() for _ in 1:nclasses]
+    raw      = [Vector{Vector{SM.Atom}}() for _ in 1:nclasses]
 
     widths = Vector{Int}(undef, nfeat)
     @inbounds for j in 1:nfeat
         widths[j] = Int(hi[j]) - Int(lo[j]) + 1
     end
     total = prod(widths)
-    batch = Int(config.max_apply_batch)
+    batch = min(Int(config.max_apply_batch), total)
+
+    # buffers hoisted out of the chunk loop: one allocation for the whole leaf
+    tbl  = Matrix{T}(undef, batch, nfeat)
+    idxm = Matrix{Int}(undef, batch, nfeat)
+    # avoids a `String(pred)` allocation per row
+    classcache = Dict{Any,Int}()
 
     i0 = 1
     while i0 ≤ total
         this_chunk = min(batch, total - i0 + 1)
-        tbl = Matrix{T}(undef, this_chunk, nfeat)
 
         @inbounds for k in 1:this_chunk
             r = i0 + k - 2
             for j in 1:nfeat
                 off = r % widths[j]
-                r = r ÷ widths[j]
-                tbl[k, j] = ctx.thrs_with_p[j][Int(lo[j]) + off]
+                r   = r ÷ widths[j]
+                t   = Int(lo[j]) + off
+                tbl[k, j]  = ctx.thrs_with_p[j][t]
+                idxm[k, j] = regidx[j][t]      # region index, precomputed
             end
         end
 
-        preds = apply(model, tbl)
+        # NOTE: if `apply` cannot consume a SubArray, use `tbl[1:this_chunk, :]`
+        preds = apply(model, view(tbl, 1:this_chunk, :))
 
         @inbounds for k in 1:this_chunk
-            label = String(preds[k])
-            ci_class = searchsortedfirst(ctx.classnames, label)
+            p  = preds[k]
+            ci = get!(classcache, p) do
+                searchsortedfirst(ctx.classnames, String(p))
+            end
 
-            truths_row = _truths_by_thresholds(tbl[k,:], ctx.thresholds)
+            len = 0
+            for j in 1:nfeat
+                len += plen[j][idxm[k, j]]
+            end
 
-            cube = generate_disjunct(
-                truths_row, ctx.thresholds, ctx.featurenames, ctx.op_families
-            )
-            push!(raw[ci_class], cube)
+            cube = Vector{SM.Atom}(undef, len)   # the only per-row allocation
+            q = 0
+            for j in 1:nfeat
+                pj = parts[j][idxm[k, j]]
+                for a in pj
+                    cube[q += 1] = a             # pointer copy, no construction
+                end
+            end
+            push!(raw[ci], cube)
         end
 
         i0 += this_chunk
     end
 
     terms = Vector{Vector{TERM}}(undef, nclasses)
-    @inbounds for c in 1:nclasses
-        terms[c] = isempty(raw[c]) ?
-            TERM[] :
-            run_minimization(config.minimization_scheme, config, raw[c])
+    # classes are independent; `run_minimization` shells out to an external
+    # binary, so this is both thread-safe and mostly I/O-bound.
+    Threads.@threads for c in 1:nclasses
+        rc = raw[c]
+        terms[c] = if isempty(rc)
+            TERM[]
+        elseif length(rc) == 1
+            # single cube: already minimal, skip the subprocess round-trip
+            TERM[SL.LeftmostConjunctiveForm(rc[1])]
+        else
+            run_minimization(config.minimization_scheme, config, rc)
+        end
     end
 
     return terms
@@ -160,52 +189,38 @@ This is intentionally the ONLY combination strategy available in this file
 sensitivity regression that motivated this file can't silently come back.
 """
 function _combine_cofactors(
-    terms_low::Vector{Vector{SM.LeftmostConjunctiveForm{<:SM.Atom}}},
-    terms_high::Vector{Vector{SM.LeftmostConjunctiveForm{<:SM.Atom}}}
+    terms_low::Vector{Vector{TERM}},
+    terms_high::Vector{Vector{TERM}}
 )
-    nclasses = length(terms_low)
-    return [vcat(terms_low[c], terms_high[c]) for c in 1:nclasses]
+    # `append!` in place instead of `vcat`: halves the copying at every
+    # internal node (and there are O(leaves) of them). Semantics unchanged —
+    # `terms_low` is a freshly built, non-aliased value from the recursion.
+    @inbounds for c in eachindex(terms_low)
+        append!(terms_low[c], terms_high[c])
+    end
+    return terms_low
 end
 
-
-# ---------------------------------------------------------------------------- #
-#                     recursive Shannon decomposition driver                   #
-# ---------------------------------------------------------------------------- #
-"""
-    _shannon_extract(config, model, ctx, lo, hi, scheme; M, max_apply_batch)
-
-Recursively decompose the index sub-rectangle `[lo, hi]` into two exact
-cofactors (splitting the currently-widest feature dimension in half) until
-each piece is small enough to materialize directly (`_leaf_extract`), then
-recombine on the way back up by plain union (`_combine_cofactors`).
-
-Same split rule and termination argument as before: pick the widest
-remaining dimension, cut it at its midpoint, recurse; terminates because
-each split strictly shrinks the widest dimension and the total size is
-finite (worst-case depth `O(log2(n_total / M))`).
-"""
 function _shannon_extract(
     config::LumenConfig{R,T},
     ctx::Ctx{R,T},
     model::FlatForest{TT,U},
     lo::Vector{R},
-    hi::Vector{R}
+    hi::Vector{R},
+    cache::RegionCache
 ) where {R<:Unsigned,T<:AbstractFloat,U,TT<:AbstractFloat}
     rect_size = prod(hi .- lo .+ one(R))
-
-    if rect_size ≤ config.M
-        return _leaf_extract(config, ctx, model, lo, hi)
-    end
+    rect_size ≤ config.M && return _leaf_extract(config, ctx, model, lo, hi, cache)
 
     jstar = argmax(hi .- lo .+ 1)
 
     t = lo[jstar] + (hi[jstar] - lo[jstar]) >> 1
     old_hi = hi[jstar]; hi[jstar] = t
-    terms_low = _shannon_extract(config, ctx, model, lo, hi)
+    terms_low = _shannon_extract(config, ctx, model, lo, hi, cache)
     hi[jstar] = old_hi
 
     old_lo = lo[jstar]; lo[jstar] = t + one(R)
-    terms_high = _shannon_extract(config, ctx, model, lo, hi)
+    terms_high = _shannon_extract(config, ctx, model, lo, hi, cache)
     lo[jstar] = old_lo
 
     return _combine_cofactors(terms_low, terms_high)
@@ -302,7 +317,8 @@ function lumen_shannon(
     lo = ones(R, length(ctx.lens))
     hi = ctx.lens
 
-    per_class_terms = _shannon_extract(config, ctx, flatmodel, lo, hi)
+    cache = RegionCache(ctx)          # built once, shared by every leaf
+    per_class_terms = _shannon_extract(config, ctx, flatmodel, lo, hi, cache)
 
     return _finalize_decision_set(ctx, per_class_terms, config)
 end

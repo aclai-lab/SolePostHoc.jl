@@ -204,6 +204,84 @@ struct Ctx{R,T}
     end
 end
 
+struct RegionCache
+    # parts[j][r] : atoms implied by feature j being in ordinal region r
+    parts::Vector{Vector{Vector{SM.Atom}}}
+    # regidx[j][t] : region index for the t-th value of ctx.thrs_with_p[j]
+    regidx::Vector{Vector{Int}}
+    # plen[j][r] : length(parts[j][r]), to size the cube exactly
+    plen::Vector{Vector{Int}}
+end
+
+@inline _mkatom(feat, op, thr) =
+    SL.Atom(SD.ScalarCondition(SD.ScalarMetaCondition(feat, op), thr))
+
+"""
+    RegionCache(ctx) -> RegionCache
+
+Materialize, once, every atom `generate_disjunct` could ever emit.
+
+`generate_disjunct` is a pure function of `(feature, truth-row)`, and the
+truth-row is itself a pure function of the ordinal region index `r` (it is
+`false` on `1:r-1`, `true` on `r:n` — see `_truths_row`). So there are only
+`n+1` distinct outputs per feature. Building them up-front removes *all*
+`Atom`/`ScalarCondition` construction, all `BitVector` allocation and all
+`findall`/`findfirst` work from the per-row hot loop.
+
+`regidx` reproduces `_truths_by_thresholds`' `findfirst(==(value), thr)`
+lookup exactly (including its duplicate-threshold behaviour and its
+"not found ⇒ row n+1" boundary case), so the result is bit-identical to the
+previous implementation.
+"""
+function RegionCache(ctx::Ctx{R,T}) where {R,T<:AbstractFloat}
+    nfeat  = length(ctx.featurenames)
+    parts  = Vector{Vector{Vector{SM.Atom}}}(undef, nfeat)
+    regidx = Vector{Vector{Int}}(undef, nfeat)
+    plen   = Vector{Vector{Int}}(undef, nfeat)
+
+    @inbounds for j in 1:nfeat
+        thr  = ctx.thresholds[j]
+        n    = length(thr)
+        feat = SD.VariableValue(j, ctx.featurenames[j])
+        regs = Vector{Vector{SM.Atom}}(undef, n + 1)
+
+        if n == 0
+            regs[1] = SM.Atom[]
+        elseif ctx.op_families[j] === :lt
+            # descending thresholds: idx0 = 1:r-1 -> `< thr[r-1]`
+            #                        idx1 = r:n   -> `≥ thr[r]`
+            lt = [_mkatom(feat, <, thr[k]) for k in 1:n]
+            ge = [_mkatom(feat, ≥, thr[k]) for k in 1:n]
+            for r in 1:(n+1)
+                a = SM.Atom[]
+                r > 1 && push!(a, lt[r-1])
+                r ≤ n && push!(a, ge[r])
+                regs[r] = a
+            end
+        else
+            # ascending thresholds: minimum(idx0) ≡ 1, maximum(idx1) ≡ n,
+            # so both atoms are region-independent.
+            le = _mkatom(feat, ≤, thr[1])
+            gt = _mkatom(feat, >, thr[n])
+            for r in 1:(n+1)
+                a = SM.Atom[]
+                r > 1 && push!(a, le)
+                r ≤ n && push!(a, gt)
+                regs[r] = a
+            end
+        end
+
+        parts[j]  = regs
+        plen[j]   = Int[length(x) for x in regs]
+        regidx[j] = Int[
+            (k = findfirst(==(v), thr); isnothing(k) ? n + 1 : k)
+            for v in ctx.thrs_with_p[j]
+        ]
+    end
+
+    return RegionCache(parts, regidx, plen)
+end
+
 function _prepare_sequential_context(
     config::LumenConfig{R,T},
     # atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},

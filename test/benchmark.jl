@@ -45,6 +45,7 @@ lumen = SP.Lumen.lumen_shannon(config, solem);
 # 2.057 s (14759046 allocations: 744.59 MiB)
 # 3.507 s (12960860 allocations: 604.03 MiB) PILE!
 # 3.450 s (8954959 allocations: 471.73 MiB) PILE!
+# 2.158 s (7168008 allocations: 407.08 MiB) PILE!
 
 @code_warntype SP.Lumen.lumen_shannon(config, solem)
 result = @report_opt SP.Lumen.lumen_shannon(config, solem)
