@@ -15,6 +15,8 @@ using StatsBase: countmap
 
 using ABC_jll
 
+using BenchmarkTools
+
 include("minimizations.jl")
 export Abc, MitEspresso
 
@@ -633,43 +635,93 @@ is not found in `thresholds`.
 Broadcast version: element-wise application for a tuple of values paired with a
 vector of per-feature threshold vectors.
 """
-function _truths_by_thresholds(thresholds::Vector{<:Float})
-    ntruths = length(thresholds)
-    truths = Vector{BitVector}(undef, ntruths + 1)
-
-    @inbounds for i = 1:(ntruths+1)
-        truths[i] = BitVector(undef, ntruths)
-        val = 2^(i - 1) - 1
-        for j = 1:ntruths
-            truths[i][j] = !((val >> (j - 1)) & 1 == 1)
-        end
+@inline function _truths_row!(dst::BitVector, i::Int)
+    n = length(dst)
+    i ≤ 1 && return fill!(dst, true)
+    i > n && return fill!(dst, false)
+    @inbounds begin
+        dst[1:(i-1)] .= false
+        dst[i:n] .= true
     end
-
-    return truths
+    return dst
 end
 
-@inline _truths_by_thresholds(
-    thresholds::Vector{T}
-) where {T<:Vector{<:Float}} = _truths_by_thresholds.(thresholds)
+@inline _truths_row(n::Int, i::Int) = _truths_row!(BitVector(undef, n), i)
 
-function _truths_by_thresholds(value::Float, thresholds::Vector{<:Float})
+function _truths_by_thresholds(
+    values::Vector{S},
+    thresholds::Vector{T}
+)::Vector{BitVector} where {S<:AbstractFloat,T<:Vector{<:AbstractFloat}}
+    n = length(values)
+    out = Vector{BitVector}(undef, n)
+    @inbounds for k in 1:n
+        out[k] = _truths_by_thresholds(values[k], thresholds[k])
+    end
+    return out
+end
+
+function _truths_by_thresholds(
+    value::S,
+    thresholds::AbstractVector{<:AbstractFloat}
+)::BitVector where {S<:AbstractFloat}
     isnan(value) && return BitVector()
 
+    n = length(thresholds)
     idx = findfirst(==(value), thresholds)
-    return isnothing(idx) ?
-           falses(length(thresholds)) :
-           _truths_by_thresholds(thresholds)[idx]
+    # not found  ⇒  boundary region  ⇒  all-false row (row n+1)
+    return isnothing(idx) ? falses(n) : _truths_row(n, idx)
 end
 
-@inline _truths_by_thresholds(
-    values::Vector{<:Float},
-    thresholds::Vector{T}
-) where {T<:Vector{<:Float}} = _truths_by_thresholds.(values, thresholds)
+function _truths_by_thresholds(
+    thresholds::Vector{<:AbstractFloat}
+)::Vector{BitVector}
+    n = length(thresholds)
+    return [_truths_row(n, i) for i in 1:(n+1)]
+end
 
-@inline _truths_by_thresholds(
-    values::Tuple{Vararg{<:Float}},
-    thresholds::Vector{T}
-) where {T<:Vector{<:Float}} = _truths_by_thresholds.(values, thresholds)
+# function _truths_by_thresholds(
+#     values::Vector{S},
+#     thresholds::Vector{T}
+# )::Vector{BitVector} where {S<:AbstractFloat,T<:Vector{<:AbstractFloat}}
+#     _truths_by_thresholds.(values, thresholds)
+# end
+
+# function _truths_by_thresholds(value::S, thresholds::Vector{<:S})::BitVector where {S<:AbstractFloat}
+#     isnan(value) && return BitVector()
+
+#     idx = findfirst(==(value), thresholds)
+#     return isnothing(idx) ?
+#            falses(length(thresholds)) :
+#            _truths_by_thresholds(thresholds)[idx]
+# end
+
+# function _truths_by_thresholds(thresholds::Vector{<:AbstractFloat})::Vector{BitVector}
+#     ntruths = length(thresholds)
+#     truths = Vector{BitVector}(undef, ntruths + 1)
+
+#     @inbounds for i = 1:(ntruths+1)
+#         truths[i] = BitVector(undef, ntruths)
+#         val = 2^(i - 1) - 1
+#         for j = 1:ntruths
+#             truths[i][j] = !((val >> (j - 1)) & 1 == 1)
+#         end
+#     end
+
+#     return truths
+# end
+
+# function _truths_by_thresholds(
+#     thresholds::Vector{T}
+# ) where {T<:Vector{<:AbstractFloat}}
+#     _truths_by_thresholds.(thresholds)
+# end
+
+# function _truths_by_thresholds(
+#     values::Tuple{Vararg{<:AbstractFloat}},
+#     thresholds::Vector{T}
+# ) where {T<:Vector{<:AbstractFloat}}
+#     _truths_by_thresholds.(values, thresholds)
+# end
 
 """
     _thrs_with_boundary(

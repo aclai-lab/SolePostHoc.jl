@@ -34,7 +34,7 @@ solem = modelc.sole[1]
 # SP.Lumen.super_lumen(config, solem, M=100000, N=10);
 
 config = SP.Lumen.LumenConfig(; minimization_scheme=Abc, M=5000)
-lumen = SP.Lumen.lumen_shannon(config, solem)
+lumen = SP.Lumen.lumen_shannon(config, solem);
 @btime SP.Lumen.lumen_shannon(config, solem);
 # 3.915 s (15192644 allocations: 801.34 MiB)
 # 2.043 s (15223660 allocations: 755.99 MiB)
@@ -44,6 +44,7 @@ lumen = SP.Lumen.lumen_shannon(config, solem)
 # 2.064 s (14759051 allocations: 744.59 MiB)
 # 2.057 s (14759046 allocations: 744.59 MiB)
 # 3.507 s (12960860 allocations: 604.03 MiB) PILE!
+# 3.450 s (8954959 allocations: 471.73 MiB) PILE!
 
 @code_warntype SP.Lumen.lumen_shannon(config, solem)
 result = @report_opt SP.Lumen.lumen_shannon(config, solem)

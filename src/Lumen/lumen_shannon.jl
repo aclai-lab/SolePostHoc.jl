@@ -88,7 +88,7 @@ function _leaf_extract(
     model::FlatForest{TT,U},
     lo::Vector{R},
     hi::Vector{R}
-) where {B<:SM.Branch,R<:Unsigned,T<:AbstractFloat,U,TT<:AbstractFloat}
+) where {R<:Unsigned,T<:AbstractFloat,U,TT<:AbstractFloat}
     nfeat = length(ctx.featurenames)
     nclasses = length(ctx.class_idxs)
     raw = [Vector{Vector{SM.Atom}}() for _ in 1:nclasses]
@@ -109,7 +109,7 @@ function _leaf_extract(
             r = i0 + k - 2
             for j in 1:nfeat
                 off = r % widths[j]
-                r   = r ÷ widths[j]
+                r = r ÷ widths[j]
                 tbl[k, j] = ctx.thrs_with_p[j][Int(lo[j]) + off]
             end
         end
@@ -121,6 +121,7 @@ function _leaf_extract(
             ci_class = searchsortedfirst(ctx.classnames, label)
 
             truths_row = _truths_by_thresholds(tbl[k,:], ctx.thresholds)
+
             cube = generate_disjunct(
                 truths_row, ctx.thresholds, ctx.featurenames, ctx.op_families
             )
