@@ -1,14 +1,13 @@
-const OpCondition = Dict{UInt8,Function}(
-    0x01 => (<),
-    0x02 => (>),
-    0x03 => (≤),
-    0x04 => (≥)
-)
+@inline evalop(::typeof(<)) = 0x01
+@inline evalop(::typeof(>)) = 0x02
+@inline evalop(::typeof(≤)) = 0x03
+@inline evalop(::typeof(≥)) = 0x04
 
-const OpCode = Dict{Function,UInt8}(v => k for (k, v) in OpCondition)
-
-@inline opcondition(code::Unsigned) = OpCondition[UInt8(code)]
-@inline opcode(f::Function) = OpCode[f]
+@inline function evalop(op::UInt8, x::T, thr::T)::Bool where {T<:AbstractFloat}
+    op == 0x01 ? (x < thr) :
+    op == 0x02 ? (x > thr) :
+    op == 0x03 ? (x ≤ thr) : (x ≥ thr)
+end
 
 # ---------------------------------------------------------------------------- #
 #                                 Lumen Node                                   #
@@ -48,8 +47,7 @@ function LumenEnsemble(
         if node isa SM.ConstantModel
             nodes[id] = LumenNode{R,T}(
                 zero(R), zero(T), zero(R), zero(R), zero(R),
-                R(levelcode(outcome(node)))
-            )
+                R(levelcode(outcome(node))))
         else
             cond = SL.value(antecedent(node))
             left = fillensemble(posconsequent(node))
@@ -57,7 +55,7 @@ function LumenEnsemble(
             nodes[id] = LumenNode{R,T}(
                 R(SD.i_variable(SD.feature(cond))),
                 T(SD.threshold(cond)),
-                opcode(SD.test_operator(cond)),
+                evalop(SD.test_operator(cond)),
                 left, right, zero(R)
             )
         end
@@ -81,42 +79,30 @@ Base.eltype(::LumenEnsemble{R,T}) where {R,T} = LumenNode{R,T}
 @inline atoms(e::LumenEnsemble) = filter(!isleaf, e.nodes)
 
 # ---------------------------------------------------------------------------- #
-#                                 Base.show                                    #
+#                                   apply                                      #
 # ---------------------------------------------------------------------------- #
-@inline Base.show(io::IO, n::LumenNode{R,T}) where {R,T} =
-    isleaf(n) ?
-        print(io, "LumenNode{$R,$T}(leaf=", n.leaf, ")") :
-        print(io, "LumenNode{$R,$T}(V", n.feat, " ",
-            opcondition(n.op), " ", n.thr, ")")
+function apply(
+    f::LumenEnsemble{R,T},
+    d::Matrix{T},
+    nclasses::R
+) where {R<:Unsigned,T<:AbstractFloat}
+    n = size(d, 1)
+    preds = Vector{R}(undef, n)
+    counts = Vector{R}(undef, nclasses)
 
-function Base.show(
-    io::IO,
-    ::MIME"text/plain",
-    n::LumenNode{R,T}
-) where {R,T}
-    println(io, "LumenNode{$R,$T}")
-    if isleaf(n)
-        println(io, "  leaf     :", n.leaf)
-    else
-        println(io, "  feature  :", n.feat)
-        println(io, "  operator :", opcondition(n.op))
-        println(io, "  threshold:", n.thr)
-        println(io, "  left     :", n.left)
-        println(io, "  right    :", n.right)
+    @inbounds for i in 1:n
+        fill!(counts, zero(R))
+        for r in f.roots
+            node = f.nodes[r]
+            while !isleaf(node)
+                r = evalop(node.op, d[i, node.feat], node.thr) ?
+                    node.left : node.right
+                node = f.nodes[r]
+            end
+            counts[node.leaf] += one(R)
+        end
+        preds[i] = argmax(counts)
     end
-end
 
-@inline Base.show(io::IO, e::LumenEnsemble{R,T}) where {R,T} =
-    print(io, "LumenEnsemble{$R,$T}(",
-        length(e.roots), " trees, ", length(e.nodes), " nodes)")
-
-function Base.show(
-    io::IO,
-    ::MIME"text/plain",
-    e::LumenEnsemble{R,T}
-) where {R,T}
-    println(io, "LumenEnsemble{$R,$T}")
-    println(io, "  trees :", length(e.roots))
-    println(io, "  nodes :", length(e.nodes))
-    println(io, "  leaves:", count(isleaf, e.nodes))
+    return preds
 end

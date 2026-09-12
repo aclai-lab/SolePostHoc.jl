@@ -297,9 +297,10 @@ function lumen_shannon(
     model::SM.DecisionEnsemble{U,SM.Branch{S}},
 ) where {R<:Unsigned,T<:AbstractFloat,U,S<:CategoricalValue}
     ensemble = LumenEnsemble(config, model)
-    # classnames, class_idxs = assign(R, unique!(SM.info(model, :supporting_labels)))
-    # featurenames = SM.info(model, :featurenames)
+    classnames, class_idxs = assign(R, unique!(SM.info(model, :supporting_labels)))
+    featurenames = SM.info(model, :featurenames)
 
+    ensemble
     # ctx = _prepare_sequential_context(
     #     config,
     #     atoms(ensemble),

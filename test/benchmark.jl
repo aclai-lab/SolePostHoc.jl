@@ -47,6 +47,14 @@ lumen = SP.Lumen.lumen_shannon(config, solem)
 # 3.450 s (8954959 allocations: 471.73 MiB) PILE!
 # 2.158 s (7168008 allocations: 407.08 MiB) PILE!
 
+# ensemble
+# 36.778 μs (433 allocations: 30.41 KiB)
+# atoms
+# 631.257 ns (5 allocations: 7.30 KiB)
+# apply
+# 11.769 μs (12 allocations: 8.05 KiB)
+
+
 @code_warntype SP.Lumen.lumen_shannon(config, solem)
 result = @report_opt SP.Lumen.lumen_shannon(config, solem)
 open("jet_report.txt", "w") do io
