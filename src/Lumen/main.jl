@@ -40,7 +40,6 @@ export Abc, MitEspresso
 include("dataset_utils.jl")
 include("config.jl")
 include("ensemble.jl")
-include("apply.jl")
 
 include("super_minimizer.jl")
 include("lumen_shannon.jl")
