@@ -85,7 +85,7 @@ end
 function _leaf_extract(
     config::LumenConfig{R,T},
     ctx::Ctx{R,T},
-    model::FlatForest{TT,U},
+    model::LumenEnsemble{TT,U},
     lo::Vector{R},
     hi::Vector{R},
     cache::RegionCache
@@ -204,7 +204,7 @@ end
 function _shannon_extract(
     config::LumenConfig{R,T},
     ctx::Ctx{R,T},
-    model::FlatForest{TT,U},
+    model::LumenEnsemble{TT,U},
     lo::Vector{R},
     hi::Vector{R},
     cache::RegionCache
@@ -292,33 +292,29 @@ compacted).
 # Throws
 - `ArgumentError` if `M` is not positive.
 """
-
-# map categorical labels onto unsigned integer of type `R`
-# sort classlabels
-function assign(
-    ::Type{R},
-    y::Vector{S}
-) where {R<:Unsigned,S<:CategoricalValue}
-    classlabels = sort!(unique(y))
-    dict = Dict{S,R}(v => i for (i, v) in enumerate(classlabels))
-    return string.(classlabels), [dict[t] for t in y]
-end
-
 function lumen_shannon(
     config::LumenConfig{R,T},
-    model::SM.DecisionEnsemble{R,SM.Branch{S}},
-) where {S<:CategoricalValue,R<:Unsigned,T<:AbstractFloat}
-    flatmodel = flatten(model)
-    classnames, class_idxs = assign(R, unique!(SM.info(model, :supporting_labels)))
-    featurenames = SM.info(model, :featurenames)
+    model::SM.DecisionEnsemble{U,SM.Branch{S}},
+) where {R<:Unsigned,T<:AbstractFloat,U,S<:CategoricalValue}
+    ensemble = LumenEnsemble(config, model)
+    # classnames, class_idxs = assign(R, unique!(SM.info(model, :supporting_labels)))
+    # featurenames = SM.info(model, :featurenames)
 
-    ctx = _prepare_sequential_context(config, _extract_atoms_bfs_order(model), featurenames, classnames, class_idxs)
+    # ctx = _prepare_sequential_context(
+    #     config,
+    #     atoms(ensemble),
+    #     featurenames,
+    #     classnames,
+    #     class_idxs
+    # )
 
-    lo = ones(R, length(ctx.lens))
-    hi = ctx.lens
+    # return ensemble, classnames, class_idxs, featurenames
 
-    cache = RegionCache(ctx)          # built once, shared by every leaf
-    per_class_terms = _shannon_extract(config, ctx, flatmodel, lo, hi, cache)
+    # lo = ones(R, length(ctx.lens))
+    # hi = ctx.lens
 
-    return _finalize_decision_set(ctx, per_class_terms, config)
+    # cache = RegionCache(ctx)          # built once, shared by every leaf
+    # per_class_terms = _shannon_extract(config, ctx, flatmodel, lo, hi, cache)
+
+    # return _finalize_decision_set(ctx, per_class_terms, config)
 end

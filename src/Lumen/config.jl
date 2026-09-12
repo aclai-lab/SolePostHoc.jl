@@ -1,21 +1,5 @@
 # ---------------------------------------------------------------------------- #
-#                                    types                                     #
-# ---------------------------------------------------------------------------- #
-"""
-    AbstractConfig
-
-Abstract base type for all LUMEN configuration structs.
-
-Concrete subtypes encapsulate the parameters needed to control a specific
-algorithm variant. Using a common supertype allows generic code to accept
-any configuration object without being tied to a particular implementation.
-
-See also: [`LumenConfig`](@ref)
-"""
-abstract type AbstractConfig end
-
-# ---------------------------------------------------------------------------- #
-#                                 Lumen struct                                 #
+#                                 Lumen config                                 #
 # ---------------------------------------------------------------------------- #
 """
     LumenConfig <: AbstractConfig

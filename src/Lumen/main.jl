@@ -15,12 +15,32 @@ using StatsBase: countmap
 
 using ABC_jll
 
-using BenchmarkTools
+# ---------------------------------------------------------------------------- #
+#                                    types                                     #
+# ---------------------------------------------------------------------------- #
+"""
+    AbstractConfig
 
-include("minimizations.jl")
+Abstract base type for all LUMEN configuration structs.
+
+Concrete subtypes encapsulate the parameters needed to control a specific
+algorithm variant. Using a common supertype allows generic code to accept
+any configuration object without being tied to a particular implementation.
+
+See also: [`LumenConfig`](@ref)
+"""
+abstract type AbstractConfig end
+
+abstract type AbstractMinimization end
+
+struct Abc <: AbstractMinimization end
+struct MitEspresso <: AbstractMinimization end
 export Abc, MitEspresso
 
+include("dataset_utils.jl")
 include("config.jl")
+include("structs.jl")
+
 include("apply.jl")
 # include("sequential_minimizer.jl")
 include("super_minimizer.jl")
@@ -506,6 +526,7 @@ Only `SM.Branch` nodes contribute atoms; leaf nodes are silently skipped.
   `Vector{<:Atom{<:ScalarCondition}}`-typed functions like
   `_take_first_percentage` — see implementation note below).
 """
+
 function _extract_atoms_bfs_order(
     model::SM.DecisionEnsemble{R,SM.Branch{S}}
 )::Vector{SM.Atom} where {R,S<:CategoricalValue}

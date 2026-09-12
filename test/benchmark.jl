@@ -34,7 +34,7 @@ solem = modelc.sole[1]
 # SP.Lumen.super_lumen(config, solem, M=100000, N=10);
 
 config = SP.Lumen.LumenConfig(; minimization_scheme=Abc, M=5000)
-lumen = SP.Lumen.lumen_shannon(config, solem);
+lumen = SP.Lumen.lumen_shannon(config, solem)
 @btime SP.Lumen.lumen_shannon(config, solem);
 # 3.915 s (15192644 allocations: 801.34 MiB)
 # 2.043 s (15223660 allocations: 755.99 MiB)
@@ -134,7 +134,7 @@ function check(
         return cond_operator(d[col], cond_threshold)
 end
 
-struct FlatForest{T<:AbstractFloat,R<:Integer}
+struct LumenEnsemble{T<:AbstractFloat,R<:Integer}
     feat::Vector{Int32}      # >0: split variable; -1: leaf
     thr::Vector{T}
     left::Vector{Int32}      # taken when antecedent holds
@@ -172,11 +172,11 @@ function flatten(m::DecisionEnsemble{U,Branch{S}}) where {U,S<:CategoricalValue}
         push!(roots, push!!(sm))
     end
     pool = CategoricalArrays.pool(first(info(m).supporting_predictions))::CategoricalPool{String,UInt32}
-    return FlatForest{T,UInt32}(feat, thr, left, right, leaf, roots, pool)
+    return LumenEnsemble{T,UInt32}(feat, thr, left, right, leaf, roots, pool)
 end
 
 function apply(
-    f::FlatForest{T,R},
+    f::LumenEnsemble{T,R},
     d::Matrix{T}
 ) where {T<:AbstractFloat,R}
     n = size(d, 1)

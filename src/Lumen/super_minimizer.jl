@@ -285,7 +285,8 @@ end
 function _prepare_sequential_context(
     config::LumenConfig{R,T},
     # atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
-    atoms::Vector{SM.Atom},
+    # atoms::Vector{SM.Atom},
+    atoms::Vector{@NamedTuple{feat::R, thr::T}},
     featurenames::Vector{Symbol},
     classnames::Vector{String},
     class_idxs::Vector{R}
