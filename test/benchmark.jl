@@ -33,7 +33,7 @@ solem = modelc.sole[1]
 # config = SP.Lumen.LumenConfig(; minimization_scheme=:mitespresso)
 # SP.Lumen.super_lumen(config, solem, M=100000, N=10);
 
-config = SP.Lumen.LumenConfig(; minimization_scheme=Abc, M=5000)
+config = SP.Lumen.LumenConfig(; minimization_scheme=Abc, M=500)
 lumen = SP.Lumen.lumen_shannon(config, solem)
 @btime SP.Lumen.lumen_shannon(config, solem);
 # 3.915 s (15192644 allocations: 801.34 MiB)

@@ -11,29 +11,31 @@ function _leaf_extract(
     lo::Vector{R},
     hi::Vector{R},
 ) where {R<:Unsigned,T<:AbstractFloat}
-    @show Int.(hi)
-    @show Int.(lo)
     raw = [Vector{Vector{LumenAtom}}() for _ in one(R):nclasses]
-    widths = [hi[j] - lo[j] + one(R) for j in 1:nfeats]
-    total = prod(R, widths)
-    @show Int.(widths)
-    @show Int(total)
-    batch = min(config.max_apply_batch, total)
+    dims = ntuple(j -> lo[j]:hi[j], nfeats)
+    all_idx = CartesianIndices(dims)
+    total = length(all_idx)
 
+    batch = min(config.max_apply_batch, total)
     tbl  = Matrix{T}(undef, batch, nfeats)
     idxm = Matrix{R}(undef, batch, nfeats)
 
-    i0 = one(R)
-    while i0 ≤ total
-        this_chunk = min(batch, total - i0 + one(R))
+    for chunk in Iterators.partition(all_idx, config.max_apply_batch)
+        this_chunk = length(chunk)
 
-        @inbounds for k in 1:this_chunk
-            r = i0 + k - 2
+        # rows = Vector{NTuple{Int(nfeats),T}}(undef, this_chunk)
+        # for (k, ci) in enumerate(chunk)
+        #     rows[k] = ntuple(j -> thrs_with_boundary[j][ci[j]], Int(nfeats))
+        # end
+
+        # tbl = NamedTuple{Tuple(ctx.featurenames)}(
+        #     ntuple(j -> [r[j] for r in rows], nfeat)
+        # )
+
+        @inbounds for (k, ci) in enumerate(chunk)
             for j in 1:nfeats
-                off = r % widths[j]
-                r   = r ÷ widths[j]
-                t   = lo[j] + off
-                tbl[k, j]  = thrs_with_boundary[j][t]
+                t = ci[j]
+                tbl[k, j] = thrs_with_boundary[j][t]
                 idxm[k, j] = atomcache.regidx[j][t]
             end
         end
@@ -41,8 +43,6 @@ function _leaf_extract(
         preds = apply(ensemble, view(tbl, 1:this_chunk, :), nclasses)
 
         @inbounds for k in 1:this_chunk
-            p  = preds[k]
-
             len = 0
             for j in 1:nfeats
                 len += length(atomcache.nodes[j][idxm[k, j]])
@@ -56,34 +56,29 @@ function _leaf_extract(
                     cube[q += 1] = a             # pointer copy, no construction
                 end
             end
-            push!(raw[p], cube)
+            push!(raw[preds[k]], cube)
         end
-
-        i0 += this_chunk
     end
 
-    @show length(raw[1])
-    @show length(raw[2])
-    @show length(raw[3])
+    terms = Vector{Vector{TERM}}(undef, nclasses)
+    # classes are independent; `run_minimization` shells out to an external
+    # binary, so this is both thread-safe and mostly I/O-bound.
+    
+    for c in 1:nclasses
+        rc = raw[c]
+        terms[c] = if isempty(rc)
+            TERM[]
+        elseif length(rc) == 1
+            # single cube: already minimal, skip the subprocess round-trip
+            TERM[SL.LeftmostConjunctiveForm(rc[1])]
+        else
+            @show "PASO"
+            @show typeof(rc)
+            run_minimization(config.minimization_scheme, config, rc)
+        end
+    end
 
-    # raw
-
-    # terms = Vector{Vector{TERM}}(undef, nclasses)
-    # # classes are independent; `run_minimization` shells out to an external
-    # # binary, so this is both thread-safe and mostly I/O-bound.
-    # Threads.@threads for c in 1:nclasses
-    #     rc = raw[c]
-    #     terms[c] = if isempty(rc)
-    #         TERM[]
-    #     elseif length(rc) == 1
-    #         # single cube: already minimal, skip the subprocess round-trip
-    #         TERM[SL.LeftmostConjunctiveForm(rc[1])]
-    #     else
-    #         run_minimization(config.minimization_scheme, config, rc)
-    #     end
-    # end
-
-    # return terms
+    return terms
 end
 
 # ---------------------------------------------------------------------------- #
