@@ -39,7 +39,7 @@ export Abc, MitEspresso
 
 include("dataset_utils.jl")
 include("config.jl")
-include("structs.jl")
+include("ensemble.jl")
 
 include("apply.jl")
 # include("sequential_minimizer.jl")
