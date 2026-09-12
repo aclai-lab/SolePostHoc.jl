@@ -10,13 +10,11 @@ end
 # ---------------------------------------------------------------------------- #
 #                              Lumen Atom Cache                                #
 # ---------------------------------------------------------------------------- #
-struct AtomCache
-    # parts[j][r] : atoms implied by feature j being in ordinal region r
-    parts::Vector{Vector{Vector{LumenAtom}}}
+struct AtomCache{R<:Unsigned,T<:AbstractFloat}
+    # nodes[j][r] : atoms implied by feature j being in ordinal region r
+    nodes::Vector{Vector{Vector{LumenAtom}}}
     # regidx[j][t] : region index for the t-th value of ctx.thrs_with_p[j]
-    # regidx::Vector{Vector{Int}}
-    # plen[j][r] : length(parts[j][r]), to size the cube exactly
-    # plen::Vector{Vector{Int}}
+    regidx::Vector{Vector{R}}
 end
 
 @inline _mknode(
@@ -43,15 +41,13 @@ lookup exactly (including its duplicate-threshold behaviour and its
 previous implementation.
 """
 function AtomCache(
-    # ctx::Ctx{R,T}
     thresholds::Vector{Vector{T}},
     thrs_with_boundary::Vector{Vector{T}},
     op_families::Vector{UInt8},
     nfeats::R
 ) where {R<:Unsigned,T<:AbstractFloat}
-    parts  = Vector{Vector{Vector{LumenAtom}}}(undef, nfeats)
-    # regidx = Vector{Vector{Int}}(undef, nfeats)
-    # plen   = Vector{Vector{Int}}(undef, nfeats)
+    nodes  = Vector{Vector{Vector{LumenAtom}}}(undef, nfeats)
+    regidx = Vector{Vector{R}}(undef, nfeats)
 
     @inbounds for feat in one(R):nfeats
         thr = thresholds[feat]
@@ -84,14 +80,12 @@ function AtomCache(
             end
         end
 
-        parts[feat]  = regs
-        # plen[feat]   = Int[length(x) for x in regs]
-        # regidx[feat] = Int[
-        #     (k = findfirst(==(v), thr); isnothing(k) ? n + 1 : k)
-        #     for v in thrs_with_boundary[feat]
-        # ]
+        nodes[feat] = regs
+        regidx[feat] = R[
+            (k = findfirst(==(v), thr); isnothing(k) ? n + 1 : k)
+            for v in thrs_with_boundary[feat]
+        ]
     end
 
-    # return AtomCache(parts, regidx)
-    return AtomCache(parts)
+    return AtomCache{R,T}(nodes, regidx)
 end

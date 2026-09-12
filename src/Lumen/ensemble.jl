@@ -21,6 +21,11 @@ struct LumenNode{R<:Unsigned,T<:AbstractFloat}
     leaf::R
 end
 
+Base.:(==)(a::LumenNode, b::LumenNode) =
+    a.feat == b.feat && a.op == b.op && a.thr == b.thr
+Base.isequal(a::LumenNode, b::LumenNode) = a == b
+Base.hash(n::LumenNode, h::UInt) =
+    hash(n.thr, hash(n.op, hash(n.feat, h)))
 @inline isleaf(n::LumenNode{R}) where {R} = n.leaf != zero(R)
 
 # ---------------------------------------------------------------------------- #
@@ -76,7 +81,7 @@ Base.getindex(e::LumenEnsemble, idxs::AbstractVector{<:Integer}) = e.nodes[idxs]
 Base.iterate(e::LumenEnsemble, s...) = iterate(e.nodes, s...)
 Base.eltype(::LumenEnsemble{R,T}) where {R,T} = LumenNode{R,T}
 
-@inline get_atoms(e::LumenEnsemble) = filter(!isleaf, e.nodes)
+@inline get_atoms(e::LumenEnsemble) = unique!(filter(!isleaf, e.nodes))
 function get_thresholds(
     atoms::Vector{LumenNode{R,T}},
     nfeats::R
@@ -99,7 +104,7 @@ end
 # ---------------------------------------------------------------------------- #
 function apply(
     f::LumenEnsemble{R,T},
-    d::Matrix{T},
+    d::SubArray{T},
     nclasses::R
 ) where {R<:Unsigned,T<:AbstractFloat}
     n = size(d, 1)

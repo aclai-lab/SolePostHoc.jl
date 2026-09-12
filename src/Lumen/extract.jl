@@ -3,72 +3,70 @@
 # ---------------------------------------------------------------------------- #
 function _leaf_extract(
     config::LumenConfig{R,T},
-    thrs_with_p::Vector{Vector{T}},
+    atomcache::AtomCache{R,T},
     ensemble::LumenEnsemble{R,T},
+    thrs_with_boundary::Vector{Vector{T}},
+    nfeats::R,
+    nclasses::R,
     lo::Vector{R},
     hi::Vector{R},
 ) where {R<:Unsigned,T<:AbstractFloat}
-    # parts, regidx, plen = cache.parts, cache.regidx, cache.plen
+    @show Int.(hi)
+    @show Int.(lo)
+    raw = [Vector{Vector{LumenAtom}}() for _ in one(R):nclasses]
+    widths = [hi[j] - lo[j] + one(R) for j in 1:nfeats]
+    total = prod(R, widths)
+    @show Int.(widths)
+    @show Int(total)
+    batch = min(config.max_apply_batch, total)
 
-    # nfeat    = length(ctx.featurenames)
-    # nclasses = length(ctx.class_idxs)
-    # raw      = [Vector{Vector{SM.Atom}}() for _ in 1:nclasses]
+    tbl  = Matrix{T}(undef, batch, nfeats)
+    idxm = Matrix{R}(undef, batch, nfeats)
 
-    # widths = Vector{Int}(undef, nfeat)
-    # @inbounds for j in 1:nfeat
-    #     widths[j] = Int(hi[j]) - Int(lo[j]) + 1
-    # end
-    # total = prod(widths)
-    # batch = min(Int(config.max_apply_batch), total)
+    i0 = one(R)
+    while i0 ≤ total
+        this_chunk = min(batch, total - i0 + one(R))
 
-    # # buffers hoisted out of the chunk loop: one allocation for the whole leaf
-    # tbl  = Matrix{T}(undef, batch, nfeat)
-    # idxm = Matrix{Int}(undef, batch, nfeat)
-    # # avoids a `String(pred)` allocation per row
-    # classcache = Dict{Any,Int}()
+        @inbounds for k in 1:this_chunk
+            r = i0 + k - 2
+            for j in 1:nfeats
+                off = r % widths[j]
+                r   = r ÷ widths[j]
+                t   = lo[j] + off
+                tbl[k, j]  = thrs_with_boundary[j][t]
+                idxm[k, j] = atomcache.regidx[j][t]
+            end
+        end
 
-    # i0 = 1
-    # while i0 ≤ total
-    #     this_chunk = min(batch, total - i0 + 1)
+        preds = apply(ensemble, view(tbl, 1:this_chunk, :), nclasses)
 
-    #     @inbounds for k in 1:this_chunk
-    #         r = i0 + k - 2
-    #         for j in 1:nfeat
-    #             off = r % widths[j]
-    #             r   = r ÷ widths[j]
-    #             t   = Int(lo[j]) + off
-    #             tbl[k, j]  = ctx.thrs_with_p[j][t]
-    #             idxm[k, j] = regidx[j][t]      # region index, precomputed
-    #         end
-    #     end
+        @inbounds for k in 1:this_chunk
+            p  = preds[k]
 
-    #     # NOTE: if `apply` cannot consume a SubArray, use `tbl[1:this_chunk, :]`
-    #     preds = apply(model, view(tbl, 1:this_chunk, :))
+            len = 0
+            for j in 1:nfeats
+                len += length(atomcache.nodes[j][idxm[k, j]])
+            end
 
-    #     @inbounds for k in 1:this_chunk
-    #         p  = preds[k]
-    #         ci = get!(classcache, p) do
-    #             searchsortedfirst(ctx.classnames, String(p))
-    #         end
+            cube = Vector{LumenAtom}(undef, len)   # the only per-row allocation
+            q = 0
+            for j in 1:nfeats
+                pj = atomcache.nodes[j][idxm[k, j]]
+                for a in pj
+                    cube[q += 1] = a             # pointer copy, no construction
+                end
+            end
+            push!(raw[p], cube)
+        end
 
-    #         len = 0
-    #         for j in 1:nfeat
-    #             len += plen[j][idxm[k, j]]
-    #         end
+        i0 += this_chunk
+    end
 
-    #         cube = Vector{SM.Atom}(undef, len)   # the only per-row allocation
-    #         q = 0
-    #         for j in 1:nfeat
-    #             pj = parts[j][idxm[k, j]]
-    #             for a in pj
-    #                 cube[q += 1] = a             # pointer copy, no construction
-    #             end
-    #         end
-    #         push!(raw[ci], cube)
-    #     end
+    @show length(raw[1])
+    @show length(raw[2])
+    @show length(raw[3])
 
-    #     i0 += this_chunk
-    # end
+    # raw
 
     # terms = Vector{Vector{TERM}}(undef, nclasses)
     # # classes are independent; `run_minimization` shells out to an external

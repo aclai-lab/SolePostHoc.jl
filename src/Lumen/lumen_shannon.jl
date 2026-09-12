@@ -161,6 +161,7 @@ function lumen_shannon(
     classnames, class_idxs = assign(R, unique!(SM.info(model, :supporting_labels)))
     featurenames = SM.info(model, :featurenames)
     nfeats = R(length(featurenames))
+    nclasses = R(length(classnames))
 
     thresholds, thrs_with_boundary, op_families = _prepare_sequential_context(
         config,
@@ -178,7 +179,7 @@ function lumen_shannon(
 
     cache = AtomCache(thresholds, thrs_with_boundary, op_families, nfeats)
     # # per_class_terms = _extract(config, thrs_with_boundary, ensemble, lo, hi)
-    # _leaf_extract(config, thrs_with_boundary, ensemble, lo, hi)
+    _leaf_extract(config, cache, ensemble, thrs_with_boundary, nfeats, nclasses, lo, hi)
 
     # return _finalize_decision_set(ctx, per_class_terms, config)
 end

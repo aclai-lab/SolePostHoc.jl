@@ -51,6 +51,7 @@ function _prepare_sequential_context(
     class_idxs::Vector{R}
 ) where {R<:Unsigned,T<:AbstractFloat}
     atoms = get_atoms(ensemble)
+    @show length(atoms)
 
     depth = config.depth
     depth < 1.0 && (atoms = _take_first_percentage(atoms, depth)) # TODO check it!
