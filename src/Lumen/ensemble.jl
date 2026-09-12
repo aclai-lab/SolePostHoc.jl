@@ -1,12 +1,12 @@
 @inline evalop(::typeof(<)) = 0x01
-@inline evalop(::typeof(>)) = 0x02
-@inline evalop(::typeof(≤)) = 0x03
+@inline evalop(::typeof(≤)) = 0x02
+@inline evalop(::typeof(>)) = 0x03
 @inline evalop(::typeof(≥)) = 0x04
 
 @inline function evalop(op::UInt8, x::T, thr::T)::Bool where {T<:AbstractFloat}
     op == 0x01 ? (x < thr) :
-    op == 0x02 ? (x > thr) :
-    op == 0x03 ? (x ≤ thr) : (x ≥ thr)
+    op == 0x02 ? (x ≤ thr) :
+    op == 0x03 ? (x > thr) : (x ≥ thr)
 end
 
 # ---------------------------------------------------------------------------- #
@@ -76,7 +76,23 @@ Base.getindex(e::LumenEnsemble, idxs::AbstractVector{<:Integer}) = e.nodes[idxs]
 Base.iterate(e::LumenEnsemble, s...) = iterate(e.nodes, s...)
 Base.eltype(::LumenEnsemble{R,T}) where {R,T} = LumenNode{R,T}
 
-@inline atoms(e::LumenEnsemble) = filter(!isleaf, e.nodes)
+@inline get_atoms(e::LumenEnsemble) = filter(!isleaf, e.nodes)
+function get_thresholds(
+    atoms::Vector{LumenNode{R,T}},
+    nfeats::R
+) where {R<:Unsigned,T<:AbstractFloat}
+    thresholds = [T[] for _ in 1:nfeats]
+    @inbounds for a in atoms
+        push!(thresholds[a.feat], a.thr)
+    end
+    return thresholds
+end
+@inline get_thresholds(atoms::Vector{LumenNode{R,T}}) where {R,T} =
+    [a.thr for a in atoms]
+@inline get_op(atoms::Vector{LumenNode{R,T}}) where {R,T} =
+    [a.op for a in atoms]
+@inline featidxs(atoms::Vector{LumenNode{R,T}}, feat::R) where {R,T} =
+    findall(a -> a.feat == feat, atoms)
 
 # ---------------------------------------------------------------------------- #
 #                                   apply                                      #

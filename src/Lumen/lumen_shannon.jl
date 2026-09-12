@@ -300,16 +300,24 @@ function lumen_shannon(
     classnames, class_idxs = assign(R, unique!(SM.info(model, :supporting_labels)))
     featurenames = SM.info(model, :featurenames)
 
-    ensemble
     # ctx = _prepare_sequential_context(
     #     config,
-    #     atoms(ensemble),
+    #     ensemble,
     #     featurenames,
     #     classnames,
     #     class_idxs
     # )
 
-    # return ensemble, classnames, class_idxs, featurenames
+    thrs_with_p = _thrs_with_boundary(
+        config,
+        ensemble,
+        featurenames,
+        classnames,
+        class_idxs    
+    )
+    lens = length.(thrs_with_p)
+    strides = _strides(lens)
+    n_total = prod(lens)
 
     # lo = ones(R, length(ctx.lens))
     # hi = ctx.lens

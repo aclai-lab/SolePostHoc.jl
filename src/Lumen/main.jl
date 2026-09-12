@@ -40,6 +40,7 @@ export Abc, MitEspresso
 include("dataset_utils.jl")
 include("config.jl")
 include("ensemble.jl")
+include("thresholds.jl")
 
 include("super_minimizer.jl")
 include("lumen_shannon.jl")
@@ -742,80 +743,80 @@ end
 #     _truths_by_thresholds.(values, thresholds)
 # end
 
-"""
-    _thrs_with_boundary(
-        thresholds::Vector{T},
-        family::Symbol
-    ) where {T<:Float} -> Vector{Float64}
+# """
+#     _thrs_with_boundary(
+#         thresholds::Vector{T},
+#         family::Symbol
+#     ) where {T<:Float} -> Vector{Float64}
 
-Append the appropriate boundary point to `thresholds` depending on the operator
-family, ensuring that all `n + 1` ordinal regions induced by `n` thresholds
-are sampled.
+# Append the appropriate boundary point to `thresholds` depending on the operator
+# family, ensuring that all `n + 1` ordinal regions induced by `n` thresholds
+# are sampled.
 
-- `:lt` family (`<`/`≤`): thresholds sorted **descending** → appends
-  `prevfloat(last(thresholds))` 
-    to cover the region **below the smallest threshold**
-  (i.e. values smaller than every condition).
+# - `:lt` family (`<`/`≤`): thresholds sorted **descending** → appends
+#   `prevfloat(last(thresholds))` 
+#     to cover the region **below the smallest threshold**
+#   (i.e. values smaller than every condition).
 
-- `:gt` family (`>`/`≥`): thresholds sorted **ascending** → appends
-  `nextfloat(last(thresholds))` 
-    to cover the region **above the largest threshold**
-  (i.e. values larger than every condition).
+# - `:gt` family (`>`/`≥`): thresholds sorted **ascending** → appends
+#   `nextfloat(last(thresholds))` 
+#     to cover the region **above the largest threshold**
+#   (i.e. values larger than every condition).
 
-Returns `[NaN]` for an empty input vector.
+# Returns `[NaN]` for an empty input vector.
 
-# Examples
+# # Examples
 
-```julia
-# :lt  — thresholds [4.8, 4.7, 1.9] (descending)
-# regions: x < 1.9 | 1.9 ≤ x < 4.7 | 4.7 ≤ x < 4.8 | x ≥ 4.8
-# boundary needed: prevfloat(1.9)  ← covers  x < 1.9
-_thrs_with_boundary([4.8, 4.7, 1.9], :lt)
-# → [4.8, 4.7, 1.9, prevfloat(1.9)]
+# ```julia
+# # :lt  — thresholds [4.8, 4.7, 1.9] (descending)
+# # regions: x < 1.9 | 1.9 ≤ x < 4.7 | 4.7 ≤ x < 4.8 | x ≥ 4.8
+# # boundary needed: prevfloat(1.9)  ← covers  x < 1.9
+# _thrs_with_boundary([4.8, 4.7, 1.9], :lt)
+# # → [4.8, 4.7, 1.9, prevfloat(1.9)]
 
-# :gt  — thresholds [1.9, 4.7, 4.8] (ascending)
-# regions: x ≤ 1.9 | 1.9 < x ≤ 4.7 | 4.7 < x ≤ 4.8 | x > 4.8
-# boundary needed: nextfloat(4.8)  ← covers  x > 4.8
-_thrs_with_boundary([1.9, 4.7, 4.8], :gt)
-# → [1.9, 4.7, 4.8, nextfloat(4.8)]
-```
+# # :gt  — thresholds [1.9, 4.7, 4.8] (ascending)
+# # regions: x ≤ 1.9 | 1.9 < x ≤ 4.7 | 4.7 < x ≤ 4.8 | x > 4.8
+# # boundary needed: nextfloat(4.8)  ← covers  x > 4.8
+# _thrs_with_boundary([1.9, 4.7, 4.8], :gt)
+# # → [1.9, 4.7, 4.8, nextfloat(4.8)]
+# ```
 
----
+# ---
 
-    _thrs_with_boundary(
-        thresholds::Vector{T},
-        op_families::Vector{Symbol}
-    ) where {T<:Vector{<:Float}} -> Vector{Vector{T}}
+#     _thrs_with_boundary(
+#         thresholds::Vector{T},
+#         op_families::Vector{Symbol}
+#     ) where {T<:Vector{<:Float}} -> Vector{Vector{T}}
 
-Element-wise version: applies `_thrs_with_boundary`
-to each per-feature threshold
-vector using the corresponding operator family.
-"""
-function _thrs_with_boundary(
-    thresholds::Vector{T},
-    family::Symbol
-) where {T<:Float}
-    isempty(thresholds) && return T[NaN]
+# Element-wise version: applies `_thrs_with_boundary`
+# to each per-feature threshold
+# vector using the corresponding operator family.
+# """
+# function _thrs_with_boundary(
+#     thresholds::Vector{T},
+#     family::Symbol
+# ) where {T<:Float}
+#     isempty(thresholds) && return T[NaN]
 
-    nthrs = length(thresholds)
-    result = Vector{T}(undef, nthrs + 1)
-    result[1:nthrs] .= thresholds
+#     nthrs = length(thresholds)
+#     result = Vector{T}(undef, nthrs + 1)
+#     result[1:nthrs] .= thresholds
 
-    # :lt (descending) → boundary point is BELOW the minimum threshold
-    #                    prevfloat(last) because last is the smallest value
-    # :gt (ascending)  → boundary point is ABOVE the maximum threshold
-    #                    nextfloat(last) because last is the largest value
-    result[end] = family === :lt ?
-                  prevfloat(last(thresholds)) :
-                  nextfloat(last(thresholds))
+#     # :lt (descending) → boundary point is BELOW the minimum threshold
+#     #                    prevfloat(last) because last is the smallest value
+#     # :gt (ascending)  → boundary point is ABOVE the maximum threshold
+#     #                    nextfloat(last) because last is the largest value
+#     result[end] = family === :lt ?
+#                   prevfloat(last(thresholds)) :
+#                   nextfloat(last(thresholds))
 
-    return result
-end
+#     return result
+# end
 
-@inline _thrs_with_boundary(
-    thresholds::Vector{T},
-    op_families::Vector{Symbol}
-) where {T<:Vector{<:Float}} = _thrs_with_boundary.(thresholds, op_families)
+# @inline _thrs_with_boundary(
+#     thresholds::Vector{T},
+#     op_families::Vector{Symbol}
+# ) where {T<:Vector{<:Float}} = _thrs_with_boundary.(thresholds, op_families)
 
 # ---------------------------------------------------------------------------- #
 #                              generate disjunts                               #

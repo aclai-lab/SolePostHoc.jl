@@ -282,62 +282,62 @@ function RegionCache(ctx::Ctx{R,T}) where {R,T<:AbstractFloat}
     return RegionCache(parts, regidx, plen)
 end
 
-function _prepare_sequential_context(
-    config::LumenConfig{R,T},
-    # atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
-    # atoms::Vector{SM.Atom},
-    atoms::Vector{@NamedTuple{feat::R, thr::T}},
-    featurenames::Vector{Symbol},
-    classnames::Vector{String},
-    class_idxs::Vector{R}
-) where {R<:Unsigned,T<:AbstractFloat}
-    depth = config.depth
+# function _prepare_sequential_context(
+#     config::LumenConfig{R,T},
+#     # atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
+#     # atoms::Vector{SM.Atom},
+#     atoms::Vector{@NamedTuple{feat::R, thr::T}},
+#     featurenames::Vector{Symbol},
+#     classnames::Vector{String},
+#     class_idxs::Vector{R}
+# ) where {R<:Unsigned,T<:AbstractFloat}
+#     depth = config.depth
 
-    depth < 1.0 && (atoms = _take_first_percentage(atoms, depth)) # TODO check it!
+#     depth < 1.0 && (atoms = _take_first_percentage(atoms, depth)) # TODO check it!
 
-    features = Vector{Symbol}(undef, length(atoms))
-    @inbounds for i in eachindex(atoms)
-        @assert get_operator(atoms[i]) ∈ _supported_operators "Only" *
-            "'<', '≥', '>', '≤' operators are currently supported."
-        features[i] = SM.featurename(get_feature(atoms[i]))
-    end
-    features = unique!(features)
+#     features = Vector{Symbol}(undef, length(atoms))
+#     @inbounds for i in eachindex(atoms)
+#         @assert get_operator(atoms[i]) ∈ _supported_operators "Only" *
+#             "'<', '≥', '>', '≤' operators are currently supported."
+#         features[i] = SM.featurename(get_feature(atoms[i]))
+#     end
+#     features = unique!(features)
 
-    thresholds = Vector{Vector{T}}(undef, length(featurenames))
-    op_families = Vector{Symbol}(undef, length(featurenames))
+#     thresholds = Vector{Vector{T}}(undef, length(featurenames))
+#     op_families = Vector{Symbol}(undef, length(featurenames))
 
-    @inbounds for i in eachindex(featurenames)
-        idx = findfirst(f -> f == featurenames[i], features)
-        if isnothing(idx)
-            thresholds[i] = T[]
-            op_families[i] = :lt
-        else
-            family = _feature_op_family(atoms, features[idx])
-            op_families[i] = family
-            thresholds[i] = sort!(
-                get_threshold.(_atoms_for_feature(atoms, features[idx]));
-                rev=(family === :lt)
-            )
-        end
-    end
+#     @inbounds for i in eachindex(featurenames)
+#         idx = findfirst(f -> f == featurenames[i], features)
+#         if isnothing(idx)
+#             thresholds[i] = T[]
+#             op_families[i] = :lt
+#         else
+#             family = _feature_op_family(atoms, features[idx])
+#             op_families[i] = family
+#             thresholds[i] = sort!(
+#                 get_threshold.(_atoms_for_feature(atoms, features[idx]));
+#                 rev=(family === :lt)
+#             )
+#         end
+#     end
 
-    thrs_with_p = _thrs_with_boundary(thresholds, op_families)
-    lens = length.(thrs_with_p)
-    strides = _strides(lens)
-    n_total = prod(lens)
+#     thrs_with_p = _thrs_with_boundary(thresholds, op_families)
+#     lens = length.(thrs_with_p)
+#     strides = _strides(lens)
+#     n_total = prod(lens)
 
-    return Ctx{R,T}(
-        featurenames,
-        classnames,
-        class_idxs,
-        thresholds,
-        thrs_with_p,
-        op_families,
-        lens,
-        strides,
-        n_total
-    )
-end
+#     return Ctx{R,T}(
+#         featurenames,
+#         classnames,
+#         class_idxs,
+#         thresholds,
+#         thrs_with_p,
+#         op_families,
+#         lens,
+#         strides,
+#         n_total
+#     )
+# end
 
 # ---------------------------------------------------------------------------- #
 #                             per-class raw buffer                             #
