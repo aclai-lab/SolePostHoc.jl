@@ -206,15 +206,14 @@ end
 
 struct RegionCache
     # parts[j][r] : atoms implied by feature j being in ordinal region r
-    parts::Vector{Vector{Vector{SM.Atom}}}
+    parts::Vector{Vector{Vector{LumenAtom}}}
     # regidx[j][t] : region index for the t-th value of ctx.thrs_with_p[j]
     regidx::Vector{Vector{Int}}
     # plen[j][r] : length(parts[j][r]), to size the cube exactly
-    plen::Vector{Vector{Int}}
+    # plen::Vector{Vector{Int}}
 end
 
-@inline _mkatom(feat, op, thr) =
-    SL.Atom(SD.ScalarCondition(SD.ScalarMetaCondition(feat, op), thr))
+@inline _mknode(feat, op, thr) = LumenAtom(feat, thr, op)
 
 """
     RegionCache(ctx) -> RegionCache
@@ -233,27 +232,31 @@ lookup exactly (including its duplicate-threshold behaviour and its
 "not found ⇒ row n+1" boundary case), so the result is bit-identical to the
 previous implementation.
 """
-function RegionCache(ctx::Ctx{R,T}) where {R,T<:AbstractFloat}
-    nfeat  = length(ctx.featurenames)
-    parts  = Vector{Vector{Vector{SM.Atom}}}(undef, nfeat)
-    regidx = Vector{Vector{Int}}(undef, nfeat)
-    plen   = Vector{Vector{Int}}(undef, nfeat)
+function RegionCache(
+    # ctx::Ctx{R,T}
+    thresholds,
+    thrs_with_boundary,
+    op_families,
+    nfeats::R
+) where {R<:Unsigned}
+    parts  = Vector{Vector{Vector{LumenAtom}}}(undef, nfeats)
+    regidx = Vector{Vector{Int}}(undef, nfeats)
+    # plen   = Vector{Vector{Int}}(undef, nfeats)
 
-    @inbounds for j in 1:nfeat
-        thr  = ctx.thresholds[j]
-        n    = length(thr)
-        feat = SD.VariableValue(j, ctx.featurenames[j])
-        regs = Vector{Vector{SM.Atom}}(undef, n + 1)
+    @inbounds for feat in one(R):nfeats
+        thr = thresholds[feat]
+        n = length(thr)
+        regs = Vector{Vector{LumenAtom}}(undef, n + 1)
 
         if n == 0
-            regs[1] = SM.Atom[]
-        elseif ctx.op_families[j] === :lt
+            regs[1] = LumenAtom[]
+        elseif op_families[feat] === evalop(<)
             # descending thresholds: idx0 = 1:r-1 -> `< thr[r-1]`
             #                        idx1 = r:n   -> `≥ thr[r]`
-            lt = [_mkatom(feat, <, thr[k]) for k in 1:n]
-            ge = [_mkatom(feat, ≥, thr[k]) for k in 1:n]
+            lt = [_mknode(feat, evalop(<), thr[k]) for k in 1:n]
+            ge = [_mknode(feat, evalop(≥), thr[k]) for k in 1:n]
             for r in 1:(n+1)
-                a = SM.Atom[]
+                a = LumenAtom[]
                 r > 1 && push!(a, lt[r-1])
                 r ≤ n && push!(a, ge[r])
                 regs[r] = a
@@ -261,25 +264,25 @@ function RegionCache(ctx::Ctx{R,T}) where {R,T<:AbstractFloat}
         else
             # ascending thresholds: minimum(idx0) ≡ 1, maximum(idx1) ≡ n,
             # so both atoms are region-independent.
-            le = _mkatom(feat, ≤, thr[1])
-            gt = _mkatom(feat, >, thr[n])
+            le = _mknode(feat, evalop(≤), thr[1])
+            gt = _mknode(feat, evalop(>), thr[n])
             for r in 1:(n+1)
-                a = SM.Atom[]
+                a = LumenAtom[]
                 r > 1 && push!(a, le)
                 r ≤ n && push!(a, gt)
                 regs[r] = a
             end
         end
 
-        parts[j]  = regs
-        plen[j]   = Int[length(x) for x in regs]
-        regidx[j] = Int[
+        parts[feat]  = regs
+        # plen[feat]   = Int[length(x) for x in regs]
+        regidx[feat] = Int[
             (k = findfirst(==(v), thr); isnothing(k) ? n + 1 : k)
-            for v in ctx.thrs_with_p[j]
+            for v in thrs_with_boundary[feat]
         ]
     end
 
-    return RegionCache(parts, regidx, plen)
+    return RegionCache(parts, regidx)
 end
 
 # function _prepare_sequential_context(

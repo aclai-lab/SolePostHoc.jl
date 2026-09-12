@@ -41,6 +41,8 @@ include("dataset_utils.jl")
 include("config.jl")
 include("ensemble.jl")
 include("thresholds.jl")
+include("extract.jl")
+include("atoms.jl")
 
 include("super_minimizer.jl")
 include("lumen_shannon.jl")

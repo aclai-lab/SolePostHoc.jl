@@ -16,18 +16,45 @@
 #     to cover the region **above the largest threshold**
 #   (i.e. values larger than every condition).
 function _thrs_with_boundary(
+    thresholds::Vector{T},
+    family::UInt8
+) where {T<:AbstractFloat}
+    nthrs = length(thresholds)
+    thrs_with_boundary = Vector{T}(undef, nthrs + 1)
+    thrs_with_boundary[1:nthrs] .= thresholds
+    # copyto!(thrs_with_boundary, thresholds)
+
+    # 0x01 (descending) → boundary point is BELOW the minimum threshold
+    #                     prevfloat(last) because last is the smallest value
+    # 0x02 (ascending)  → boundary point is ABOVE the maximum threshold
+    #                     nextfloat(last) because last is the largest value
+    thrs_with_boundary[end] = family === 0x01 ?
+                  prevfloat(last(thresholds)) :
+                  nextfloat(last(thresholds))
+
+    return thrs_with_boundary
+end
+
+@inline _thrs_with_boundary(
+    thresholds::Vector{Vector{T}},
+    op_families::Vector{UInt8}
+) where {T<:AbstractFloat} = _thrs_with_boundary.(thresholds, op_families)
+
+# ---------------------------------------------------------------------------- #
+#                         prepare sequential context                           #
+# ---------------------------------------------------------------------------- #
+function _prepare_sequential_context(
     config::LumenConfig{R,T},
     ensemble::LumenEnsemble{R,T},
-    featurenames::Vector{Symbol},
+    nfeats::R,
     classnames::Vector{String},
     class_idxs::Vector{R}
 ) where {R<:Unsigned,T<:AbstractFloat}
     atoms = get_atoms(ensemble)
 
     depth = config.depth
-    depth < 1.0 && (atms = _take_first_percentage(atoms, depth)) # TODO check it!
+    depth < 1.0 && (atoms = _take_first_percentage(atoms, depth)) # TODO check it!
 
-    nfeats = R(length(featurenames))
     thresholds = get_thresholds(atoms, nfeats)
     op_families = zeros(UInt8, nfeats)
 
@@ -40,30 +67,7 @@ function _thrs_with_boundary(
             "a single op family is required."))
     end
 
-    return _thrs_with_boundary(thresholds, op_families)
+    thrs_with_boundary = _thrs_with_boundary(thresholds, op_families)
+
+    return thresholds, thrs_with_boundary, op_families
 end
-
-function _thrs_with_boundary(
-    thresholds::Vector{T},
-    family::UInt8
-) where {T<:AbstractFloat}
-    nthrs = length(thresholds)
-    result = Vector{T}(undef, nthrs + 1)
-    result[1:nthrs] .= thresholds
-    # copyto!(result, thresholds)
-
-    # 0x01 (descending) → boundary point is BELOW the minimum threshold
-    #                     prevfloat(last) because last is the smallest value
-    # 0x02 (ascending)  → boundary point is ABOVE the maximum threshold
-    #                     nextfloat(last) because last is the largest value
-    result[end] = family === 0x01 ?
-                  prevfloat(last(thresholds)) :
-                  nextfloat(last(thresholds))
-
-    return result
-end
-
-@inline _thrs_with_boundary(
-    thresholds::Vector{Vector{T}},
-    op_families::Vector{UInt8}
-) where {T<:AbstractFloat} = _thrs_with_boundary.(thresholds, op_families)
