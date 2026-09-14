@@ -11,11 +11,10 @@ function gather_atoms!(
         len += length(nodes[j][idxs[j]])
     end
     resize!(out, len)
-    q = 1
+    q = 0
     @inbounds for j in eachindex(idxs)
         src = nodes[j][idxs[j]]
-        copyto!(out, q, src, 1, length(src))
-        q += length(src)
+        copyto!(out, q+=1, src, 1, length(src))
     end
     return out
 end
