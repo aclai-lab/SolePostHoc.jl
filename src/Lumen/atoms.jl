@@ -41,26 +41,24 @@ lookup exactly (including its duplicate-threshold behaviour and its
 previous implementation.
 """
 function AtomCache(
-    thresholds::Vector{Vector{T}},
-    thrs_with_boundary::Vector{Vector{T}},
-    op_families::Vector{UInt8},
-    nfeats::R
+    thrs::ThresholdSpace{R,T},
 ) where {R<:Unsigned,T<:AbstractFloat}
+    nfeats = length(thrs.feat_idxs)
     nodes  = Vector{Vector{Vector{LumenAtom}}}(undef, nfeats)
     regidx = Vector{Vector{R}}(undef, nfeats)
 
-    @inbounds for feat in one(R):nfeats
-        thr = thresholds[feat]
+    @inbounds for f in thrs.feat_idxs
+        thr = thrs.thresholds[f]
         n = length(thr)
         regs = Vector{Vector{LumenAtom}}(undef, n + 1)
 
         if n == 0
             regs[1] = LumenAtom[]
-        elseif op_families[feat] === evalop(<)
+        elseif thrs.op_families[f] === evalop(<)
             # descending thresholds: idx0 = 1:r-1 -> `< thr[r-1]`
             #                        idx1 = r:n   -> `≥ thr[r]`
-            lt = [_mknode(feat, evalop(<), thr[k]) for k in 1:n]
-            ge = [_mknode(feat, evalop(≥), thr[k]) for k in 1:n]
+            lt = [_mknode(f, evalop(<), thr[k]) for k in 1:n]
+            ge = [_mknode(f, evalop(≥), thr[k]) for k in 1:n]
             for r in 1:(n+1)
                 a = LumenAtom[]
                 r > 1 && push!(a, lt[r-1])
@@ -70,8 +68,8 @@ function AtomCache(
         else
             # ascending thresholds: minimum(idx0) ≡ 1, maximum(idx1) ≡ n,
             # so both atoms are region-independent.
-            le = _mknode(feat, evalop(≤), thr[1])
-            gt = _mknode(feat, evalop(>), thr[n])
+            le = _mknode(f, evalop(≤), thr[1])
+            gt = _mknode(f, evalop(>), thr[n])
             for r in 1:(n+1)
                 a = LumenAtom[]
                 r > 1 && push!(a, le)
@@ -80,10 +78,10 @@ function AtomCache(
             end
         end
 
-        nodes[feat] = regs
-        regidx[feat] = R[
+        nodes[f] = regs
+        regidx[f] = R[
             (k = findfirst(==(v), thr); isnothing(k) ? n + 1 : k)
-            for v in thrs_with_boundary[feat]
+            for v in vcat(thrs.thresholds[f], thrs.boundaries[f])
         ]
     end
 

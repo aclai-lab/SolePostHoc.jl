@@ -1,8 +1,8 @@
 # ---------------------------------------------------------------------------- #
-#                                 Lumen config                                 #
+#                            Lumen Shannon struct                              #
 # ---------------------------------------------------------------------------- #
 """
-    LumenConfig <: AbstractConfig
+    LumenShannonConfig <: AbstractConfig
 
 Configuration object for the LUMEN rule-extraction algorithm.
 
@@ -48,10 +48,10 @@ The constructor throws `ArgumentError` when:
 
 ```julia
 # Default configuration
-cfg = LumenConfig()
+cfg = LumenShannonConfig()
 
 # Custom scheme and coverage parameters
-cfg = LumenConfig(
+cfg = LumenShannonConfig(
     minimization_scheme = :mitespresso,
     depth               = 0.7,
     vertical            = 0.9,
@@ -59,7 +59,7 @@ cfg = LumenConfig(
 )
 
 # Pass extra kwargs to the minimizer and use a custom alphabet filter
-cfg = LumenConfig(
+cfg = LumenShannonConfig(
     minimization_scheme  = :abc,
     minimization_kwargs  = (timeout = 30,),
     filt_alphabet        = alph -> my_filter(alph),
@@ -68,32 +68,32 @@ cfg = LumenConfig(
 
 See also: [`lumen`](@ref), [`LumenResult`](@ref), [`AbstractConfig`](@ref)
 """
-struct LumenConfig{R<:Unsigned,T<:AbstractFloat,MS} <: AbstractConfig
-    minimization_scheme::Type{MS}
-    binary::Union{Nothing,String}
+struct LumenShannonConfig{R<:Unsigned,T<:AbstractFloat,MS} <: AbstractConfig
+    # minimization_scheme::Type{MS}
+    # binary::Union{Nothing,String} # TODO deprecate as soon as MitEspresso_jll will be developed
     depth::T
-    vertical::T
-    horizontal::T
-    minimization_kwargs::NamedTuple
-    filt_alphabet::Base.Callable
-    apply_function::Base.Callable
-    importance::Vector{T}
-    check_opt::Bool
-    check_alphabet::Bool
+    # vertical::T
+    # horizontal::T
+    # minimization_kwargs::NamedTuple
+    # filt_alphabet::Base.Callable
+    # apply_function::Base.Callable
+    # importance::Vector{T}
+    # check_opt::Bool
+    # check_alphabet::Bool
     M::R
     max_apply_batch::R
 
-    function LumenConfig(;
+    function LumenShannonConfig(;
         minimization_scheme::Type{MS}=Abc,
         depth::Float64=1.0,
-        vertical::Float64=1.0,
-        horizontal::Float64=1.0,
-        minimization_kwargs::NamedTuple=(;),
-        filt_alphabet::Base.Callable=identity,
-        apply_function::Base.Callable=SM.apply,
-        importance::Vector=Float64[],
-        check_opt::Bool=false,
-        check_alphabet::Bool=false,
+        # vertical::Float64=1.0,
+        # horizontal::Float64=1.0,
+        # minimization_kwargs::NamedTuple=(;),
+        # filt_alphabet::Base.Callable=identity,
+        # apply_function::Base.Callable=SM.apply,
+        # importance::Vector=Float64[],
+        # check_opt::Bool=false,
+        # check_alphabet::Bool=false,
         M::Int=20_000,
         max_apply_batch::Int=min(M, 4096),
         internal_resolution::Type=UInt32,
@@ -102,88 +102,90 @@ struct LumenConfig{R<:Unsigned,T<:AbstractFloat,MS} <: AbstractConfig
         # validate coverage parameters - must be positive and ≤ 1.0
         # these parameters control the proportion of instances
         # that must be covered by rules
-        if vertical ≤ 0.0 || vertical > 1.0 ||
-           horizontal ≤ 0.0 || horizontal > 1.0 ||
-           depth ≤ 0.0 || depth > 1.0
-            throw(ArgumentError(
-                "vertical, depth and horizontal parameters must be in range " *
-                "(0.0, 1.0]. Got vertical=$(vertical), depth=$(depth), " *
-                "horizontal=$(horizontal). These parameters control " *
-                "rule coverage and must be meaningful proportions.",
-            ),)
-        end
+        # if vertical ≤ 0.0 || vertical > 1.0 ||
+        #    horizontal ≤ 0.0 || horizontal > 1.0 ||
+        #    depth ≤ 0.0 || depth > 1.0
+        #     throw(ArgumentError(
+        #         "vertical, depth and horizontal parameters must be in range " *
+        #         "(0.0, 1.0]. Got vertical=$(vertical), depth=$(depth), " *
+        #         "horizontal=$(horizontal). These parameters control " *
+        #         "rule coverage and must be meaningful proportions.",
+        #     ),)
+        # end
 
         # validate minimization scheme
-        valid_schemes = Dict(
-            MitEspresso => setup_espresso(),
-            # :boom => setup_boom(),
-            Abc => setup_abc(),
-            # :abc_balanced => setup_abc(),
-            # :abc_thorough => setup_abc(),
-            # :quine => setup_quine(),
-            # :quine_naive => setup_quine()
-        )
+        # valid_schemes = Dict(
+        #     # MitEspresso => setup_espresso(),
+        #     # :boom => setup_boom(),
+        #     Abc => setup_abc(),
+        #     # :abc_balanced => setup_abc(),
+        #     # :abc_thorough => setup_abc(),
+        #     # :quine => setup_quine(),
+        #     # :quine_naive => setup_quine()
+        # )
 
-        M >= 1 || throw(ArgumentError("M must be positive, got $M"))
+        M ≥ 1 || throw(ArgumentError("M must be positive, got $M"))
 
-        binary = valid_schemes[minimization_scheme]
+        # binary = valid_schemes[minimization_scheme]
 
         new{internal_resolution,float_resolution,minimization_scheme}(
-            minimization_scheme,
-            binary,
+            # minimization_scheme,
+            # binary,
             depth,
-            vertical,
-            horizontal,
-            minimization_kwargs,
-            filt_alphabet,
-            apply_function,
-            importance,
-            check_opt,
-            check_alphabet,
+            # vertical,
+            # horizontal,
+            # minimization_kwargs,
+            # filt_alphabet,
+            # apply_function,
+            # importance,
+            # check_opt,
+            # check_alphabet,
             M,
             max_apply_batch
         )
     end
 end
 
-function get_universe_conditions(model)
-    thresholds_per_feature = Dict{Any,Set{Float64}}()
+# TODO make a Base.show
 
-    function traverse(node)
-        if node isa Branch
-            # Estrai la condizione dal nodo (di solito un Atom)
-            cond = node.condition
-            if cond isa SL.Atom
-                scalar_cond = SL.value(cond)
-                feat = SD.feature(scalar_cond)
-                # Estrai la soglia (usa SD.threshold se esiste, altrimenti il campo .threshold)
-                t = SD.threshold(scalar_cond)
-                push!(get!(thresholds_per_feature, feat, Set{Float64}()), t)
-            end
-            # Ricorri sui figli
-            traverse(node.then_branch)   # oppure node.true_branch
-            traverse(node.else_branch)   # oppure node.false_branch
-        elseif node isa Leaf
-            # Foglia: nessuna condizione
-        elseif node isa DecisionEnsemble
-            for tree in node.trees
-                traverse(tree)
-            end
-        elseif node isa AbstractVector
-            for t in node
-                traverse(t)
-            end
-        end
-    end
+# function get_universe_conditions(model)
+#     thresholds_per_feature = Dict{Any,Set{Float64}}()
 
-    traverse(model)
+#     function traverse(node)
+#         if node isa Branch
+#             # Estrai la condizione dal nodo (di solito un Atom)
+#             cond = node.condition
+#             if cond isa SL.Atom
+#                 scalar_cond = SL.value(cond)
+#                 feat = SD.feature(scalar_cond)
+#                 # Estrai la soglia (usa SD.threshold se esiste, altrimenti il campo .threshold)
+#                 t = SD.threshold(scalar_cond)
+#                 push!(get!(thresholds_per_feature, feat, Set{Float64}()), t)
+#             end
+#             # Ricorri sui figli
+#             traverse(node.then_branch)   # oppure node.true_branch
+#             traverse(node.else_branch)   # oppure node.false_branch
+#         elseif node isa Leaf
+#             # Foglia: nessuna condizione
+#         elseif node isa DecisionEnsemble
+#             for tree in node.trees
+#                 traverse(tree)
+#             end
+#         elseif node isa AbstractVector
+#             for t in node
+#                 traverse(t)
+#             end
+#         end
+#     end
 
-    conds = SD.ScalarCondition[]
-    for (feat, thresholds) in thresholds_per_feature
-        for t in sort!(collect(thresholds))
-            push!(conds, SD.ScalarCondition(feat, (>=), t))
-            push!(conds, SD.ScalarCondition(feat, (<), t))
-        end
-    end
-    return conds
-end
+#     traverse(model)
+
+#     conds = SD.ScalarCondition[]
+#     for (feat, thresholds) in thresholds_per_feature
+#         for t in sort!(collect(thresholds))
+#             push!(conds, SD.ScalarCondition(feat, (>=), t))
+#             push!(conds, SD.ScalarCondition(feat, (<), t))
+#         end
+#     end
+#     return conds
+# end

@@ -37,7 +37,7 @@ struct LumenEnsemble{R<:Unsigned,T<:AbstractFloat}
 end
 
 function LumenEnsemble(
-    ::LumenConfig{R,T},
+    ::LumenShannonConfig{R,T},
     model::DecisionEnsemble{U,SM.Branch{S}}
 ) where {R<:Unsigned,T<:AbstractFloat,U,S<:CategoricalValue}
     nodes = LumenNode{R,T}[]
@@ -82,16 +82,19 @@ Base.iterate(e::LumenEnsemble, s...) = iterate(e.nodes, s...)
 Base.eltype(::LumenEnsemble{R,T}) where {R,T} = LumenNode{R,T}
 
 @inline get_atoms(e::LumenEnsemble) = unique!(filter(!isleaf, e.nodes))
+
 function get_thresholds(
     atoms::Vector{LumenNode{R,T}},
-    nfeats::R
+    nfeats::Integer
 ) where {R<:Unsigned,T<:AbstractFloat}
     thresholds = [T[] for _ in 1:nfeats]
     @inbounds for a in atoms
         push!(thresholds[a.feat], a.thr)
     end
+    foreach(v -> sort!(v; rev=true), thresholds)
     return thresholds
 end
+
 @inline get_thresholds(atoms::Vector{LumenNode{R,T}}) where {R,T} =
     [a.thr for a in atoms]
 @inline get_op(atoms::Vector{LumenNode{R,T}}) where {R,T} =
@@ -105,7 +108,7 @@ end
 function apply(
     f::LumenEnsemble{R,T},
     d::SubArray{T},
-    nclasses::R
+    nclasses::Integer
 ) where {R<:Unsigned,T<:AbstractFloat}
     n = size(d, 1)
     preds = Vector{R}(undef, n)
@@ -113,6 +116,7 @@ function apply(
 
     @inbounds for i in 1:n
         fill!(counts, zero(R))
+
         for r in f.roots
             node = f.nodes[r]
             while !isleaf(node)
@@ -122,7 +126,17 @@ function apply(
             end
             counts[node.leaf] += one(R)
         end
-        preds[i] = argmax(counts)
+
+        best = 1
+        tie = false
+        @inbounds for j in 2:nclasses
+            if counts[j] > counts[best]
+                best, tie = j, false
+            elseif counts[j] == counts[best]
+                tie = true
+            end
+        end
+        preds[i] = best
     end
 
     return preds

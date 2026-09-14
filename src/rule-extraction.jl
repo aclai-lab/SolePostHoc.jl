@@ -87,7 +87,7 @@ export LumenRuleExtractor
 using SoleModels: RuleExtractor
 import SoleModels: isexact, extractrules
 
-include("Lumen/main.jl")
+include("Lumen/Lumen.jl")
 @reexport using .Lumen
 
 """$(_get_rule_extractor_docstring("LumenRuleExtractor", Lumen))"""
