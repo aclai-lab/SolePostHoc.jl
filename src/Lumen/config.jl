@@ -68,13 +68,13 @@ cfg = LumenShannonConfig(
 
 See also: [`lumen`](@ref), [`LumenResult`](@ref), [`AbstractConfig`](@ref)
 """
-struct LumenShannonConfig{R<:Unsigned,T<:AbstractFloat,MS} <: AbstractConfig
+struct LumenShannonConfig{R<:Unsigned,T<:AbstractFloat,MS,S} <: AbstractConfig
     # minimization_scheme::Type{MS}
     # binary::Union{Nothing,String} # TODO deprecate as soon as MitEspresso_jll will be developed
     depth::T
     # vertical::T
     # horizontal::T
-    # minimization_kwargs::NamedTuple
+    minimization_setup::Type{<:AbstractMinimizeSetup}
     # filt_alphabet::Base.Callable
     # apply_function::Base.Callable
     # importance::Vector{T}
@@ -88,7 +88,7 @@ struct LumenShannonConfig{R<:Unsigned,T<:AbstractFloat,MS} <: AbstractConfig
         depth::Float64=1.0,
         # vertical::Float64=1.0,
         # horizontal::Float64=1.0,
-        # minimization_kwargs::NamedTuple=(;),
+        minimization_setup::Type{S}=Fast,
         # filt_alphabet::Base.Callable=identity,
         # apply_function::Base.Callable=SM.apply,
         # importance::Vector=Float64[],
@@ -98,7 +98,7 @@ struct LumenShannonConfig{R<:Unsigned,T<:AbstractFloat,MS} <: AbstractConfig
         max_apply_batch::Int=min(M, 4096),
         internal_resolution::Type=UInt32,
         float_resolution::Type=Float32
-    ) where MS<:AbstractMinimization
+    ) where {MS<:AbstractMinimization,S<:AbstractMinimizeSetup}
         # validate coverage parameters - must be positive and ≤ 1.0
         # these parameters control the proportion of instances
         # that must be covered by rules
@@ -128,13 +128,18 @@ struct LumenShannonConfig{R<:Unsigned,T<:AbstractFloat,MS} <: AbstractConfig
 
         # binary = valid_schemes[minimization_scheme]
 
-        new{internal_resolution,float_resolution,minimization_scheme}(
+        new{
+            internal_resolution,
+            float_resolution,
+            minimization_scheme,
+            minimization_setup
+        }(
             # minimization_scheme,
             # binary,
             depth,
             # vertical,
             # horizontal,
-            # minimization_kwargs,
+            minimization_setup,
             # filt_alphabet,
             # apply_function,
             # importance,

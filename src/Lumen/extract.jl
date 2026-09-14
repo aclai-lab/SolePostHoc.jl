@@ -23,13 +23,13 @@ end
 #                        leaf extractor (Lumen legacy)                         #
 # ---------------------------------------------------------------------------- #
 function _leaf_extract(
-    config::LumenShannonConfig{R,T},
+    config::LumenShannonConfig{R,T,MS},
     thrs::ThresholdSpace{R,T},
     cache::AtomCache{R,T},
     ensemble::LumenEnsemble{R,T},
     lo::Vector{I},
     hi::Vector{I},
-) where {R<:Unsigned,T<:AbstractFloat,I}
+) where {R<:Unsigned,T<:AbstractFloat,MS,I}
     nfeats = length(thrs.feat_idxs)
     nclasses = length(thrs.class_idxs)
     vals = [vcat(thrs.thresholds[j], thrs.boundaries[j]) for j in 1:nfeats]
@@ -86,20 +86,26 @@ function _leaf_extract(
         i0 += this_chunk
     end
 
-    # terms = Vector{Vector{TERM}}(undef, nclasses)
-    # # classes are independent; `run_minimization` shells out to an external
-    # # binary, so this is both thread-safe and mostly I/O-bound.
+    return raw, config
+
+    terms = Vector{Vector{LumenAtom}}(undef, nclasses)
+    # classes are independent; `run_minimization` shells out to an external
+    # binary, so this is both thread-safe and mostly I/O-bound.
     # Threads.@threads for c in 1:nclasses
     #     rc = raw[c]
     #     terms[c] = if isempty(rc)
-    #         TERM[]
+    #         LumenAtom[]
     #     elseif length(rc) == 1
     #         # single cube: already minimal, skip the subprocess round-trip
-    #         TERM[SL.LeftmostConjunctiveForm(rc[1])]
+    #         LumenAtom[SL.LeftmostConjunctiveForm(rc[1])]
     #     else
     #         run_minimization(config.minimization_scheme, config, rc)
     #     end
     # end
+
+    # develop
+    rc = raw[1]
+    run_minimization(MS, config, rc)
 
     # return terms
 end

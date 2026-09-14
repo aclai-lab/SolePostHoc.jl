@@ -21,7 +21,7 @@ model = modelc.sole[1]
 # ---------------------------------------------------------------------------- #
 #                                  config                                      #
 # ---------------------------------------------------------------------------- #
-config = LumenShannonConfig(; minimization_scheme=Abc, M=5000, float_resolution=Float64)
+config = LumenShannonConfig(; minimization_scheme=Abc, M=5000)
 
 R=UInt32; T=Float32
 
@@ -34,3 +34,9 @@ lumen = Lumen.lumen_shannon(config, model)
 # 43.760 μs (853 allocations: 56.88 KiB)
 # 1.850 ms (1006 allocations: 548.60 KiB)
 
+# ---------------------------------------------------------------------------- #
+#                               minimization                                   #
+# ---------------------------------------------------------------------------- #
+raw, config = Lumen.lumen_shannon(config, model)
+
+Lumen.run_minimization(Abc, config, raw[1])

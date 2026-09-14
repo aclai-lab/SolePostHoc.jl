@@ -1602,22 +1602,22 @@ function run_minimization(
     end
 end
 
-function run_minimization(
-    ::Type{Abc},
-    extractor::LumenConfig{U,T},
-    atoms::Vector{Vector{SL.Atom}}
-)::Vector{TERM} where {U,T<:AbstractFloat}
-    ABC_jll.abc() do binary
-        minimized_formula = SD.abc_minimize(
-            atoms,
-            binary;
-            fast=3,
-            depth=extractor.depth,
-            float_type=T
-        )
-        return _as_terms(refine_dnf(minimized_formula))
-    end
-end
+# function run_minimization(
+#     ::Type{Abc},
+#     extractor::LumenConfig{U,T},
+#     atoms::Vector{Vector{SL.Atom}}
+# )::Vector{TERM} where {U,T<:AbstractFloat}
+#     ABC_jll.abc() do binary
+#         minimized_formula = SD.abc_minimize(
+#             atoms,
+#             binary;
+#             fast=3,
+#             depth=extractor.depth,
+#             float_type=T
+#         )
+#         return _as_terms(refine_dnf(minimized_formula))
+#     end
+# end
 
 """
     run_minimization(

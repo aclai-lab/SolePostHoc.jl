@@ -36,6 +36,12 @@ struct Abc <: AbstractMinimization end
 struct MitEspresso <: AbstractMinimization end
 export Abc, MitEspresso
 
+abstract type AbstractMinimizeSetup end
+struct Fast <: AbstractMinimizeSetup end
+struct Balanced <: AbstractMinimizeSetup end
+struct Sop <: AbstractMinimizeSetup end
+export Fast, Balanced, Sop
+
 # ---------------------------------------------------------------------------- #
 #                                   include                                    #
 # ---------------------------------------------------------------------------- #
@@ -45,12 +51,8 @@ include("ensemble.jl")
 include("thresholds.jl")
 include("atoms.jl")
 include("extract.jl")
+include("minimize.jl")
 
-# include("atoms.jl")
-# export ThresholdSpace, _extract_atoms_bfs_order, extract_atoms_bfs_order
-# include("apply.jl")
-# include("sequential_minimizer.jl")
-# include("super_minimizer.jl")
 include("lumen_shannon.jl")
 export lumen_shannon
 
