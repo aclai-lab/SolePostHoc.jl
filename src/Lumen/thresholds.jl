@@ -53,7 +53,6 @@ function ThresholdSpace(
     class_idxs::Vector{R}
 ) where {R<:Unsigned,T<:AbstractFloat}
     nfeats = length(feat_idxs)
-
     atoms = get_atoms(ensemble)
 
     depth = config.depth

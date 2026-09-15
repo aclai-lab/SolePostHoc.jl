@@ -18,12 +18,20 @@ dsc = setup_dataset(
 modelc = solexplorer(dsc)
 model = modelc.sole[1]
 
+# LumenEnsemble
+
 # ---------------------------------------------------------------------------- #
 #                                  config                                      #
 # ---------------------------------------------------------------------------- #
 config = LumenShannonConfig(; minimization_scheme=Abc, M=5000)
 
 R=UInt32; T=Float32
+
+# ---------------------------------------------------------------------------- #
+#                              lumen ensemble                                  #
+# ---------------------------------------------------------------------------- #
+@btime LumenEnsemble(config, model);
+# 34.355 μs (395 allocations: 28.22 KiB)
 
 lumen = Lumen.lumen_shannon(config, model)
 
@@ -37,8 +45,11 @@ lumen = Lumen.lumen_shannon(config, model)
 # 1.955 ms (860 allocations: 470.33 KiB)
 
 # ---------------------------------------------------------------------------- #
-#                               minimization                                   #
+#                                    pla                                       #
 # ---------------------------------------------------------------------------- #
-thrs, cache = Lumen.lumen_shannon(config, model)
+cache, thrs, raw = Lumen.lumen_shannon(config, model)
 
-Lumen.run_minimization(Abc, config, raw[1])
+Lumen.write_pla(cache.nodes, thrs.feat_idxs, Univariate)
+
+length.(cache.nodes)
+

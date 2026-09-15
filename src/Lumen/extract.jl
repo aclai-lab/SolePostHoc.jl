@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------- #
 #                           collect atoms for rule                             #
 # ---------------------------------------------------------------------------- #
-function gather_atoms!(
+function gather_atoms(
     out::Vector{LumenAtom},
     nodes::Vector{Vector{LumenAtom}},
     idxs::AbstractVector{R},
@@ -86,8 +86,7 @@ function _leaf_extract(
         # pass 2: fill by cursor
         @inbounds for k in 1:this_chunk
             c = preds[k]
-            gather_atoms!(scratch, cache.nodes, @view idxm[k, :])
-            raw[c][cursors[c] += 1] = scratch
+            raw[c][cursors[c] += 1] = gather_atoms(scratch, cache.nodes, @view idxm[k, :])
         end
 
         i0 += this_chunk

@@ -191,7 +191,9 @@ function lumen_shannon(
     cache = AtomCache(thrs)
     # # per_class_terms = _extract(config, thrs_with_boundary, ensemble, lo, hi)
 
-    _leaf_extract(config, thrs, cache, ensemble, lo, hi)
+    raw = _leaf_extract(config, thrs, cache, ensemble, lo, hi)
+
+    return cache, thrs, raw
 
     # return _finalize_decision_set(ctx, per_class_terms, config)
 end

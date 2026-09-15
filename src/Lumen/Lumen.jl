@@ -50,12 +50,14 @@ export Univariate, Multivariate
 # ---------------------------------------------------------------------------- #
 #                                   include                                    #
 # ---------------------------------------------------------------------------- #
-include("config.jl")
 export LumenShannonConfig
+include("config.jl")
+export LumenEnsemble
 include("ensemble.jl")
 include("thresholds.jl")
 include("atoms.jl")
 include("extract.jl")
+include("pla.jl")
 include("minimize.jl")
 
 include("lumen_shannon.jl")

@@ -38,8 +38,16 @@ end
 
 function LumenEnsemble(
     ::LumenShannonConfig{R,T},
-    model::DecisionEnsemble{U,SM.Branch{S}}
-) where {R<:Unsigned,T<:AbstractFloat,U,S<:CategoricalValue}
+    model::AbstractModel
+) where {R<:Unsigned,T<:AbstractFloat}
+    LumenEnsemble(model, R, T)
+end
+
+function LumenEnsemble( 
+    model::DecisionEnsemble{U,SM.Branch{S}},
+    R::Type{<:Unsigned}=UInt32,
+    T::Type{<:AbstractFloat}=Float32
+) where {U,S<:CategoricalValue}
     nodes = LumenNode{R,T}[]
     roots = R[]
 
@@ -101,6 +109,25 @@ end
     [a.op for a in atoms]
 @inline featidxs(atoms::Vector{LumenNode{R,T}}, feat::R) where {R,T} =
     findall(a -> a.feat == feat, atoms)
+
+function Base.show(io::IO, e::LumenEnsemble{R,T}) where {R,T}
+    nleaves = count(isleaf, e.nodes)
+    print(io, "LumenEnsemble{", R, ",", T, "}(",
+        length(e.roots), " trees, ",
+        length(e.nodes), " nodes, ",
+        nleaves, " leaves)")
+end
+
+function Base.show(io::IO, ::MIME"text/plain", e::LumenEnsemble{R,T}) where {R,T}
+    show(io, e)
+    isempty(e.nodes) && return
+    nsplits = length(e.nodes) - count(isleaf, e.nodes)
+    feats = unique(n.feat for n in e.nodes if !isleaf(n))
+    println(io)
+    println(io, "  splits:   ", nsplits)
+    println(io, "  features: ", length(feats))
+    print(io,   "  classes:  ", length(unique(n.leaf for n in e.nodes if isleaf(n))))
+end
 
 # ---------------------------------------------------------------------------- #
 #                                   apply                                      #
