@@ -1,24 +1,8 @@
 # ---------------------------------------------------------------------------- #
-#                                    types                                     #
+#                            Lumen Shannon struct                              #
 # ---------------------------------------------------------------------------- #
 """
-    AbstractConfig
-
-Abstract base type for all LUMEN configuration structs.
-
-Concrete subtypes encapsulate the parameters needed to control a specific
-algorithm variant. Using a common supertype allows generic code to accept
-any configuration object without being tied to a particular implementation.
-
-See also: [`LumenConfig`](@ref)
-"""
-abstract type AbstractConfig end
-
-# ---------------------------------------------------------------------------- #
-#                                 Lumen struct                                 #
-# ---------------------------------------------------------------------------- #
-"""
-    LumenConfig <: AbstractConfig
+    LumenShannonConfig <: AbstractConfig
 
 Configuration object for the LUMEN rule-extraction algorithm.
 
@@ -64,10 +48,10 @@ The constructor throws `ArgumentError` when:
 
 ```julia
 # Default configuration
-cfg = LumenConfig()
+cfg = LumenShannonConfig()
 
 # Custom scheme and coverage parameters
-cfg = LumenConfig(
+cfg = LumenShannonConfig(
     minimization_scheme = :mitespresso,
     depth               = 0.7,
     vertical            = 0.9,
@@ -75,7 +59,7 @@ cfg = LumenConfig(
 )
 
 # Pass extra kwargs to the minimizer and use a custom alphabet filter
-cfg = LumenConfig(
+cfg = LumenShannonConfig(
     minimization_scheme  = :abc,
     minimization_kwargs  = (timeout = 30,),
     filt_alphabet        = alph -> my_filter(alph),
@@ -84,173 +68,129 @@ cfg = LumenConfig(
 
 See also: [`lumen`](@ref), [`LumenResult`](@ref), [`AbstractConfig`](@ref)
 """
-struct LumenConfig <: AbstractConfig
-    minimization_scheme::Symbol
-    binary::Union{Nothing,String}
-    depth::Float64
-    vertical::Float64
-    horizontal::Float64
-    minimization_kwargs::NamedTuple
-    filt_alphabet::Base.Callable
-    apply_function::Base.Callable
-    importance::Vector
-    check_opt::Bool
-    check_alphabet::Bool
-    use_multithreads::Bool
-    float_type::Type
+struct LumenShannonConfig{R<:Unsigned,T<:AbstractFloat,MS,S} <: AbstractConfig
+    # minimization_scheme::Type{MS}
+    # binary::Union{Nothing,String} # TODO deprecate as soon as MitEspresso_jll will be developed
+    depth::T
+    # vertical::T
+    # horizontal::T
+    minimization_setup::Type{<:AbstractMinimizeSetup}
+    # filt_alphabet::Base.Callable
+    # apply_function::Base.Callable
+    # importance::Vector{T}
+    # check_opt::Bool
+    # check_alphabet::Bool
+    M::R
+    max_apply_batch::R
 
-    function LumenConfig(;
-        minimization_scheme::Symbol=:abc,
+    function LumenShannonConfig(;
+        minimization_scheme::Type{MS}=Abc,
         depth::Float64=1.0,
-        vertical::Float64=1.0,
-        horizontal::Float64=1.0,
-        minimization_kwargs::NamedTuple=(;),
-        filt_alphabet::Base.Callable=identity,
-        apply_function::Base.Callable=SM.apply,
-        importance::Vector=Float64[],
-        check_opt::Bool=false,
-        check_alphabet::Bool=false,
-        use_multithreads::Bool=true,
-        float_type::Type=Float64
-    )
+        # vertical::Float64=1.0,
+        # horizontal::Float64=1.0,
+        minimization_setup::Type{S}=Fast,
+        # filt_alphabet::Base.Callable=identity,
+        # apply_function::Base.Callable=SM.apply,
+        # importance::Vector=Float64[],
+        # check_opt::Bool=false,
+        # check_alphabet::Bool=false,
+        M::Int=20_000,
+        max_apply_batch::Int=min(M, 4096),
+        internal_resolution::Type=UInt32,
+        float_resolution::Type=Float32
+    ) where {MS<:AbstractMinimization,S<:AbstractMinimizeSetup}
         # validate coverage parameters - must be positive and ≤ 1.0
         # these parameters control the proportion of instances
         # that must be covered by rules
-        if vertical ≤ 0.0 || vertical > 1.0 ||
-           horizontal ≤ 0.0 || horizontal > 1.0 ||
-           depth ≤ 0.0 || depth > 1.0
-            throw(ArgumentError(
-                "vertical, depth and horizontal parameters must be in range " *
-                "(0.0, 1.0]. Got vertical=$(vertical), depth=$(depth), " *
-                "horizontal=$(horizontal). These parameters control " *
-                "rule coverage and must be meaningful proportions.",
-            ),)
-        end
+        # if vertical ≤ 0.0 || vertical > 1.0 ||
+        #    horizontal ≤ 0.0 || horizontal > 1.0 ||
+        #    depth ≤ 0.0 || depth > 1.0
+        #     throw(ArgumentError(
+        #         "vertical, depth and horizontal parameters must be in range " *
+        #         "(0.0, 1.0]. Got vertical=$(vertical), depth=$(depth), " *
+        #         "horizontal=$(horizontal). These parameters control " *
+        #         "rule coverage and must be meaningful proportions.",
+        #     ),)
+        # end
 
         # validate minimization scheme
-        valid_schemes = Dict(
-            :mitespresso => setup_espresso(),
-            :boom => setup_boom(),
-            :abc => setup_abc(),
-            :abc_balanced => setup_abc(),
-            :abc_thorough => setup_abc(),
-            :quine => setup_quine(),
-            :quine_naive => setup_quine()
-        )
+        # valid_schemes = Dict(
+        #     # MitEspresso => setup_espresso(),
+        #     # :boom => setup_boom(),
+        #     Abc => setup_abc(),
+        #     # :abc_balanced => setup_abc(),
+        #     # :abc_thorough => setup_abc(),
+        #     # :quine => setup_quine(),
+        #     # :quine_naive => setup_quine()
+        # )
 
-        if minimization_scheme ∉ keys(valid_schemes)
-            throw(ArgumentError(
-                "minimization_scheme must be one of: " *
-                "$(keys(valid_schemes) |> collect). " *
-                "Got: $(minimization_scheme)."
-            ))
-        end
+        M ≥ 1 || throw(ArgumentError("M must be positive, got $M"))
 
-        binary = valid_schemes[minimization_scheme]
+        # binary = valid_schemes[minimization_scheme]
 
-        new(
+        new{
+            internal_resolution,
+            float_resolution,
             minimization_scheme,
-            binary,
+            minimization_setup
+        }(
+            # minimization_scheme,
+            # binary,
             depth,
-            vertical,
-            horizontal,
-            minimization_kwargs,
-            filt_alphabet,
-            apply_function,
-            importance,
-            check_opt,
-            check_alphabet,
-            use_multithreads,
-            float_type
+            # vertical,
+            # horizontal,
+            minimization_setup,
+            # filt_alphabet,
+            # apply_function,
+            # importance,
+            # check_opt,
+            # check_alphabet,
+            M,
+            max_apply_batch
         )
     end
 end
 
-# ---------------------------------------------------------------------------- #
-#                                  methods                                     #
-# ---------------------------------------------------------------------------- #
-"""
-    get_minimization_scheme(r::LumenConfig) -> Symbol
+# TODO make a Base.show
 
-Return the DNF minimization algorithm identifier stored in `r`.
-"""
-@inline get_minimization_scheme(r::LumenConfig) = r.minimization_scheme
+# function get_universe_conditions(model)
+#     thresholds_per_feature = Dict{Any,Set{Float64}}()
 
-"""
-    get_binary(r::LumenConfig) -> String
+#     function traverse(node)
+#         if node isa Branch
+#             # Estrai la condizione dal nodo (di solito un Atom)
+#             cond = node.condition
+#             if cond isa SL.Atom
+#                 scalar_cond = SL.value(cond)
+#                 feat = SD.feature(scalar_cond)
+#                 # Estrai la soglia (usa SD.threshold se esiste, altrimenti il campo .threshold)
+#                 t = SD.threshold(scalar_cond)
+#                 push!(get!(thresholds_per_feature, feat, Set{Float64}()), t)
+#             end
+#             # Ricorri sui figli
+#             traverse(node.then_branch)   # oppure node.true_branch
+#             traverse(node.else_branch)   # oppure node.false_branch
+#         elseif node isa Leaf
+#             # Foglia: nessuna condizione
+#         elseif node isa DecisionEnsemble
+#             for tree in node.trees
+#                 traverse(tree)
+#             end
+#         elseif node isa AbstractVector
+#             for t in node
+#                 traverse(t)
+#             end
+#         end
+#     end
 
-Return the absolute path to the minimizer executable stored in `r`.
-"""
-@inline get_binary(r::LumenConfig) = r.binary
+#     traverse(model)
 
-"""
-    get_depth(r::LumenConfig) -> Float64
-
-Return the depth coverage parameter δ ∈ (0, 1] stored in `r`.
-"""
-@inline get_depth(r::LumenConfig) = r.depth
-
-"""
-    get_vertical(r::LumenConfig) -> Float64
-
-Return the instance-coverage parameter α ∈ (0, 1] stored in `r`.
-"""
-@inline get_vertical(r::LumenConfig) = r.vertical
-
-"""
-    get_horizontal(r::LumenConfig) -> Float64
-
-Return the feature-coverage parameter β ∈ (0, 1] stored in `r`.
-"""
-@inline get_horizontal(r::LumenConfig) = r.horizontal
-
-"""
-    get_minimization_kwargs(r::LumenConfig) -> NamedTuple
-
-Return the extra keyword arguments forwarded to the minimizer stored in `r`.
-"""
-@inline get_minimization_kwargs(r::LumenConfig) = r.minimization_kwargs
-
-"""
-    get_filt_alphabet(r::LumenConfig) -> Base.Callable
-
-Return the alphabet-filter callback stored in `r`.
-"""
-@inline get_filt_alphabet(r::LumenConfig) = r.filt_alphabet
-
-"""
-    get_apply_function(r::LumenConfig) -> Base.Callable
-
-Return the model-application function stored in `r`.
-"""
-@inline get_apply_function(r::LumenConfig) = r.apply_function
-
-"""
-    get_importance(r::LumenConfig) -> Vector
-
-Return the feature-importance weight vector stored in `r`.
-"""
-@inline get_importance(r::LumenConfig) = r.importance
-
-"""
-    get_check_opt(r::LumenConfig) -> Bool
-
-Return `true` if OTT-optimisation validation is enabled in `r`.
-"""
-@inline get_check_opt(r::LumenConfig) = r.check_opt
-
-"""
-    get_check_alphabet(r::LumenConfig) -> Bool
-
-Return `true` if alphabet-analysis diagnostics are enabled in `r`.
-"""
-@inline get_check_alphabet(r::LumenConfig) = r.check_alphabet
-
-@inline get_use_multithreads(r::LumenConfig) = r.use_multithreads
-
-"""
-    get_float_type(r::LumenConfig) -> Type
-
-Return the floating-point type stored in `r`.
-"""
-@inline get_float_type(r::LumenConfig) = r.float_type
+#     conds = SD.ScalarCondition[]
+#     for (feat, thresholds) in thresholds_per_feature
+#         for t in sort!(collect(thresholds))
+#             push!(conds, SD.ScalarCondition(feat, (>=), t))
+#             push!(conds, SD.ScalarCondition(feat, (<), t))
+#         end
+#     end
+#     return conds
+# end
