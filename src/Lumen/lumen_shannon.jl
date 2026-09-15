@@ -119,13 +119,14 @@
 
 # map categorical labels onto unsigned integer of type `R`
 # sort classlabels
-function assign(
+function _assign(
     ::Type{R},
-    y::Vector{S}
+    y::Vector{S},
+    sorted::Bool=false
 ) where {R<:Unsigned,S}
-    classlabels = sort!(unique(y))
-    dict = Dict{S,R}(v => i for (i, v) in enumerate(classlabels))
-    return classlabels, [dict[t] for t in y]
+    labels = sorted ? sort!(unique(y)) : unique(y)
+    dict = Dict{S,R}(v => i for (i, v) in enumerate(labels))
+    return labels, [dict[t] for t in y]
 end
 
 # ---------------------------------------------------------------------------- #
@@ -171,29 +172,26 @@ function lumen_shannon(
     classnames::Vector{String},
     class_idxs::Vector{R}
 ) where {R<:Unsigned,T<:AbstractFloat}
-    # nclasses = length(class_idxs)
-    # nfeats = length(feat_idxs)
-
     ensemble = LumenEnsemble(config, model)
 
-    thrs = ThresholdSpace(
-        config,
-        ensemble,
-        featurenames,
-        feat_idxs,
-        classnames,
-        class_idxs
-    )
+    # thrs = ThresholdSpace(
+    #     config,
+    #     ensemble,
+    #     featurenames,
+    #     feat_idxs,
+    #     classnames,
+    #     class_idxs
+    # )
 
-    hi = [length(t) + 1 for t in thrs.thresholds]
-    lo = ones(Int, length(hi))
+    # hi = [length(t) + 1 for t in thrs.thresholds]
+    # lo = ones(Int, length(hi))
 
-    cache = AtomCache(thrs)
-    # # per_class_terms = _extract(config, thrs_with_boundary, ensemble, lo, hi)
+    # cache = AtomCache(thrs)
+    # # # per_class_terms = _extract(config, thrs_with_boundary, ensemble, lo, hi)
 
-    raw = _leaf_extract(config, thrs, cache, ensemble, lo, hi)
+    # raw = _leaf_extract(config, thrs, cache, ensemble, lo, hi)
 
-    return cache, thrs, raw
+    # return cache, thrs, raw
 
     # return _finalize_decision_set(ctx, per_class_terms, config)
 end
@@ -203,9 +201,9 @@ function lumen_shannon(
     model::SM.AbstractModel,
 ) where {R<:Unsigned,T<:AbstractFloat}
     featurenames, feat_idxs =
-        assign(R, unique!(SM.info(model, :featurenames)))
+        _assign(R, unique!(SM.info(model, :featurenames)), false)
     classnames, class_idxs =
-        assign(R, unique!(SM.info(model, :supporting_labels)))
+        _assign(R, unique!(SM.info(model, :supporting_labels)), true)
 
     lumen_shannon(
         config,

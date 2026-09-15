@@ -42,7 +42,9 @@ lumen = Lumen.lumen_shannon(config, model)
 # 43.760 μs (853 allocations: 56.88 KiB)
 # 1.850 ms (1006 allocations: 548.60 KiB)
 # 1.929 ms (917 allocations: 469.75 KiB)
-# 1.955 ms (860 allocations: 470.33 KiB)
+# 1.955 ms (860 allocations: 470.33 KiB) # wrong results!
+
+# LumenEnsemble 33.713 μs (429 allocations: 31.09 KiB)
 
 # ---------------------------------------------------------------------------- #
 #                                    pla                                       #
