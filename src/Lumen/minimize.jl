@@ -235,10 +235,9 @@
 # ---------------------------------------------------------------------------- #
 function abc_minimize(
     atoms::Vector{Vector{LumenAtom}},
-    binary::String;
-    setup::UInt8=evalst(Fast),
-    allow_scalar_range_conditions::Bool=false,
-)
+    binary::String,
+    config::LumenShannonConfig{R,T}
+) where {R<:Unsigned,T<:AbstractFloat}
     # # convert formula to pla string format
     # pla_string, fnames = formula_to_pla(
     #     atoms;
@@ -291,15 +290,13 @@ function run_minimization(
     config::LumenShannonConfig{R,T},
     atoms::Vector{Vector{LumenAtom}}
 ) where {R<:Unsigned,T<:AbstractFloat}
-    # ABC_jll.abc() do binary
-    #     minimized_formula = abc_minimize(
-    #         atoms,
-    #         binary;
-    #         setup=3,
-    #         depth=config.depth,
-    #         float_type=T
-    #     )
+    ABC_jll.abc() do binary
+        minimized_formula = abc_minimize(
+            atoms,
+            binary,
+            config,
+        )
     #     return _as_terms(refine_dnf(minimized_formula))
-    # end
+    end
 end
 

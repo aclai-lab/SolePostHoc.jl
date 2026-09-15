@@ -3,18 +3,25 @@
 # ---------------------------------------------------------------------------- #
 function gather_atoms!(
     out::Vector{LumenAtom},
-    nodes::Vector{Vector{Vector{LumenAtom}}},
+    nodes::Vector{Vector{LumenAtom}},
     idxs::AbstractVector{R},
 ) where {R<:Unsigned}
     len = 0
     @inbounds for j in eachindex(idxs)
-        len += length(nodes[j][idxs[j]])
+        r = Int(idxs[j])
+        s = max(1, 2r - 2)
+        e = min(2r - 1, length(nodes[j]))
+        len += e - s + 1
     end
     resize!(out, len)
-    q = 0
+    q = 1
     @inbounds for j in eachindex(idxs)
-        src = nodes[j][idxs[j]]
-        copyto!(out, q+=1, src, 1, length(src))
+        r = Int(idxs[j])
+        s = max(1, 2r - 2)
+        e = min(2r - 1, length(nodes[j]))
+        n = e - s + 1
+        copyto!(out, q, nodes[j], s, n)
+        q += n
     end
     return out
 end
@@ -86,8 +93,6 @@ function _leaf_extract(
         i0 += this_chunk
     end
 
-    return raw, config
-
     terms = Vector{Vector{LumenAtom}}(undef, nclasses)
     # classes are independent; `run_minimization` shells out to an external
     # binary, so this is both thread-safe and mostly I/O-bound.
@@ -107,7 +112,7 @@ function _leaf_extract(
     rc = raw[1]
     run_minimization(MS, config, rc)
 
-    # return terms
+    return raw
 end
 
 # ---------------------------------------------------------------------------- #

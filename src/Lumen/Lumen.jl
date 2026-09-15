@@ -42,6 +42,11 @@ struct Balanced <: AbstractMinimizeSetup end
 struct Sop <: AbstractMinimizeSetup end
 export Fast, Balanced, Sop
 
+abstract type AbstractEncoding end
+struct Univariate <: AbstractEncoding end
+struct Multivariate <: AbstractEncoding end
+export Univariate, Multivariate
+
 # ---------------------------------------------------------------------------- #
 #                                   include                                    #
 # ---------------------------------------------------------------------------- #

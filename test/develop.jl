@@ -33,10 +33,12 @@ lumen = Lumen.lumen_shannon(config, model)
 # 41.962 μs (631 allocations: 47.50 KiB)
 # 43.760 μs (853 allocations: 56.88 KiB)
 # 1.850 ms (1006 allocations: 548.60 KiB)
+# 1.929 ms (917 allocations: 469.75 KiB)
+# 1.955 ms (860 allocations: 470.33 KiB)
 
 # ---------------------------------------------------------------------------- #
 #                               minimization                                   #
 # ---------------------------------------------------------------------------- #
-raw, config = Lumen.lumen_shannon(config, model)
+thrs, cache = Lumen.lumen_shannon(config, model)
 
 Lumen.run_minimization(Abc, config, raw[1])
