@@ -180,7 +180,7 @@ function lumen_shannon(
     # lo = ones(Int, length(hi))
 
     # cache = AtomCache(thrs)
-    # # # per_class_terms = _extract(config, thrs_with_boundary, ensemble, lo, hi)
+    # # # per_class_terms = _extract(config, thrs, ensemble, lo, hi)
 
     # raw = _leaf_extract(config, thrs, cache, ensemble, lo, hi)
 

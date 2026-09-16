@@ -42,10 +42,6 @@ isempty_atom(a::LumenAtom) = a.op == 0xff && iszero(a.feat)
 # ---------------------------------------------------------------------------- #
 #                                 Lumen Node                                   #
 # ---------------------------------------------------------------------------- #
-# struct LumenNode{R<:Unsigned,T<:AbstractFloat}
-    # feat::R
-    # thr::T
-    # op::UInt8
 struct LumenNode{R<:Unsigned}
     left::R
     right::R
@@ -97,9 +93,6 @@ function LumenEnsemble(
                 zero(R), zero(R),
                 R(levelcode(outcome(node)))
             )
-            # nodes[id] = LumenNode{R,T}(
-            #     zero(R), zero(T), zero(R), zero(R), zero(R),
-            #     R(levelcode(outcome(node))))
         else
             cond = SL.value(antecedent(node))
             left = fillensemble(posconsequent(node))
@@ -110,12 +103,6 @@ function LumenEnsemble(
                 evalop(SD.test_operator(cond)),                
             )
             nodes[id] = LumenNode{R}(left, right, zero(R))
-            # nodes[id] = LumenNode{R,T}(
-            #     R(SD.i_variable(SD.feature(cond))),
-            #     T(SD.threshold(cond)),
-            #     evalop(SD.test_operator(cond)),
-            #     left, right, zero(R)
-            # )
         end
 
         return id
@@ -138,18 +125,6 @@ Base.eltype(::LumenEnsemble{R,T}) where {R,T} = LumenAtom{R,T}
 @inline get_thresholds(e::LumenEnsemble, id::R) where R =
     get_thresholds(e.atoms, id)
 @inline get_atoms(e::LumenEnsemble) = unique!(filter(!isempty_atom, e.atoms))
-
-# function get_thresholds(
-#     atoms::Vector{LumenAtom{R,T}},
-#     nfeats::Integer
-# ) where {R<:Unsigned,T<:AbstractFloat}
-#     thresholds = [T[] for _ in 1:nfeats]
-#     @inbounds for a in atoms
-#         push!(thresholds[a.feat], a.thr)
-#     end
-#     foreach(v -> sort!(v; rev=true), thresholds)
-#     return thresholds
-# end
 
 function Base.show(io::IO, e::LumenEnsemble{R,T}) where {R,T}
     nleaves = count(isleaf, e.nodes)

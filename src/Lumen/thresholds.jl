@@ -19,7 +19,7 @@ struct ThresholdSpace{R<:Unsigned,T<:AbstractFloat}
     op_families::Vector{UInt8}
     feat_idxs::Vector{R}
     class_idxs::Vector{R}
-    # nlev::Vector{R} # TODO boh
+    nlev::Vector{R}
 end
 
 function ThresholdSpace(
@@ -48,9 +48,27 @@ function ThresholdSpace(
     thrs = reduce(
         vcat, ([t; b] for (t, b) in zip(per_feat, thrs_boundary)); init=T[])
     thrs_offset = R.(cumsum([1; length.(per_feat)]))
+    nlev = R.(length.(per_feat)) .+ one(R)
 
     return ThresholdSpace{R,T}(
-        thrs, thrs_offset, op_families, feat_idxs, class_idxs)
+        thrs, thrs_offset, op_families, feat_idxs, class_idxs, nlev)
+end
+
+function Base.show(io::IO, ts::ThresholdSpace{R,T}) where {R,T}
+    print(io, "ThresholdSpace{", R, ",", T, "}(",
+        length(ts.feat_idxs), " features, ",
+        length(ts.class_idxs), " classes)")
+end
+
+function Base.show(io::IO, ::MIME"text/plain", ts::ThresholdSpace{R,T}) where {R,T}
+    show(io, ts)
+    isempty(ts.feat_idxs) && return
+    println(io)
+    for (i, f) in enumerate(ts.feat_idxs)
+        println(io, "  V", Int(f), ": ",
+            Int(ts.thrs_offset[i+1] - ts.thrs_offset[i]), " thresholds")
+    end
+    print(io, "  classes: ", length(ts.class_idxs))
 end
 
 # ---------------------------------------------------------------------------- #
