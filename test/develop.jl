@@ -45,6 +45,8 @@ lumen = Lumen.lumen_shannon(config, model)
 # 1.955 ms (860 allocations: 470.33 KiB) # wrong results!
 
 # LumenEnsemble 33.713 μs (429 allocations: 31.09 KiB)
+# LumenEnsemble new Atom struct 39.413 μs (525 allocations: 34.08 KiB)
+# ThresholdSpace 47.400 μs (774 allocations: 49.70 KiB)
 
 # ---------------------------------------------------------------------------- #
 #                                    pla                                       #
@@ -54,4 +56,9 @@ cache, thrs, raw = Lumen.lumen_shannon(config, model)
 Lumen.write_pla(cache.nodes, thrs.feat_idxs, Univariate)
 
 length.(cache.nodes)
+
+Lumen.get_atoms(lumen)
+
+get_feats(a::LumenAtom{R,T}, id::R) where {R<:Unsigned,T<:AbstractFloat} =
+    get_thresholds(filter(a.op==id, a))
 

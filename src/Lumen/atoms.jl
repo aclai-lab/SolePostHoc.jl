@@ -1,17 +1,17 @@
 # ---------------------------------------------------------------------------- #
 #                                 Lumen Atom                                   #
 # ---------------------------------------------------------------------------- #
-struct LumenAtom{R<:Unsigned,T<:AbstractFloat}
-    feat::R
-    thr::T
-    op::UInt8
-end
+# struct LumenAtom{R<:Unsigned,T<:AbstractFloat}
+#     feat::R
+#     thr::T
+#     op::UInt8
+# end
 
-LumenAtom{R,T}() where {R<:Unsigned,T<:AbstractFloat} =
-    LumenAtom{R,T}(zero(R), T(NaN), 0xff)
-LumenAtom() = LumenAtom{UInt32,Float64}()
+# LumenAtom{R,T}() where {R<:Unsigned,T<:AbstractFloat} =
+#     LumenAtom{R,T}(zero(R), T(NaN), 0xff)
+# LumenAtom() = LumenAtom{UInt32,Float64}()
 
-isempty_atom(a::LumenAtom) = a.op == 0xff && iszero(a.feat)
+# isempty_atom(a::) = a.op == 0xff && iszero(a.feat)
 
 # ---------------------------------------------------------------------------- #
 #                              Lumen Atom Cache                                #

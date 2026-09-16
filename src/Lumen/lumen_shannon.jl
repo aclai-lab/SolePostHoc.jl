@@ -174,14 +174,7 @@ function lumen_shannon(
 ) where {R<:Unsigned,T<:AbstractFloat}
     ensemble = LumenEnsemble(config, model)
 
-    # thrs = ThresholdSpace(
-    #     config,
-    #     ensemble,
-    #     featurenames,
-    #     feat_idxs,
-    #     classnames,
-    #     class_idxs
-    # )
+    thrs = ThresholdSpace(ensemble, feat_idxs, class_idxs, config.depth)
 
     # hi = [length(t) + 1 for t in thrs.thresholds]
     # lo = ones(Int, length(hi))
