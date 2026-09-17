@@ -6,6 +6,8 @@ using RDatasets
 using DataFrames
 using Random
 
+using SoleModels
+
 # ---------------------------------------------------------------------------- #
 #                                 iris test                                    #
 # ---------------------------------------------------------------------------- #
@@ -23,9 +25,22 @@ model = modelc.sole[1]
 # ---------------------------------------------------------------------------- #
 #                                  config                                      #
 # ---------------------------------------------------------------------------- #
+R=UInt32; T=Float32
+
 config = LumenShannonConfig(; minimization_scheme=Abc, M=5000)
 
-R=UInt32; T=Float32
+featurenames, feat_idxs =
+    assign(R, unique!(SoleModels.info(model, :featurenames)), false)
+classnames, class_idxs =
+    assign(R, unique!(SoleModels.info(model, :supporting_labels)), true)
+
+ensemble = LumenEnsemble(config, model);
+thrs = ThresholdSpace(ensemble, feat_idxs, class_idxs, config.depth);
+
+hi = [12, 7, 15, 11]
+
+gather_atoms(thrs, R.([1,1,1,1]))
+a=gather_atoms(thrs, R.([1, 7, 15, 11]))
 
 # ---------------------------------------------------------------------------- #
 #                              lumen ensemble                                  #
@@ -35,7 +50,6 @@ R=UInt32; T=Float32
 
 lumen = Lumen.lumen_shannon(config, model)
 
-@btime Lumen.lumen_shannon(config, model);
 # 42.567 μs (429 allocations: 31.08 KiB)
 # 36.340 μs (458 allocations: 41.44 KiB)
 # 41.962 μs (631 allocations: 47.50 KiB)
@@ -47,6 +61,9 @@ lumen = Lumen.lumen_shannon(config, model)
 # LumenEnsemble 33.713 μs (429 allocations: 31.09 KiB)
 # LumenEnsemble new Atom struct 39.413 μs (525 allocations: 34.08 KiB)
 # ThresholdSpace 47.400 μs (774 allocations: 49.70 KiB)
+
+#  49.956 μs (782 allocations: 49.98 KiB)
+# 2.122 ms (28549 allocations: 2.90 MiB)
 
 # ---------------------------------------------------------------------------- #
 #                                    pla                                       #
@@ -62,3 +79,4 @@ Lumen.get_atoms(lumen)
 get_feats(a::LumenAtom{R,T}, id::R) where {R<:Unsigned,T<:AbstractFloat} =
     get_thresholds(filter(a.op==id, a))
 
+# countmap(predictions) = 3) => 2239, 2) => 9515, 1) => 2106)

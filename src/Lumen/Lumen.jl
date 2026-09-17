@@ -54,13 +54,13 @@ export LumenShannonConfig
 include("config.jl")
 export LumenEnsemble
 include("ensemble.jl")
+export ThresholdSpace
 include("thresholds.jl")
-include("atoms.jl")
+export gather_atoms
 include("extract.jl")
 include("pla.jl")
 include("minimize.jl")
-
+export lumen_shannon, assign
 include("lumen_shannon.jl")
-export lumen_shannon
 
 end

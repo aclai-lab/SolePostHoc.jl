@@ -119,7 +119,7 @@
 
 # map categorical labels onto unsigned integer of type `R`
 # sort classlabels
-function _assign(
+function assign(
     ::Type{R},
     y::Vector{S},
     sorted::Bool=false
@@ -176,13 +176,14 @@ function lumen_shannon(
 
     thrs = ThresholdSpace(ensemble, feat_idxs, class_idxs, config.depth)
 
-    # hi = [length(t) + 1 for t in thrs.thresholds]
-    # lo = ones(Int, length(hi))
+    hi = thrs.nlev
+    lo = ones(R, length(hi))
 
     # cache = AtomCache(thrs)
     # # # per_class_terms = _extract(config, thrs, ensemble, lo, hi)
 
-    # raw = _leaf_extract(config, thrs, cache, ensemble, lo, hi)
+    # debug
+    raw = _leaf_extract(config, thrs, ensemble, lo, hi, model)
 
     # return cache, thrs, raw
 
@@ -194,9 +195,9 @@ function lumen_shannon(
     model::SM.AbstractModel,
 ) where {R<:Unsigned,T<:AbstractFloat}
     featurenames, feat_idxs =
-        _assign(R, unique!(SM.info(model, :featurenames)), false)
+        assign(R, unique!(SM.info(model, :featurenames)), false)
     classnames, class_idxs =
-        _assign(R, unique!(SM.info(model, :supporting_labels)), true)
+        assign(R, unique!(SM.info(model, :supporting_labels)), true)
 
     lumen_shannon(
         config,

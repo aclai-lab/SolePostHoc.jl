@@ -81,7 +81,6 @@ struct LumenShannonConfig{R<:Unsigned,T<:AbstractFloat,MS,S} <: AbstractConfig
     # check_opt::Bool
     # check_alphabet::Bool
     M::R
-    max_apply_batch::R
 
     function LumenShannonConfig(;
         minimization_scheme::Type{MS}=Abc,
@@ -95,7 +94,6 @@ struct LumenShannonConfig{R<:Unsigned,T<:AbstractFloat,MS,S} <: AbstractConfig
         # check_opt::Bool=false,
         # check_alphabet::Bool=false,
         M::Int=20_000,
-        max_apply_batch::Int=min(M, 4096),
         internal_resolution::Type=UInt32,
         float_resolution::Type=Float32
     ) where {MS<:AbstractMinimization,S<:AbstractMinimizeSetup}
@@ -145,8 +143,7 @@ struct LumenShannonConfig{R<:Unsigned,T<:AbstractFloat,MS,S} <: AbstractConfig
             # importance,
             # check_opt,
             # check_alphabet,
-            M,
-            max_apply_batch
+            M
         )
     end
 end

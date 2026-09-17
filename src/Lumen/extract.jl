@@ -2,29 +2,33 @@
 #                           collect atoms for rule                             #
 # ---------------------------------------------------------------------------- #
 function gather_atoms(
-    out::Vector{LumenAtom},
-    nodes::Vector{Vector{LumenAtom}},
-    idxs::AbstractVector{R},
-) where {R<:Unsigned}
-    len = 0
-    @inbounds for j in eachindex(idxs)
-        r = Int(idxs[j])
-        s = max(1, 2r - 2)
-        e = min(2r - 1, length(nodes[j]))
-        len += e - s + 1
+    thrs::ThresholdSpace{R,T},
+    levels::AbstractVector{R},
+) where {R<:Unsigned,T<:AbstractFloat}
+    out = Vector{LumenAtom{R,T}}()
+    sizehint!(out, 2 * length(levels))
+
+    @inbounds for j in eachindex(levels)
+        t = levels[j]
+        off = thrs.thrs_offset[j] - one(R)
+        nlev = thrs.nlev[j]
+        feat = thrs.feat_idxs[j]
+
+        opin, opout = thrs.op_families[j] === 0x01 ?
+            (evalop(<), evalop(≥)) :
+            (evalop(≤), evalop(>))
+
+        # region t is bounded by threshold t (inclusive side) ...
+        t < nlev && push!(out, LumenAtom{R,T}(feat, thrs.thrs[off + t], opin))
+        # ... and by threshold t-1 (exclusive side)
+        t > 1 && push!(out, LumenAtom{R,T}(feat, thrs.thrs[off + t], opout))
     end
-    resize!(out, len)
-    q = 1
-    @inbounds for j in eachindex(idxs)
-        r = Int(idxs[j])
-        s = max(1, 2r - 2)
-        e = min(2r - 1, length(nodes[j]))
-        n = e - s + 1
-        copyto!(out, q, nodes[j], s, n)
-        q += n
-    end
+
     return out
 end
+
+using SoleModels, DataFrames
+using CategoricalArrays
 
 # ---------------------------------------------------------------------------- #
 #                        leaf extractor (Lumen legacy)                         #
@@ -32,44 +36,48 @@ end
 function _leaf_extract(
     config::LumenShannonConfig{R,T,MS},
     thrs::ThresholdSpace{R,T},
-    cache::AtomCache{R,T},
     ensemble::LumenEnsemble{R,T},
-    lo::Vector{I},
-    hi::Vector{I},
-) where {R<:Unsigned,T<:AbstractFloat,MS,I}
+    lo::Vector{R},
+    hi::Vector{R},
+    model
+) where {R<:Unsigned,T<:AbstractFloat,MS}
     nfeats = length(thrs.feat_idxs)
     nclasses = length(thrs.class_idxs)
-    vals = [vcat(thrs.thresholds[j], thrs.boundaries[j]) for j in 1:nfeats]
 
-    scratch = LumenAtom[]
+    # scratch = LumenAtom{R,T}[]
     counts_c = Vector{R}(undef, nclasses)
-    cursors  = Vector{R}(undef, nclasses)
-    raw = [Vector{Vector{LumenAtom}}() for _ in 1:nclasses]
+    cursors = Vector{R}(undef, nclasses)
+    raw = [Vector{Vector{LumenAtom{R,T}}}() for _ in 1:nclasses]
 
-    widths = [hi[j] - lo[j] + 1 for j in 1:nfeats]
+    widths = hi .- lo .+ one(R)
     total = prod(widths)
-    batch = min(config.max_apply_batch, total)
 
-    tbl  = Matrix{T}(undef, batch, nfeats)
-    idxm = Matrix{R}(undef, batch, nfeats)
+    tbl  = Matrix{T}(undef, total, nfeats)
+    idxm = Matrix{R}(undef, total, nfeats)
 
     i0 = 1
     while i0 ≤ total
-        this_chunk = min(batch, total - i0 + 1)
+        this_chunk = min(config.M, total - i0 + 1)
 
         @inbounds for k in 1:this_chunk
             r = i0 + k - 2
-            for j in 1:nfeats
-                off = r % widths[j]
-                r = r ÷ widths[j]
-                t = lo[j] + off
-                tbl[k, j] = vals[j][t]
-                idxm[k, j] = cache.regidx[j][t]
+            for f in 1:nfeats
+                off = r % widths[f]
+                r = r ÷ widths[f]
+                t = R(lo[f] + off)
+                tbl[k, f] = thrs.thrs[thrs.thrs_offset[f] + t - one(R)]
+                idxm[k, f] = t
             end
         end
 
-        preds = apply(
-            ensemble, view(tbl, 1:this_chunk, :), nclasses)
+        preds = apply(ensemble, view(tbl, 1:this_chunk, :), nclasses)
+
+        # d = PropositionalLogiset(DataFrame(tbl[1:this_chunk, :], :auto))
+        # preds = levelcode.(SoleModels.apply(
+        #     model, d;
+        #     use_multithreads=false,
+        #     suppress_parity_warning=true
+        # ))
 
         # pass 1: count cubes per class in this chunk
         fill!(counts_c, 0)
@@ -86,13 +94,14 @@ function _leaf_extract(
         # pass 2: fill by cursor
         @inbounds for k in 1:this_chunk
             c = preds[k]
-            raw[c][cursors[c] += 1] = gather_atoms(scratch, cache.nodes, @view idxm[k, :])
+            raw[c][cursors[c] += 1] = gather_atoms(thrs, @view idxm[k, :])
         end
 
         i0 += this_chunk
     end
 
-    terms = Vector{Vector{LumenAtom}}(undef, nclasses)
+    raw
+    # terms = Vector{Vector{LumenAtom}}(undef, nclasses)
     # classes are independent; `run_minimization` shells out to an external
     # binary, so this is both thread-safe and mostly I/O-bound.
     # Threads.@threads for c in 1:nclasses
@@ -108,10 +117,10 @@ function _leaf_extract(
     # end
 
     # develop
-    rc = raw[1]
-    run_minimization(MS, config, rc)
+    # rc = raw[1]
+    # run_minimization(MS, config, rc)
 
-    return raw
+    # return raw
 end
 
 # ---------------------------------------------------------------------------- #

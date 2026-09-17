@@ -44,11 +44,13 @@ function ThresholdSpace(
     per_feat = [sort!(
         get_thresholds(atoms, f), rev=op_families[f] === 0x01 ? true : false
     ) for f in feat_idxs]
+    nper_feat = length.(per_feat)
     thrs_boundary = _thrs_boundary(per_feat, op_families)
     thrs = reduce(
         vcat, ([t; b] for (t, b) in zip(per_feat, thrs_boundary)); init=T[])
-    thrs_offset = R.(cumsum([1; length.(per_feat)]))
-    nlev = R.(length.(per_feat)) .+ one(R)
+    # added onr(R) to take into account the last added boundaty value
+    thrs_offset = R.(cumsum([1; nper_feat[1:end-1] .+ one(R)]))
+    nlev = R.(nper_feat) .+ one(R)
 
     return ThresholdSpace{R,T}(
         thrs, thrs_offset, op_families, feat_idxs, class_idxs, nlev)
