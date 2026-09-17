@@ -27,9 +27,6 @@ function gather_atoms(
     return out
 end
 
-using SoleModels, DataFrames
-using CategoricalArrays
-
 # ---------------------------------------------------------------------------- #
 #                        leaf extractor (Lumen legacy)                         #
 # ---------------------------------------------------------------------------- #
@@ -39,12 +36,10 @@ function _leaf_extract(
     ensemble::LumenEnsemble{R,T},
     lo::Vector{R},
     hi::Vector{R},
-    model
 ) where {R<:Unsigned,T<:AbstractFloat,MS}
     nfeats = length(thrs.feat_idxs)
     nclasses = length(thrs.class_idxs)
 
-    # scratch = LumenAtom{R,T}[]
     counts_c = Vector{R}(undef, nclasses)
     cursors = Vector{R}(undef, nclasses)
     raw = [Vector{Vector{LumenAtom{R,T}}}() for _ in 1:nclasses]
@@ -71,13 +66,6 @@ function _leaf_extract(
         end
 
         preds = apply(ensemble, view(tbl, 1:this_chunk, :), nclasses)
-
-        # d = PropositionalLogiset(DataFrame(tbl[1:this_chunk, :], :auto))
-        # preds = levelcode.(SoleModels.apply(
-        #     model, d;
-        #     use_multithreads=false,
-        #     suppress_parity_warning=true
-        # ))
 
         # pass 1: count cubes per class in this chunk
         fill!(counts_c, 0)

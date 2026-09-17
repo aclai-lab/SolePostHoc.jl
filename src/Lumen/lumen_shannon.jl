@@ -183,7 +183,7 @@ function lumen_shannon(
     # # # per_class_terms = _extract(config, thrs, ensemble, lo, hi)
 
     # debug
-    raw = _leaf_extract(config, thrs, ensemble, lo, hi, model)
+    raw = _leaf_extract(config, thrs, ensemble, lo, hi)
 
     # return cache, thrs, raw
 

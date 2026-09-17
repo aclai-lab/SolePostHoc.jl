@@ -37,11 +37,15 @@ classnames, class_idxs =
 ensemble = LumenEnsemble(config, model);
 thrs = ThresholdSpace(ensemble, feat_idxs, class_idxs, config.depth);
 
-hi = [12, 7, 15, 11]
+lo = R.([1, 1, 1, 1])
+hi = R.([12, 7, 15, 11])
 
-gather_atoms(thrs, R.([1,1,1,1]))
-a=gather_atoms(thrs, R.([1, 7, 15, 11]))
+@code_warntype Lumen._leaf_extract(config, thrs, ensemble, lo, hi)
 
+@code_warntype gather_atoms(thrs, R.([1,1,1,1]))
+
+@btime Lumen._leaf_extract(config, thrs, ensemble, lo, hi)
+# 2.046 ms (27763 allocations: 2.85 MiB)
 # ---------------------------------------------------------------------------- #
 #                              lumen ensemble                                  #
 # ---------------------------------------------------------------------------- #
