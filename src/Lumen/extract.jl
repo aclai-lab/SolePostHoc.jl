@@ -1,30 +1,33 @@
 # ---------------------------------------------------------------------------- #
 #                           collect atoms for rule                             #
 # ---------------------------------------------------------------------------- #
+# Write the atoms of the cube at `levels` into `out[pos+1:pos+n]` and return
+# the new fill position. `out` must already be long enough (`count_atoms`);
+# no growth happens here, so the caller can hand out views into `out`.
 function gather_atoms(
+    out::Vector{LumenAtom{R,T}},
+    pos::Int,
     thrs::ThresholdSpace{R,T},
     levels::AbstractVector{R},
 ) where {R<:Unsigned,T<:AbstractFloat}
-    out = Vector{LumenAtom{R,T}}()
-    sizehint!(out, 2 * length(levels))
-
     @inbounds for j in eachindex(levels)
         t = levels[j]
         off = thrs.thrs_offset[j] - one(R)
         nlev = thrs.nlev[j]
         feat = thrs.feat_idxs[j]
+        thr = thrs.thrs[off + t]
 
         opin, opout = thrs.op_families[j] === 0x01 ?
             (evalop(<), evalop(≥)) :
             (evalop(≤), evalop(>))
 
         # region t is bounded by threshold t (inclusive side) ...
-        t < nlev && push!(out, LumenAtom{R,T}(feat, thrs.thrs[off + t], opin))
+        t < nlev && (out[pos += 1] = LumenAtom{R,T}(feat, thr, opin))
         # ... and by threshold t-1 (exclusive side)
-        t > 1 && push!(out, LumenAtom{R,T}(feat, thrs.thrs[off + t], opout))
+        t > 1 && (out[pos += 1] = LumenAtom{R,T}(feat, thr, opout))
     end
 
-    return out
+    return pos
 end
 
 # ---------------------------------------------------------------------------- #
@@ -40,52 +43,75 @@ function _leaf_extract(
     nfeats = length(thrs.feat_idxs)
     nclasses = length(thrs.class_idxs)
 
-    counts_c = Vector{R}(undef, nclasses)
-    cursors = Vector{R}(undef, nclasses)
-    raw = [Vector{Vector{LumenAtom{R,T}}}() for _ in 1:nclasses]
-
     widths = hi .- lo .+ one(R)
     total = prod(widths)
+    nrows = min(Int(config.M), total)
 
-    tbl  = Matrix{T}(undef, total, nfeats)
-    idxm = Matrix{R}(undef, total, nfeats)
+    Atom = LumenAtom{R,T}
+    Cube = SubArray{Atom,1,Vector{Atom},Tuple{UnitRange{Int}},true}
 
+    tbl = Matrix{T}(undef, nrows, nfeats) # apply input, one chunk at a time
+    nat = Vector{Int}(undef, nrows)       # atoms produced by row k of the chunk
+    preds = Vector{R}(undef, total)       # class of every row
+    ncubes_c = zeros(Int, nclasses)
+    natoms_c = zeros(Int, nclasses)
+
+    # pass 1: classify every row chunk by chunk and size the per-class output
     i0 = 1
     while i0 ≤ total
-        this_chunk = min(config.M, total - i0 + 1)
+        this_chunk = min(nrows, total - i0 + 1)
 
         @inbounds for k in 1:this_chunk
             r = i0 + k - 2
+            n = 0
             for f in 1:nfeats
                 off = r % widths[f]
                 r = r ÷ widths[f]
                 t = R(lo[f] + off)
                 tbl[k, f] = thrs.thrs[thrs.thrs_offset[f] + t - one(R)]
-                idxm[k, f] = t
+                n += (t < thrs.nlev[f]) + (t > one(R))
             end
+            nat[k] = n
         end
 
-        preds = apply(ensemble, view(tbl, 1:this_chunk, :), nclasses)
+        chunk_preds = apply(ensemble, view(tbl, 1:this_chunk, :), nclasses)
 
-        # pass 1: count cubes per class in this chunk
-        fill!(counts_c, 0)
         @inbounds for k in 1:this_chunk
-            counts_c[preds[k]] += 1
-        end
-
-        # grow each class vector once
-        @inbounds for c in 1:nclasses
-            cursors[c] = length(raw[c])
-            resize!(raw[c], cursors[c] + counts_c[c])
-        end
-
-        # pass 2: fill by cursor
-        @inbounds for k in 1:this_chunk
-            c = preds[k]
-            raw[c][cursors[c] += 1] = gather_atoms(thrs, @view idxm[k, :])
+            c = chunk_preds[k]
+            preds[i0 + k - 1] = c
+            ncubes_c[c] += 1
+            natoms_c[c] += nat[k]
         end
 
         i0 += this_chunk
+    end
+
+    # every buffer is allocated once, at its final size: no regrowth copies
+    atoms = [Vector{Atom}(undef, natoms_c[c]) for c in 1:nclasses]
+    raw = [Vector{Cube}(undef, ncubes_c[c]) for c in 1:nclasses]
+    ccur = zeros(Int, nclasses)   # fill cursor into raw[c]
+    acur = zeros(Int, nclasses)   # fill cursor into atoms[c]
+
+    # pass 2: rewind the odometer and fill by cursor, straight from its digits
+    cur = copy(lo)
+    @inbounds for i in 1:total
+        c = preds[i]
+        buf = atoms[c]
+        a0 = acur[c]
+        a1 = gather_atoms(buf, a0, thrs, cur)
+        acur[c] = a1
+        raw[c][ccur[c] += 1] = view(buf, a0+1:a1)
+
+        f = 1
+        while f ≤ nfeats
+            t = cur[f]
+            if t < hi[f]
+                cur[f] = t + one(R)
+                break
+            end
+            cur[f] = lo[f]
+            f += 1
+        end
     end
 
     raw
@@ -144,9 +170,9 @@ function _extract(
     config::LumenShannonConfig{R,T},
     thrs::ThresholdSpace{R,T},
     ensemble::LumenEnsemble{R,T},
-    lo::Vector{I},
-    hi::Vector{I},
-) where {R<:Unsigned,T<:AbstractFloat,I}
+    lo::Vector{R},
+    hi::Vector{R},
+) where {R<:Unsigned,T<:AbstractFloat}
     rect_size = prod(hi .- lo .+ one(R))
     rect_size ≤ config.M &&
         return _leaf_extract(config, thrs, ensemble, lo, hi)

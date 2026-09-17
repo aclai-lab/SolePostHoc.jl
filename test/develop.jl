@@ -44,7 +44,7 @@ hi = R.([12, 7, 15, 11])
 
 @code_warntype gather_atoms(thrs, R.([1,1,1,1]))
 
-@btime Lumen._leaf_extract(config, thrs, ensemble, lo, hi)
+@btime Lumen._leaf_extract(config, thrs, ensemble, lo, hi);
 # 2.046 ms (27763 allocations: 2.85 MiB)
 # ---------------------------------------------------------------------------- #
 #                              lumen ensemble                                  #
@@ -53,6 +53,8 @@ hi = R.([12, 7, 15, 11])
 # 34.355 μs (395 allocations: 28.22 KiB)
 
 lumen = Lumen.lumen_shannon(config, model)
+
+@btime Lumen.lumen_shannon(config, model);
 
 # 42.567 μs (429 allocations: 31.08 KiB)
 # 36.340 μs (458 allocations: 41.44 KiB)
@@ -68,6 +70,7 @@ lumen = Lumen.lumen_shannon(config, model)
 
 #  49.956 μs (782 allocations: 49.98 KiB)
 # 2.122 ms (28549 allocations: 2.90 MiB)
+# 1.763 ms (836 allocations: 1.95 MiB)
 
 # ---------------------------------------------------------------------------- #
 #                                    pla                                       #
@@ -82,5 +85,3 @@ Lumen.get_atoms(lumen)
 
 get_feats(a::LumenAtom{R,T}, id::R) where {R<:Unsigned,T<:AbstractFloat} =
     get_thresholds(filter(a.op==id, a))
-
-# countmap(predictions) = 3) => 2239, 2) => 9515, 1) => 2106)
