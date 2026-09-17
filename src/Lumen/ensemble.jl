@@ -40,6 +40,16 @@ isempty_atom(a::LumenAtom) = a.op == 0xff && iszero(a.feat)
     findall(a -> a.feat == feat, atoms)
 
 # ---------------------------------------------------------------------------- #
+#                                   Ref Atom                                   #
+# ---------------------------------------------------------------------------- #
+# the thr is an index that reference the value in Thresolds vector
+struct RefAtom{R<:Unsigned}
+    feat::R
+    thr::R
+    op::UInt8
+end
+
+# ---------------------------------------------------------------------------- #
 #                                 Lumen Node                                   #
 # ---------------------------------------------------------------------------- #
 struct LumenNode{R<:Unsigned}
