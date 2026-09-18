@@ -63,6 +63,7 @@ lumen = Lumen.lumen_shannon(config, model)
 # 1.850 ms (1006 allocations: 548.60 KiB)
 # 1.929 ms (917 allocations: 469.75 KiB)
 # 1.955 ms (860 allocations: 470.33 KiB) # wrong results!
+# 1.731 ms (836 allocations: 1.95 MiB) # ok
 
 # LumenEnsemble 33.713 μs (429 allocations: 31.09 KiB)
 # LumenEnsemble new Atom struct 39.413 μs (525 allocations: 34.08 KiB)
@@ -70,7 +71,7 @@ lumen = Lumen.lumen_shannon(config, model)
 
 #  49.956 μs (782 allocations: 49.98 KiB)
 # 2.122 ms (28549 allocations: 2.90 MiB)
-# 1.763 ms (836 allocations: 1.95 MiB)
+# 1.806 ms (836 allocations: 1.95 MiB)
 
 # ---------------------------------------------------------------------------- #
 #                                    pla                                       #

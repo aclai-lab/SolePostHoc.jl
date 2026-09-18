@@ -47,9 +47,6 @@ function _leaf_extract(
     total = prod(widths)
     nrows = min(Int(config.M), total)
 
-    Atom = LumenAtom{R,T}
-    Cube = SubArray{Atom,1,Vector{Atom},Tuple{UnitRange{Int}},true}
-
     tbl = Matrix{T}(undef, nrows, nfeats) # apply input, one chunk at a time
     nat = Vector{Int}(undef, nrows)       # atoms produced by row k of the chunk
     preds = Vector{R}(undef, total)       # class of every row
@@ -87,8 +84,8 @@ function _leaf_extract(
     end
 
     # every buffer is allocated once, at its final size: no regrowth copies
-    atoms = [Vector{Atom}(undef, natoms_c[c]) for c in 1:nclasses]
-    raw = [Vector{Cube}(undef, ncubes_c[c]) for c in 1:nclasses]
+    atoms = [Vector{LumenAtom{R,T}}(undef, natoms_c[c]) for c in 1:nclasses]
+    raw = [Vector{LumenCube{R,T}}(undef, ncubes_c[c]) for c in 1:nclasses]
     ccur = zeros(Int, nclasses)   # fill cursor into raw[c]
     acur = zeros(Int, nclasses)   # fill cursor into atoms[c]
 

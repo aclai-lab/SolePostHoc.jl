@@ -288,7 +288,7 @@ end
 function run_minimization(
     ::Type{Abc},
     config::LumenShannonConfig{R,T},
-    atoms::Vector{Vector{LumenAtom}}
+    cube::Cube
 ) where {R<:Unsigned,T<:AbstractFloat}
     ABC_jll.abc() do binary
         minimized_formula = abc_minimize(
