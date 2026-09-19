@@ -15,16 +15,21 @@ function gather_atoms(
         off = thrs.thrs_offset[j] - one(R)
         nlev = thrs.nlev[j]
         feat = thrs.feat_idxs[j]
-        thr = thrs.thrs[off + t]
+        # level t is sampled at threshold t (`_leaf_extract` feeds
+        # `thrs[off + t]` to `apply`), so its region is closed on threshold t
+        # and open on threshold t-1: the two bounds use DIFFERENT thresholds.
+        thr_t = thrs.thrs[off + t]
+        thr_p = t > 1 ? thrs.thrs[off + t - one(R)] : thr_t
 
-        opin, opout = thrs.op_families[j] === 0x01 ?
-            (evalop(<), evalop(≥)) :
-            (evalop(≤), evalop(>))
-
-        # region t is bounded by threshold t (inclusive side) ...
-        t < nlev && (out[pos += 1] = LumenAtom{R,T}(feat, thr, opin))
-        # ... and by threshold t-1 (exclusive side)
-        t > 1 && (out[pos += 1] = LumenAtom{R,T}(feat, thr, opout))
+        if thrs.op_families[j] === 0x01
+            # '<' family, thresholds descending: region t = [thr_t, thr_{t-1})
+            t > 1    && (out[pos += 1] = LumenAtom{R,T}(feat, thr_p, evalop(<)))
+            t < nlev && (out[pos += 1] = LumenAtom{R,T}(feat, thr_t, evalop(≥)))
+        else
+            # '≤' family, thresholds ascending: region t = (thr_{t-1}, thr_t]
+            t < nlev && (out[pos += 1] = LumenAtom{R,T}(feat, thr_t, evalop(≤)))
+            t > 1    && (out[pos += 1] = LumenAtom{R,T}(feat, thr_p, evalop(>)))
+        end
     end
 
     return pos
@@ -118,7 +123,7 @@ function _leaf_extract(
 
     removeduals!.(sort!.(unique!.(atoms)))
 
-    @show length.(atoms)
+    @show atoms
 
     # terms = Vector{Vector{LumenAtom}}(undef, nclasses)
     # classes are independent; `run_minimization` shells out to an external
