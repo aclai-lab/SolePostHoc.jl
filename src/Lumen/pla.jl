@@ -56,14 +56,14 @@ into the global condition space (same mechanism already used for
 feature/threshold never seen in the on-set couldn't be encoded correctly.
 """
 function write_pla(
-    atoms::Vector{Vector{LumenAtom}},
-    feat_idxs::Vector{R},
-    encoding::Type{<:AbstractEncoding}=Univariate,
+    cube::LumenCube{R,T},
+    thrs::ThresholdSpace{R,T},
+    # encoding::Type{<:AbstractEncoding}=Univariate,
     # removewhitespaces::Bool=true,
     # pretty_op::Bool=false,
     # universe_conditions::Union{Nothing,Vector{<:SD.AbstractScalarCondition}}=nothing,
-) where {R<:Unsigned}
-    nfnames = length(feat_idxs)
+) where {R<:Unsigned,T<:AbstractFloat}
+    nfnames = length(thrs.feat_idxs)
 
     # sort!(conditions; by=SD._scalarcondition_sortby)
     # sort!(feat_idxs; by=syntaxstring)

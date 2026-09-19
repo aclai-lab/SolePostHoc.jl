@@ -25,10 +25,10 @@ model = modelc.sole[1]
 # ---------------------------------------------------------------------------- #
 #                                  config                                      #
 # ---------------------------------------------------------------------------- #
-R=UInt32; T=Float32
-
 config = LumenShannonConfig(; minimization_scheme=Abc, M=5000)
+lumen = Lumen.lumen_shannon(config, model)
 
+R=UInt32; T=Float32
 featurenames, feat_idxs =
     assign(R, unique!(SoleModels.info(model, :featurenames)), false)
 classnames, class_idxs =
@@ -39,6 +39,8 @@ thrs = ThresholdSpace(ensemble, feat_idxs, class_idxs, config.depth);
 
 lo = R.([1, 1, 1, 1])
 hi = R.([12, 7, 15, 11])
+
+cube = Lumen._leaf_extract(config, thrs, ensemble, lo, hi)
 
 @code_warntype Lumen._leaf_extract(config, thrs, ensemble, lo, hi)
 
@@ -76,13 +78,90 @@ lumen = Lumen.lumen_shannon(config, model)
 # ---------------------------------------------------------------------------- #
 #                                    pla                                       #
 # ---------------------------------------------------------------------------- #
-cache, thrs, raw = Lumen.lumen_shannon(config, model)
+conditions = Lumen.lumen_shannon(config, model)
 
-Lumen.write_pla(cache.nodes, thrs.feat_idxs, Univariate)
+flat_conditions = unique(collect(Iterators.flatten(Iterators.flatten(conditions))))
+@btime unique(collect(Iterators.flatten(Iterators.flatten(conditions))))
+# 1.100 ms (39 allocations: 2.52 MiB)
 
-length.(cache.nodes)
+nfeats = length(thrs.feat_idxs)
 
-Lumen.get_atoms(lumen)
+# sort!(conditions; by=SD._scalarcondition_sortby)
+# sort!(feat_idxs; by=syntaxstring)
 
-get_feats(a::LumenAtom{R,T}, id::R) where {R<:Unsigned,T<:AbstractFloat} =
-    get_thresholds(filter(a.op==id, a))
+# conditions = SD.removeduals(conditions)
+
+# feat_condindxss = Vector{Vector{Int}}(undef, nfnames)
+# feat_condnames = Vector{Vector{String}}(undef, nfnames)
+
+# @inbounds for (i, feat) in enumerate(feat_idxs)
+#     feat_condindxs = findall(c->SD.feature(c) == feat, conditions)
+#     conds = filter(c->SD.feature(c) == feat, conditions)
+#     condname = SoleLogics.syntaxstring.(conds; removewhitespaces, pretty_op)
+
+#     feat_condindxss[i] = feat_condindxs
+#     feat_condnames[i] = condname
+# end
+
+# feat_nconds = length.(feat_condindxss)
+
+# includes, excludes = Vector{BitMatrix}(undef, nfnames),
+# Vector{BitMatrix}(undef, nfnames)
+# @inbounds for (i, feat_condindxs) in enumerate(feat_condindxss)
+#     includes[i] = BitMatrix([
+#         SD.includes(conditions[cond_i], conditions[cond_j]) for
+#         cond_i in feat_condindxs, cond_j in feat_condindxs
+#     ])
+#     excludes[i] = BitMatrix([
+#         SD.excludes(conditions[cond_j], conditions[cond_i]) for
+#         cond_i in feat_condindxs, cond_j in feat_condindxs
+#     ])
+# end
+
+# pla_header = if encoding == :multivariate
+#     _header(feat_nconds, feat_condnames; has_offset)
+# else
+#     _header(conditions, feat_condnames; has_offset)
+# end
+
+# # --- ON-set rows -----------------------------------------------------
+# conjuncts = _get_conjuncts(atoms)
+# pla_onset_rows = Vector{String}(undef, length(conjuncts))
+# Threads.@threads for i in eachindex(conjuncts)
+#     row = _encode_disjunct(
+#         conjuncts[i], feat_idxs, conditions, includes, excludes, feat_condindxss
+#     )
+#     pla_onset_rows[i] =
+#         encoding == :multivariate ? _onset_rows(feat_nconds, row) : _onset_rows(row)
+# end
+
+# # --- OFF-set rows (NEW, only if `offset` given) -----------------------
+# # Same conditions/includes/excludes/feat_condindxss as the ON-set: this
+# # reuse is exactly what guarantees column alignment between the two
+# # halves of the 
+# pla_offset_rows = String[]
+# if has_offset
+#     offset_conjuncts = _get_conjuncts(offset)
+#     pla_offset_rows = Vector{String}(undef, length(offset_conjuncts))
+#     Threads.@threads for i in eachindex(offset_conjuncts)
+#         row = _encode_disjunct(
+#             offset_conjuncts[i], feat_idxs, conditions, includes, excludes, feat_condindxss
+#         )
+#         pla_offset_rows[i] =
+#             encoding == :multivariate ? _offset_rows(feat_nconds, row) : _offset_rows(row)
+#     end
+# end
+
+# all_rows = vcat(pla_onset_rows, pla_offset_rows)
+
+# pla_content = join(
+#     [
+#         join(pla_header, "\n"),
+#         ".p $(length(all_rows))",
+#         join(all_rows, "\n"),
+#         ".e",
+#     ],
+#     "\n",
+# )
+
+# return pla_content, feat_idxs

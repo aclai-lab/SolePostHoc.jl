@@ -58,7 +58,7 @@ export ThresholdSpace
 include("thresholds.jl")
 export gather_atoms
 include("extract.jl")
-include("pla.jl")
+# include("pla.jl")
 include("minimize.jl")
 export lumen_shannon, assign
 include("lumen_shannon.jl")

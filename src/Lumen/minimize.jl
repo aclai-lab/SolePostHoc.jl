@@ -234,9 +234,8 @@
 
 # ---------------------------------------------------------------------------- #
 function abc_minimize(
-    atoms::Vector{Vector{LumenAtom}},
-    binary::String,
-    config::LumenShannonConfig{R,T}
+    config::LumenShannonConfig{R,T},
+    cube::LumenCube{R,T}
 ) where {R<:Unsigned,T<:AbstractFloat}
     # # convert formula to pla string format
     # pla_string, fnames = formula_to_pla(
@@ -288,15 +287,13 @@ end
 function run_minimization(
     ::Type{Abc},
     config::LumenShannonConfig{R,T},
-    cube::Cube
+    cube::LumenCube{R,T}
 ) where {R<:Unsigned,T<:AbstractFloat}
     ABC_jll.abc() do binary
         minimized_formula = abc_minimize(
-            atoms,
-            binary,
+            cube,
             config,
         )
     #     return _as_terms(refine_dnf(minimized_formula))
     end
 end
-
