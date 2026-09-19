@@ -30,6 +30,16 @@ function gather_atoms(
     return pos
 end
 
+# drop atoms whose dual (same feat/thr, complementary op) was already kept.
+function removeduals!(atoms::Vector{LumenAtom{R,T}}) where {R,T}
+    seen = Set{LumenAtom{R,T}}()
+    filter!(atoms) do a
+        dual(a) in seen && return false
+        push!(seen, a)
+        return true
+    end
+end
+
 # ---------------------------------------------------------------------------- #
 #                        leaf extractor (Lumen legacy)                         #
 # ---------------------------------------------------------------------------- #
@@ -106,7 +116,9 @@ function _leaf_extract(
         end
     end
 
-    unique!.(atoms)
+    removeduals!.(sort!.(unique!.(atoms)))
+
+    @show length.(atoms)
 
     # terms = Vector{Vector{LumenAtom}}(undef, nclasses)
     # classes are independent; `run_minimization` shells out to an external

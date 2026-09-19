@@ -43,7 +43,6 @@ hi = R.([12, 7, 15, 11])
 cube = Lumen._leaf_extract(config, thrs, ensemble, lo, hi)
 
 @code_warntype Lumen._leaf_extract(config, thrs, ensemble, lo, hi)
-
 @code_warntype gather_atoms(thrs, R.([1,1,1,1]))
 
 @btime Lumen._leaf_extract(config, thrs, ensemble, lo, hi);
@@ -51,13 +50,7 @@ cube = Lumen._leaf_extract(config, thrs, ensemble, lo, hi)
 # ---------------------------------------------------------------------------- #
 #                              lumen ensemble                                  #
 # ---------------------------------------------------------------------------- #
-@btime LumenEnsemble(config, model);
-# 34.355 μs (395 allocations: 28.22 KiB)
-
-lumen = Lumen.lumen_shannon(config, model)
-
 @btime Lumen.lumen_shannon(config, model);
-
 # 42.567 μs (429 allocations: 31.08 KiB)
 # 36.340 μs (458 allocations: 41.44 KiB)
 # 41.962 μs (631 allocations: 47.50 KiB)
@@ -67,7 +60,8 @@ lumen = Lumen.lumen_shannon(config, model)
 # 1.955 ms (860 allocations: 470.33 KiB) # wrong results!
 # 1.793 ms (836 allocations: 1.95 MiB) # single vector with offset
 # 1.813 ms (823 allocations: 1.42 MiB) # get rid of cube
-# 2.609 ms (858 allocations: 1.43 MiB) # unique!
+# 2.555 ms (857 allocations: 1.43 MiB)
+# 2.442 ms (863 allocations: 1.43 MiB) # unique and sort
 
 # ---------------------------------------------------------------------------- #
 #                                    pla                                       #
@@ -84,12 +78,23 @@ thrs = ThresholdSpace(ensemble, feat_idxs, class_idxs, config.depth);
 atoms = Lumen.lumen_shannon(config, model);
 
 minimized = run_minimization(
-        minimization_scheme(config), config, raw[2])
+        minimization_scheme(config), config, atoms[2])
 
 @btime begin
     for c in $class_idxs
         minimized = run_minimization(
-            minimization_scheme($config), $config, $raw[c])
+            minimization_scheme($config), $config, $atoms[c])
     end
 end
 # 22.686 μs (78 allocations: 8.53 KiB)
+
+
+function removeduals(values::Vector)
+    newvalues = similar(values, (0,))
+    for cond in values
+        if !SoleData.hasdual(cond) || !(SoleData.dual(cond) in newvalues)
+            push!(newvalues, cond)
+        end
+    end
+    newvalues
+end

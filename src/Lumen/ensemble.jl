@@ -1,13 +1,19 @@
 @inline evalop(::typeof(<)) = 0x01
-@inline evalop(::typeof(≤)) = 0x02
-@inline evalop(::typeof(>)) = 0x03
-@inline evalop(::typeof(≥)) = 0x04
+@inline evalop(::typeof(>)) = 0x02
+@inline evalop(::typeof(≥)) = 0x03
+@inline evalop(::typeof(≤)) = 0x04
 
 @inline function evalop(op::UInt8, x::T, thr::T)::Bool where {T<:AbstractFloat}
     op == 0x01 ? (x < thr) :
-    op == 0x02 ? (x ≤ thr) :
-    op == 0x03 ? (x > thr) : (x ≥ thr)
+    op == 0x02 ? (x > thr) :
+    op == 0x03 ? (x ≥ thr) : (x ≤ thr)
 end
+
+# dual operator: < ↔ ≥ , > ↔ ≤
+@inline dualop(op::UInt8) =
+    op == 0x01 ? 0x03 :
+    op == 0x03 ? 0x01 :
+    op == 0x02 ? 0x04 : 0x02
 
 # ---------------------------------------------------------------------------- #
 #                                 Lumen Atom                                   #
@@ -24,6 +30,16 @@ Base.isequal(a::LumenAtom, b::LumenAtom) = a == b
 Base.hash(n::LumenAtom, h::UInt) =
     hash(n.thr, hash(n.op, hash(n.feat, h)))
 
+# sort key mirroring SoleData._scalarcondition_sortby:
+# (feature, operator, threshold) — operators ordered so that the
+# "inclusive" side (≥, ≤) sorts consistently relative to (<, >).
+@inline function _lumenatom_sortby(a::LumenAtom)
+    (a.feat, a.op, a.thr)
+end
+
+Base.isless(a::LumenAtom, b::LumenAtom) =
+    isless(_lumenatom_sortby(a), _lumenatom_sortby(b))
+
 LumenAtom{R,T}() where {R<:Unsigned,T<:AbstractFloat} =
     LumenAtom{R,T}(zero(R), T(NaN), 0xff)
 LumenAtom() = LumenAtom{UInt32,Float64}()
@@ -38,6 +54,9 @@ isempty_atom(a::LumenAtom) = a.op == 0xff && iszero(a.feat)
     [a.op for a in atoms]
 @inline featidxs(atoms::Vector{LumenAtom{R,T}}, feat::R) where {R,T} =
     findall(a -> a.feat == feat, atoms)
+
+@inline dual(a::LumenAtom{R,T}) where {R,T} =
+    LumenAtom{R,T}(a.feat, a.thr, dualop(a.op))
 
 const LumenSlice{R,T} = SubArray{
     LumenAtom{R,T},1,
@@ -183,6 +202,16 @@ function apply(
                 best, tie = j, false
             elseif counts[j] == counts[best]
                 tie = true
+            end
+        end
+        # SoleModels parity rule (DecisionTreeExt `:alphanumeric` tiebreaker,
+        # the one SoleXplorer sets): on a tie, `first(sort(keys(countmap)))`,
+        # i.e. the lowest-level class that received at least one vote,
+        # even when that class is not among the tied maxima.
+        if tie
+            best = 1
+            @inbounds while iszero(counts[best])
+                best += 1
             end
         end
         preds[i] = best

@@ -21,37 +21,13 @@
 # end
 
 function formula_to_pla(
-    cube::LumenSlice{R,T}
+    atoms::Vector{LumenAtom{R,T}}
 ) where {R<:Unsigned,T<:AbstractFloat}
-#     @assert encoding in [:univariate, :multivariate]
-
-#     has_offset = !isnothing(offset) && !isempty(offset)
-
-#     # extract domains: ON-set + (if present) OFF-set, so conditions
-#     # mentioned ONLY in the offset still enter the shared condition space.
-#     local_conditions = map(SL.value, reduce(vcat, atoms))
-#     if has_offset
-#         offset_conditions = map(SL.value, reduce(vcat, offset))
-#         local_conditions = vcat(local_conditions, offset_conditions)
-#     end
-
-#     if isnothing(universe_conditions)
-#         conditions = unique(local_conditions)
-#     else
-#         conditions = unique(vcat(collect(universe_conditions), local_conditions))
-#     end
-
 #     fnames = unique(SD.feature.(conditions))
 #     nfnames = length(fnames)
 
 #     sort!(conditions; by=SD._scalarcondition_sortby)
 #     sort!(fnames; by=syntaxstring)
-
-#     if allow_scalar_range_conditions
-#         original_conditions = conditions
-#         conditions = SD.scalartiling(conditions, fnames)
-#         @assert length(setdiff(original_conditions, conditions)) == 0
-#     end
 
 #     conditions = SD.removeduals(conditions)
 
@@ -190,11 +166,11 @@ end
 function abc_minimize(
     config::LumenShannonConfig{R,T},
     binary::String,
-    cube::LumenSlice{R,T},
+    atoms::Vector{LumenAtom{R,T}},
 ) where {R<:Unsigned,T<:AbstractFloat}
     # convert formula to pla string format
-    # pla_string, fnames = formula_to_pla(cube)
-    formula_to_pla(cube)
+    # pla_string, fnames = formula_to_pla(atoms)
+    formula_to_pla(atoms)
 
     # # create temporary files for input/output
     # mktempdir() do tmp
@@ -238,13 +214,13 @@ end
 function run_minimization(
     ::Type{Abc},
     config::LumenShannonConfig{R,T},
-    cube::LumenSlice{R,T}
+    atoms::Vector{LumenAtom{R,T}}
 ) where {R<:Unsigned,T<:AbstractFloat}
     ABC_jll.abc() do binary
         minimized_formula = abc_minimize(
             config,
             binary,
-            cube
+            atoms
         )
     #     return _as_terms(refine_dnf(minimized_formula))
     end
