@@ -629,20 +629,16 @@ function extract_atoms(model, filteralphabetcallback, depth = 1.0)
             println("==========================")
             println(t)
             all_atoms_bfs = extract_atoms_bfs_order(t)
-            @show all_atoms_bfs
 
             # Prendi solo i primi depth% degli atoms #NOTICE IN FUTURE WE CAN CHOSE DIFFERENT STRATEGY TO TAKE ATOMS
             selected_atoms = take_first_percentage(all_atoms_bfs, depth)
-            @show selected_atoms
 
             # Aggiungi agli all_atoms
             append!(all_atoms, selected_atoms)
             println("==========================")
         end
-        @show all_atoms
     else
         all_atoms = collect(atoms(SoleModels.alphabet(model, false)))
-        #@show all_atoms
     end
 
     num_all_atoms = length(all_atoms)

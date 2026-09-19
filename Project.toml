@@ -11,7 +11,6 @@ CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 CategoricalArrays = "324d7699-5711-5eae-9e2f-1d82baa6b597"
 Clustering = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
 ComplexityMeasures = "ab4b797d-85ee-42ba-b621-05d793b346a2"
-ConcurrentCollections = "5060bff5-0b44-40c5-b522-fcd3ca5cecdd"
 CondaPkg = "992eb4ea-22a4-4c89-a5bb-47a3300528ab"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
@@ -58,7 +57,6 @@ CSV = "0.10"
 CategoricalArrays = "0.10, 1"
 Clustering = "0.15"
 ComplexityMeasures = "3"
-ConcurrentCollections = "0.1"
 CondaPkg = "0.2"
 DataFrames = "1"
 DataStructures = "0.18, 0.19"
@@ -94,9 +92,11 @@ ThreadsX = "0.1"
 julia = "1"
 
 [extras]
+InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
+JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 MLJBase = "a7f614a8-145f-11e9-1d2a-a57a1082229d"
 RCall = "6f49c342-dc21-5d91-9882-a32aef131414"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["MLJBase", "RCall", "Test"]
+test = ["InteractiveUtils", "JET", "MLJBase", "RCall", "Test"]
