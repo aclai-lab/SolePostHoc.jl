@@ -148,6 +148,8 @@ struct LumenShannonConfig{R<:Unsigned,T<:AbstractFloat,MS,S} <: AbstractConfig
     end
 end
 
+@inline minimization_scheme(::LumenShannonConfig{R,T,MS}) where {R,T,MS} = MS
+
 # TODO make a Base.show
 
 # function get_universe_conditions(model)

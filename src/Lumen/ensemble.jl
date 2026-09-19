@@ -39,8 +39,10 @@ isempty_atom(a::LumenAtom) = a.op == 0xff && iszero(a.feat)
 @inline featidxs(atoms::Vector{LumenAtom{R,T}}, feat::R) where {R,T} =
     findall(a -> a.feat == feat, atoms)
 
-const LumenCube{R,T} = 
-    SubArray{LumenAtom{R,T},1,Vector{LumenAtom{R,T}},Tuple{UnitRange{Int}},true}
+const LumenSlice{R,T} = SubArray{
+    LumenAtom{R,T},1,
+    Vector{LumenAtom{R,T}},Tuple{Base.Slice{Base.OneTo{Int64}}},true
+}
 
 # ---------------------------------------------------------------------------- #
 #                                 Lumen Node                                   #

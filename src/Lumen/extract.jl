@@ -5,7 +5,7 @@
 # the new fill position. `out` must already be long enough (`count_atoms`);
 # no growth happens here, so the caller can hand out views into `out`.
 function gather_atoms(
-    out::Vector{LumenAtom{R,T}},
+    out::LumenSlice{R,T},
     pos::Int,
     thrs::ThresholdSpace{R,T},
     levels::AbstractVector{R},
@@ -48,9 +48,8 @@ function _leaf_extract(
     nrows = min(Int(config.M), total)
 
     tbl = Matrix{T}(undef, nrows, nfeats) # apply input, one chunk at a time
-    nat = Vector{Int}(undef, nrows)       # atoms produced by row k of the chunk
-    preds = Vector{R}(undef, total)       # class of every row
-    ncubes_c = zeros(Int, nclasses)
+    nat = Vector{Int}(undef, nrows) # atoms produced by row k of the chunk
+    preds = Vector{R}(undef, total) # class of every row
     natoms_c = zeros(Int, nclasses)
 
     # pass 1: classify every row chunk by chunk and size the per-class output
@@ -76,7 +75,6 @@ function _leaf_extract(
         @inbounds for k in 1:this_chunk
             c = chunk_preds[k]
             preds[i0 + k - 1] = c
-            ncubes_c[c] += 1
             natoms_c[c] += nat[k]
         end
 
@@ -85,19 +83,16 @@ function _leaf_extract(
 
     # every buffer is allocated once, at its final size: no regrowth copies
     atoms = [Vector{LumenAtom{R,T}}(undef, natoms_c[c]) for c in 1:nclasses]
-    raw = [Vector{LumenCube{R,T}}(undef, ncubes_c[c]) for c in 1:nclasses]
-    ccur = zeros(Int, nclasses)   # fill cursor into raw[c]
-    acur = zeros(Int, nclasses)   # fill cursor into atoms[c]
+    acur = zeros(Int, nclasses) # fill cursor into atoms[c]
 
     # pass 2: rewind the odometer and fill by cursor, straight from its digits
     cur = copy(lo)
     @inbounds for i in 1:total
         c = preds[i]
-        buf = atoms[c]
+        buf = view(atoms[c], :)
         a0 = acur[c]
         a1 = gather_atoms(buf, a0, thrs, cur)
         acur[c] = a1
-        raw[c][ccur[c] += 1] = view(buf, a0+1:a1)
 
         f = 1
         while f ≤ nfeats
@@ -111,7 +106,8 @@ function _leaf_extract(
         end
     end
 
-    raw
+    unique!.(atoms)
+
     # terms = Vector{Vector{LumenAtom}}(undef, nclasses)
     # classes are independent; `run_minimization` shells out to an external
     # binary, so this is both thread-safe and mostly I/O-bound.

@@ -2,49 +2,9 @@
 @inline evalst(::Balanced) = 0x02
 @inline evalst(::Sop) = 0x03
 
-# # ---------------------------------------------------------------------------- #
-# #                                formula to pla                                #
-# # ---------------------------------------------------------------------------- #
-# """
-#     formula_to_pla(
-#         formula::SoleLogics.Formula;
-#         allow_scalar_range_conditions::Bool=false, kwargs...
-#     ) -> (String, Vector{VariableValue})
-#     formula_to_pla(
-#         dnfformula::SoleLogics.DNF;
-#         allow_scalar_range_conditions::Bool=false, kwargs...
-#     ) -> (String, Vector{VariableValue})
-#     formula_to_pla(
-#         atoms::Vector{Vector{SoleLogics.Atom}};
-#         encoding::Symbol=:univariate,
-#         allow_scalar_range_conditions::Bool=false,
-#         offset::Union{Nothing,Vector{Vector{SoleLogics.Atom}}}=nothing,
-#         kwargs...
-#     ) -> (String, Vector{VariableValue})
-
-# Convert a logical formula into Programmable Logic Array (PLA) format.
-# See original module docstring for the full step-by-step description --
-# unchanged except for the NEW `offset` keyword documented below.
-
-# # `offset` (NEW, only on the `atoms::Vector{Vector{Atom}}` method)
-# If `nothing` (default): behavior IDENTICAL to before -- implicit `.type f`
-# PLA, Espresso computes the absolute complement. No change for any existing
-# caller that doesn't pass `offset`.
-
-# If given: `offset` is, like `atoms`, a `Vector{Vector{Atom}}` -- one cube
-# per row -- but represents cubes CONFIRMED OFF (not "unknown"). It is
-# encoded with `_encode_disjunct` using EXACTLY the same condition space
-# (`conditions`, `includes`, `excludes`, `feat_condindxss`) as the ON-set, so
-# PLA columns stay aligned between the two halves, then its rows are emitted
-# with output `"0"` instead of `"1"`. The `.type fr` header line is also
-# emitted, which is what tells Espresso "everything else is don't-care, not
-# complement".
-
-# Conditions that appear ONLY in `offset` (not in `atoms`) are still folded
-# into the global condition space (same mechanism already used for
-# `universe_conditions`), otherwise an off-set cube mentioning a
-# feature/threshold never seen in the on-set couldn't be encoded correctly.
-# """
+# ---------------------------------------------------------------------------- #
+#                                formula to pla                                #
+# ---------------------------------------------------------------------------- #
 # function formula_to_pla(
 #     dnfformula::SL.DNF;
 #     allow_scalar_range_conditions::Bool=false,
@@ -60,15 +20,9 @@
 #     formula_to_pla(atoms_per_disjunct; allow_scalar_range_conditions, kwargs...)
 # end
 
-# function formula_to_pla(
-#     atoms::Vector{Vector{SL.Atom}};
-#     encoding::Symbol=:univariate,
-#     allow_scalar_range_conditions::Bool=false,
-#     removewhitespaces::Bool=true,
-#     pretty_op::Bool=false,
-#     universe_conditions::Union{Nothing,Vector{<:SD.AbstractScalarCondition}}=nothing,
-#     offset::Union{Nothing,Vector{Vector{SL.Atom}}}=nothing,
-# )
+function formula_to_pla(
+    cube::LumenSlice{R,T}
+) where {R<:Unsigned,T<:AbstractFloat}
 #     @assert encoding in [:univariate, :multivariate]
 
 #     has_offset = !isnothing(offset) && !isempty(offset)
@@ -175,7 +129,7 @@
 #     )
 
 #     return pla_content, fnames
-# end
+end
 
 # # ---------------------------------------------------------------------------- #
 # #                                pla to formula                                #
@@ -235,15 +189,12 @@
 # ---------------------------------------------------------------------------- #
 function abc_minimize(
     config::LumenShannonConfig{R,T},
-    cube::LumenCube{R,T}
+    binary::String,
+    cube::LumenSlice{R,T},
 ) where {R<:Unsigned,T<:AbstractFloat}
-    # # convert formula to pla string format
-    # pla_string, fnames = formula_to_pla(
-    #     atoms;
-    #     allow_scalar_range_conditions,
-    #     removewhitespaces=true,
-    #     pretty_op=false
-    # )
+    # convert formula to pla string format
+    # pla_string, fnames = formula_to_pla(cube)
+    formula_to_pla(cube)
 
     # # create temporary files for input/output
     # mktempdir() do tmp
@@ -287,12 +238,13 @@ end
 function run_minimization(
     ::Type{Abc},
     config::LumenShannonConfig{R,T},
-    cube::LumenCube{R,T}
+    cube::LumenSlice{R,T}
 ) where {R<:Unsigned,T<:AbstractFloat}
     ABC_jll.abc() do binary
         minimized_formula = abc_minimize(
-            cube,
             config,
+            binary,
+            cube
         )
     #     return _as_terms(refine_dnf(minimized_formula))
     end

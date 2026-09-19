@@ -50,7 +50,7 @@ export Univariate, Multivariate
 # ---------------------------------------------------------------------------- #
 #                                   include                                    #
 # ---------------------------------------------------------------------------- #
-export LumenShannonConfig
+export LumenShannonConfig, minimization_scheme
 include("config.jl")
 export LumenEnsemble
 include("ensemble.jl")
@@ -59,6 +59,7 @@ include("thresholds.jl")
 export gather_atoms
 include("extract.jl")
 # include("pla.jl")
+export run_minimization
 include("minimize.jl")
 export lumen_shannon, assign
 include("lumen_shannon.jl")
