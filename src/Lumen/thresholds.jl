@@ -31,21 +31,20 @@ function ThresholdSpace(
     atoms = get_atoms(ensemble)
     depth < 1.0 && (atoms = _take_first_percentage(atoms, depth)) # TODO check it!
 
-    op_families = zeros(UInt8, length(feat_idxs))
-    @inbounds for a in atoms
-        fam = a.op ≤ 0x02 ? 0x01 : 0x02
-        prev = op_families[a.feat]
-        prev === 0x00 ? (op_families[a.feat] = fam) :
-        prev === fam || throw(ArgumentError(
-            "Feature $(a.feat) mixes '<'/'≤' with '>'/'≥' operators; " *
-            "a single op family is required."))
-    end
-
-    per_feat = [sort!(
-        get_thresholds(atoms, f), rev=op_families[f] === 0x01 ? true : false
-    ) for f in feat_idxs]
+    # Normalize every split to the '<' partition, as classic Lumen's
+    # `_normalize_atom` does:  x ≥ t  splits ℝ exactly like  x < t;
+    #   x > t  ⟺  x ≥ nextfloat(t)   and   x ≤ t  ⟺  x < nextfloat(t).
+    # After this there is a single family: thresholds descending, boundary
+    # sample `prevfloat(min)`, and `gather_atoms` emits '<' / '≥' only.
+    op_families = fill(evalop(<), length(feat_idxs))
+    normthr(a) = (a.op == evalop(>) || a.op == evalop(≤)) ? nextfloat(a.thr) : a.thr
+    per_feat = [
+        unique!(sort!([normthr(a) for a in atoms if a.feat == f], rev=true))
+        for f in feat_idxs]
     nper_feat = length.(per_feat)
-    thrs_boundary = _thrs_boundary(per_feat, op_families)
+    # a feature the model never splits on has one level and no atoms; its
+    # sample value is irrelevant, so any finite number will do.
+    thrs_boundary = [isempty(t) ? zero(T) : _thrs_boundary(t, 0x01) for t in per_feat]
     thrs = reduce(
         vcat, ([t; b] for (t, b) in zip(per_feat, thrs_boundary)); init=T[])
     # added onr(R) to take into account the last added boundaty value

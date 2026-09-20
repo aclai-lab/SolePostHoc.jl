@@ -21,7 +21,7 @@ function gather_atoms(
         thr_t = thrs.thrs[off + t]
         thr_p = t > 1 ? thrs.thrs[off + t - one(R)] : thr_t
 
-        if thrs.op_families[j] === 0x01
+        if thrs.op_families[j] === evalop(<)
             # '<' family, thresholds descending: region t = [thr_t, thr_{t-1})
             t > 1    && (out[pos += 1] = LumenAtom{R,T}(feat, thr_p, evalop(<)))
             t < nlev && (out[pos += 1] = LumenAtom{R,T}(feat, thr_t, evalop(≥)))
@@ -35,6 +35,7 @@ function gather_atoms(
     return pos
 end
 
+# TODO PROVA A VEDERE CHE SUCCEDE SU ELIMINI ENTRAMBI I DUALI,NON UNO SOLO
 # drop atoms whose dual (same feat/thr, complementary op) was already kept.
 function removeduals!(atoms::Vector{LumenAtom{R,T}}) where {R,T}
     seen = Set{LumenAtom{R,T}}()
@@ -66,6 +67,7 @@ function _leaf_extract(
     nat = Vector{Int}(undef, nrows) # atoms produced by row k of the chunk
     preds = Vector{R}(undef, total) # class of every row
     natoms_c = zeros(Int, nclasses)
+    ncubes_c = zeros(Int, nclasses)
 
     # pass 1: classify every row chunk by chunk and size the per-class output
     i0 = 1
@@ -91,6 +93,7 @@ function _leaf_extract(
             c = chunk_preds[k]
             preds[i0 + k - 1] = c
             natoms_c[c] += nat[k]
+            ncubes_c[c] += 1
         end
 
         i0 += this_chunk
@@ -99,6 +102,8 @@ function _leaf_extract(
     # every buffer is allocated once, at its final size: no regrowth copies
     atoms = [Vector{LumenAtom{R,T}}(undef, natoms_c[c]) for c in 1:nclasses]
     acur = zeros(Int, nclasses) # fill cursor into atoms[c]
+    cube = [Vector{LumenCube{R,T}}(undef, ncubes_c[c]) for c in 1:nclasses]
+    ccur = zeros(Int, nclasses)   # fill cursor into cube[c]
 
     # pass 2: rewind the odometer and fill by cursor, straight from its digits
     cur = copy(lo)
@@ -108,6 +113,7 @@ function _leaf_extract(
         a0 = acur[c]
         a1 = gather_atoms(buf, a0, thrs, cur)
         acur[c] = a1
+        cube[c][ccur[c] += 1] = view(buf, a0+1:a1)
 
         f = 1
         while f ≤ nfeats
@@ -121,9 +127,7 @@ function _leaf_extract(
         end
     end
 
-    removeduals!.(sort!.(unique!.(atoms)))
-
-    @show atoms
+    return removeduals!.(sort!.(unique!.(atoms))), cube
 
     # terms = Vector{Vector{LumenAtom}}(undef, nclasses)
     # classes are independent; `run_minimization` shells out to an external

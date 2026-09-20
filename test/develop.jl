@@ -62,6 +62,7 @@ cube = Lumen._leaf_extract(config, thrs, ensemble, lo, hi)
 # 1.813 ms (823 allocations: 1.42 MiB) # get rid of cube
 # 2.555 ms (857 allocations: 1.43 MiB)
 # 2.442 ms (863 allocations: 1.43 MiB) # unique and sort
+# 2.604 ms (743 allocations: 1.96 MiB) # output both atoms than cube
 
 # ---------------------------------------------------------------------------- #
 #                                    pla                                       #
@@ -75,26 +76,22 @@ classnames, class_idxs =
     assign(R, unique!(SoleModels.info(model, :supporting_labels)), true)
 ensemble = LumenEnsemble(config, model);
 thrs = ThresholdSpace(ensemble, feat_idxs, class_idxs, config.depth);
-atoms = Lumen.lumen_shannon(config, model);
+atoms, cube = Lumen.lumen_shannon(config, model);
 
-minimized = run_minimization(
-        minimization_scheme(config), config, atoms[2])
+minimized = run_minimization(minimization_scheme(config), config, atoms[2], cube[2], feat_idxs)
+
+
 
 @btime begin
     for c in $class_idxs
         minimized = run_minimization(
-            minimization_scheme($config), $config, $atoms[c])
+            minimization_scheme($config), $config, $atoms[c], $cube[c])
     end
 end
+
 # 22.686 μs (78 allocations: 8.53 KiB)
+# 21.382 μs (84 allocations: 8.81 KiB) # iobuffer
+# 21.485 μs (93 allocations: 9.19 KiB) # header
+# 44.808 μs (846 allocations: 49.38 KiB) reintroduced cube
 
 
-function removeduals(values::Vector)
-    newvalues = similar(values, (0,))
-    for cond in values
-        if !SoleData.hasdual(cond) || !(SoleData.dual(cond) in newvalues)
-            push!(newvalues, cond)
-        end
-    end
-    newvalues
-end

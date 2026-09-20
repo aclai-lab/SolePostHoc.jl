@@ -3,7 +3,13 @@
 @inline evalop(::typeof(≥)) = 0x03
 @inline evalop(::typeof(≤)) = 0x04
 
-@inline function evalop(op::UInt8, x::T, thr::T)::Bool where {T<:AbstractFloat}
+function evalop(op::UInt8)
+    op == 0x01 ? '<' :
+    op == 0x02 ? '>' :
+    op == 0x03 ? '≥' : '≤'
+end
+
+function evalop(op::UInt8, x::T, thr::T)::Bool where {T<:AbstractFloat}
     op == 0x01 ? (x < thr) :
     op == 0x02 ? (x > thr) :
     op == 0x03 ? (x ≥ thr) : (x ≤ thr)
@@ -46,6 +52,8 @@ LumenAtom() = LumenAtom{UInt32,Float64}()
 
 isempty_atom(a::LumenAtom) = a.op == 0xff && iszero(a.feat)
 
+@inline get_features(atoms::Vector{LumenAtom{R,T}}) where {R,T} =
+    [a.feat for a in atoms]
 @inline get_thresholds(atoms::Vector{LumenAtom{R,T}}) where {R,T} =
     [a.thr for a in atoms]
 @inline get_thresholds(atoms::Vector{LumenAtom{R,T}}, id::R) where {R,T} =
@@ -62,6 +70,14 @@ const LumenSlice{R,T} = SubArray{
     LumenAtom{R,T},1,
     Vector{LumenAtom{R,T}},Tuple{Base.Slice{Base.OneTo{Int64}}},true
 }
+const LumenCube{R,T} = 
+    SubArray{LumenAtom{R,T},1,Vector{LumenAtom{R,T}},Tuple{UnitRange{Int}},true}
+
+const LumenCubeVec{R,T} =
+    Vector{
+        SubArray{LumenAtom{R,T},1,
+        Vector{LumenAtom{R,T}},Tuple{UnitRange{Int64}},true}
+    }
 
 # ---------------------------------------------------------------------------- #
 #                                 Lumen Node                                   #

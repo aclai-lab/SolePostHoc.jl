@@ -2,6 +2,42 @@
 @inline evalst(::Balanced) = 0x02
 @inline evalst(::Sop) = 0x03
 
+# function _write_rows(
+#     io::IO, sp::ThresholdSpace, bs::BoxSet, L::PlaLayout,
+#     row::Vector{UInt8}, outchar::UInt8, encoding::Symbol
+# )
+#     nfeat = nfeatures(sp)
+#     nc = ncolumns(L)
+#     @inbounds for i in 1:bs.n
+#         lo = boxlo(bs, i); hi = boxhi(bs, i)
+
+#         if encoding === :tight
+#             for c in 1:nc
+#                 j = L.colfeat[c]
+#                 k = L.colthr[c]
+#                 row[c] = k <= lo[j] - Int32(1) ? UInt8('1') :
+#                          k >= hi[j]           ? UInt8('0') : UInt8('-')
+#             end
+#         else
+#             fill!(row, UInt8('-'))
+#             for j in 1:nfeat
+#                 if lo[j] > 1
+#                     c = _column(L, j, lo[j] - Int32(1))
+#                     c != 0 && (row[c] = UInt8('1'))
+#                 end
+#                 if hi[j] <= Int32(nthresholds(sp, j))
+#                     c = _column(L, j, hi[j])
+#                     c != 0 && (row[c] = UInt8('0'))
+#                 end
+#             end
+#         end
+
+#         write(io, row)
+#         write(io, UInt8(' '), outchar, UInt8('\n'))
+#     end
+#     return nothing
+# end
+
 # ---------------------------------------------------------------------------- #
 #                                formula to pla                                #
 # ---------------------------------------------------------------------------- #
@@ -20,9 +56,69 @@
 #     formula_to_pla(atoms_per_disjunct; allow_scalar_range_conditions, kwargs...)
 # end
 
+function get_includes(a::LumenAtom, b::LumenAtom)
+    (a.feat == b.feat) || return false
+    return true
+    # return issubset(tointervalset(b), tointervalset(a))
+end
+
+# function get_excludes(a::LumenAtom, b::LumenAtom)
+#     (feature(a) == feature(b)) || return false
+#     # @show tointervalset(a)
+#     # @show tointervalset(b)
+#     return isdisjoint(tointervalset(a), tointervalset(b))
+# end
+
 function formula_to_pla(
-    atoms::Vector{LumenAtom{R,T}}
+    buf::IOBuffer,
+    atoms::Vector{LumenAtom{R,T}},
+    cube::LumenCubeVec{R,T},
+    feat_idxs::Vector{R}
 ) where {R<:Unsigned,T<:AbstractFloat}
+    grouped = Dict(
+    f => filter(a -> a.feat == f, atoms)
+        for f in unique(getfield.(atoms, :feat)))
+
+    natoms = length(atoms)
+    nrows = length(cube)
+    ngrp = length(grouped)
+
+    print(buf, ".i ", natoms, "\n.o 1\n.ilb ")
+
+    # for a in atoms
+    #     print(buf, " [", a.feat, "]", evalop(a.op), a.thr)
+    # end
+
+    for i in 1:natoms
+        print(buf, 'x', i, ' ')
+    end
+
+    print(buf, "\n.ob formula_output\n")
+    print(buf, ".p ", nrows, "\n")
+
+    # row = Vector{UInt8}(undef, natoms)
+    # _write_rows(buf, sp, bs, L, row, UInt8('1'), encoding)
+    # isnothing(offset_bs) || _write_rows(buf, sp, offset_bs, L, row, UInt8('0'), encoding)
+    # print(buf, ".e\n")
+
+    @show ngrp
+    includes = Vector{BitMatrix}(undef, ngrp)
+    excludes = Vector{BitMatrix}(undef, ngrp)
+    @inbounds for (i, g) in enumerate(grouped)
+        @show typeof(g)
+        includes[i] = BitMatrix([
+            get_includes(cond_i, cond_j) for
+            cond_i in g, cond_j in g
+        ])
+        # excludes[i] = BitMatrix([
+        #     get_excludes(conditions[cond_j], conditions[cond_i]) for
+        #     cond_i in g, cond_j in g
+        # ])
+    end
+
+    @show String(take!(buf))
+    return nothing
+
 #     fnames = unique(SD.feature.(conditions))
 #     nfnames = length(fnames)
 
@@ -167,10 +263,16 @@ function abc_minimize(
     config::LumenShannonConfig{R,T},
     binary::String,
     atoms::Vector{LumenAtom{R,T}},
+    cube::LumenCubeVec{R,T},
+    feat_idxs::Vector{R}
 ) where {R<:Unsigned,T<:AbstractFloat}
+
+    # buf = IOBuffer(; sizehint = 64 + (ncolumns(L) + 4) * (nrows + 4))
+    buf = IOBuffer()
+
     # convert formula to pla string format
     # pla_string, fnames = formula_to_pla(atoms)
-    formula_to_pla(atoms)
+    formula_to_pla(buf, atoms, cube, feat_idxs)
 
     # # create temporary files for input/output
     # mktempdir() do tmp
@@ -214,13 +316,17 @@ end
 function run_minimization(
     ::Type{Abc},
     config::LumenShannonConfig{R,T},
-    atoms::Vector{LumenAtom{R,T}}
+    atoms::Vector{LumenAtom{R,T}},
+    cube::LumenCubeVec{R,T},
+    feat_idxs::Vector{R}
 ) where {R<:Unsigned,T<:AbstractFloat}
     ABC_jll.abc() do binary
         minimized_formula = abc_minimize(
             config,
             binary,
-            atoms
+            atoms,
+            cube,
+            feat_idxs
         )
     #     return _as_terms(refine_dnf(minimized_formula))
     end
