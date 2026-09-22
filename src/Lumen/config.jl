@@ -122,6 +122,8 @@ struct LumenShannonConfig{R<:Unsigned,T<:AbstractFloat,MS,S} <: AbstractConfig
         #     # :quine_naive => setup_quine()
         # )
 
+        0.0 < depth ≤ 1.0 || throw(ArgumentError(
+            "depth must be in (0.0, 1.0], got $depth"))
         M ≥ 1 || throw(ArgumentError("M must be positive, got $M"))
 
         # binary = valid_schemes[minimization_scheme]

@@ -56,12 +56,13 @@ export LumenEnsemble
 include("ensemble.jl")
 export ThresholdSpace
 include("thresholds.jl")
+export LumenDNF, PlaLayout, Minimizer
+export write_pla, read_pla, run_minimization, refine!, compact!
+include("minimize.jl")
 export gather_atoms
 include("extract.jl")
-# include("pla.jl")
-export run_minimization
-include("minimize.jl")
-export lumen_shannon, assign
+# export lumen_shannon, assign, decision_set, leafclasses
+export lumen_shannon, assign, decision_set
 include("lumen_shannon.jl")
 
 end

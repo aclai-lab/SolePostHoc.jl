@@ -145,8 +145,8 @@ end
 # end
 
 # the plain label behind an outcome (a categorical value unwraps to its level)
-# _label(x::CategoricalValue) = CategoricalArrays.unwrap(x)
-# _label(x) = x
+_label(x::CategoricalValue) = CategoricalArrays.unwrap(x)
+_label(x) = x
 
 # function LumenEnsemble(
 #     ::LumenShannonConfig{R,T},
@@ -322,13 +322,13 @@ end
 # ---------------------------------------------------------------------------- #
 #                                   apply                                      #
 # ---------------------------------------------------------------------------- #
-function apply(
-    f::LumenEnsemble{R,T},
-    d::SubArray{T},
-    nclasses::Integer
-) where {R<:Unsigned,T<:AbstractFloat}
-    apply!(Vector{R}(undef, size(d, 1)), f, d, nclasses)
-end
+# function apply(
+#     f::LumenEnsemble{R,T},
+#     d::SubArray{T},
+#     nclasses::Integer
+# ) where {R<:Unsigned,T<:AbstractFloat}
+#     apply!(Vector{R}(undef, size(d, 1)), f, d, nclasses)
+# end
 
 # in-place form: `preds` must hold at least `size(d, 1)` entries
 function apply!(
@@ -355,7 +355,6 @@ function apply!(
                 node = f.nodes[r]
             end
             # counts[node.leaf] += weights[k]
-            counts[node.leaf] += 1
         end
 
         best = 1
@@ -371,6 +370,54 @@ function apply!(
         # the one SoleXplorer sets): on a tie, `first(sort(keys(countmap)))`,
         # i.e. the lowest class (in `leafclasses` order) that received at
         # least one vote, even when that class is not among the tied maxima.
+        if tie
+            best = 1
+            @inbounds while iszero(counts[best])
+                best += 1
+            end
+        end
+        preds[i] = best
+    end
+
+    return preds
+end
+
+function apply(
+    f::LumenEnsemble{R,T},
+    d::SubArray{T},
+    nclasses::Integer
+) where {R<:Unsigned,T<:AbstractFloat}
+    n = size(d, 1)
+    preds = Vector{R}(undef, n)
+    counts = Vector{R}(undef, nclasses)
+
+    @inbounds for i in 1:n
+        fill!(counts, zero(R))
+
+        for r in f.roots
+            node = f.nodes[r]
+            while !isleaf(node)
+                a = f.atoms[r]
+                r = evalop(a.op, d[i, a.feat], a.thr) ?
+                    node.left : node.right
+                node = f.nodes[r]
+            end
+            counts[node.leaf] += one(R)
+        end
+
+        best = 1
+        tie = false
+        @inbounds for j in 2:nclasses
+            if counts[j] > counts[best]
+                best, tie = j, false
+            elseif counts[j] == counts[best]
+                tie = true
+            end
+        end
+        # SoleModels parity rule (DecisionTreeExt `:alphanumeric` tiebreaker,
+        # the one SoleXplorer sets): on a tie, `first(sort(keys(countmap)))`,
+        # i.e. the lowest-level class that received at least one vote,
+        # even when that class is not among the tied maxima.
         if tie
             best = 1
             @inbounds while iszero(counts[best])

@@ -22,7 +22,6 @@ struct LeafScratch{R<:Unsigned,T<:AbstractFloat}
     alphabet::Vector{Vector{LumenAtom{R,T}}} # per class: distinct atoms
     cur::Vector{R}
     widths::Vector{R}
-    total::Int
 end
 
 function LeafScratch(
@@ -32,28 +31,16 @@ function LeafScratch(
     nfeats = length(thrs.feat_idxs)
     nclasses = length(thrs.class_idxs)
 
-    # a leaf never holds more points than the whole space: cap the row
-    # buffers at prod(nlev), saturating at M so huge spaces cannot overflow
-    total = prod(thrs.nlev)
-    nrows = Int(min(config.M, total))
-
     return LeafScratch{R,T}(
-        Matrix{T}(undef, nrows, nfeats),
-        Vector{Int}(undef, nrows),
-        Vector{R}(undef, nrows),
-        # zeros(Int, nclasses),
-        # zeros(Int, nclasses),
-        # zeros(Int, nclasses),
-        # zeros(Int, nclasses),
-        Vector{Int}(undef, nclasses),
-        Vector{Int}(undef, nclasses),
-        Vector{Int}(undef, nclasses),
-        Vector{Int}(undef, nclasses),
+        Matrix{T}(undef, config.M, nfeats),
+        Vector{Int}(undef, config.M),
+        Vector{R}(undef, config.M),
+        zeros(Int, nclasses), zeros(Int, nclasses),
+        zeros(Int, nclasses), zeros(Int, nclasses),
         [LumenDNF{R,T}() for _ in 1:nclasses],
         [LumenAtom{R,T}[] for _ in 1:nclasses],
         Vector{R}(undef, nfeats),
         Vector{R}(undef, nfeats),
-        nrows
     )
 end
 
@@ -131,9 +118,9 @@ function _leaf_extract!(
     # total = prod(widths)
     # nrows = min(Int(config.M), total)
 
-    # widths = ws.widths
-    ws.widths .= hi .- lo .+ one(R)
-    # total = ws.total
+    widths = ws.widths
+    widths .= hi .- lo .+ one(R)
+    total = prod(widths)
 
     # tbl = Matrix{T}(undef, nrows, nfeats) # apply input, one chunk at a time
     # nat = Vector{Int}(undef, nrows) # atoms produced by row k of the chunk
@@ -141,36 +128,30 @@ function _leaf_extract!(
     # natoms_c = zeros(Int, nclasses)
     # ncubes_c = zeros(Int, nclasses)
 
-    # tbl = ws.tbl; nat = ws.nat; preds = ws.preds
-    # natoms_c = fill!(ws.natoms_c, 0)
-    # ncubes_c = fill!(ws.ncubes_c, 0)
-
-    # pass 0: reset the counters
-    fill!(ws.natoms_c, 0)
-    fill!(ws.ncubes_c, 0)
-    fill!(ws.acur, 0)
-    fill!(ws.ccur, 0)
+    tbl = ws.tbl; nat = ws.nat; preds = ws.preds
+    natoms_c = fill!(ws.natoms_c, 0)
+    ncubes_c = fill!(ws.ncubes_c, 0)
 
     # pass 1: classify every row and size the per-class output
-    @inbounds for k in 1:ws.total
+    @inbounds for k in 1:total
         r = k - 1
         n = 0
         for f in 1:nfeats
-            off = r % ws.widths[f]
-            r = r ÷ ws.widths[f]
+            off = r % widths[f]
+            r = r ÷ widths[f]
             t = R(lo[f] + off)
-            ws.tbl[k, f] = thrs.thrs[thrs.thrs_offset[f] + t - one(R)]
+            tbl[k, f] = thrs.thrs[thrs.thrs_offset[f] + t - one(R)]
             n += (t < thrs.nlev[f]) + (t > one(R))
         end
-        ws.nat[k] = n
+        nat[k] = n
     end
 
-    apply!(ws.preds, ensemble, view(ws.tbl, 1:ws.total, :), nclasses)
+    apply!(preds, ensemble, view(tbl, 1:total, :), nclasses)
 
-    @inbounds for k in 1:ws.total
-        c = ws.preds[k]
-        ws.natoms_c[c] += ws.nat[k]
-        ws.ncubes_c[c] += 1
+    @inbounds for k in 1:total
+        c = preds[k]
+        natoms_c[c] += nat[k]
+        ncubes_c[c] += 1
     end
 
     # per-class buffers keep their capacity across leaves: a resize! here
@@ -178,22 +159,22 @@ function _leaf_extract!(
     # offset pair into the class' flat atom pool, not a 40-byte view.
     @inbounds for c in 1:nclasses
         d = ws.cube[c]
-        resize!(d.atoms, ws.natoms_c[c])
-        resize!(d.offsets, ws.ncubes_c[c] + 1)
+        resize!(d.atoms, natoms_c[c])
+        resize!(d.offsets, ncubes_c[c] + 1)
         d.offsets[1] = 0
     end
-    # acur = fill!(ws.acur, 0)
-    # ccur = fill!(ws.ccur, 0)
+    acur = fill!(ws.acur, 0)
+    ccur = fill!(ws.ccur, 0)
 
     # pass 2: rewind the odometer and fill by cursor, straight from its digits
     cur = copyto!(ws.cur, lo)
-    @inbounds for i in 1:ws.total
-        c = ws.preds[i]
+    @inbounds for i in 1:total
+        c = preds[i]
         d = ws.cube[c]
-        a0 = ws.acur[c]
+        a0 = acur[c]
         a1 = gather_atoms(view(d.atoms, :), a0, thrs, cur)
-        ws.acur[c] = a1
-        d.offsets[(ws.ccur[c] += 1) + 1] = a1
+        acur[c] = a1
+        d.offsets[(ccur[c] += 1) + 1] = a1
 
         f = 1
         while f ≤ nfeats
@@ -249,7 +230,7 @@ _leaf_extract(
 # backend is an external process, so they run in parallel; each thread only
 # ever touches its own `out[c]`.
 function _leaf_minimize!(
-    config::LumenShannonConfig{R,T,MS},
+    config::LumenShannonConfig{R,T},
     out::Vector{LumenDNF{R,T}},
     ws::LeafScratch{R,T},
     # m::Minimizer,
@@ -257,12 +238,12 @@ function _leaf_minimize!(
     ensemble::LumenEnsemble{R,T},
     lo::Vector{R},
     hi::Vector{R},
-) where {R<:Unsigned,T<:AbstractFloat,MS}
+) where {R<:Unsigned,T<:AbstractFloat}
     alphabet, cube = _leaf_extract!(config, ws, thrs, ensemble, lo, hi)
-    Threads.@threads for c in eachindex(out)
-        # append!(out[c], run_minimization(m, alphabet[c], cube[c]))
-        append!(out[c], run_minimization(MS, config, alphabet[c], cube[c]))
-    end
+    # Threads.@threads for c in eachindex(out)
+    #     # append!(out[c], run_minimization(m, alphabet[c], cube[c]))
+    #     append!(out[c], run_minimization(alphabet[c], cube[c]))
+    # end
     return out
 end
 

@@ -241,10 +241,13 @@ function lumen_shannon(
     hi = thrs.nlev
     lo = ones(R, length(hi))
 
-    terms = _extract(config, thrs, ensemble, lo, hi)
-    # finally
-    #     close(m)
-    # end
+    # terms = _extract(config, thrs, ensemble, lo, hi)
+
+    ### DEVELOP
+    out = [LumenDNF{R,T}() for _ in thrs.class_idxs]
+    ws = LeafScratch(config, thrs)
+    _extract!(out, ws, config, thrs, ensemble, lo, hi)
+    # _leaf_extract!(out, ws, config, thrs, ensemble, lo, hi)
 
     # leaves were minimised in isolation: a term of one leaf may be contained
     # in, or adjacent to, a term of a neighbouring leaf. Dropping the former
