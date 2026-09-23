@@ -145,8 +145,8 @@ end
 # end
 
 # the plain label behind an outcome (a categorical value unwraps to its level)
-# _label(x::CategoricalValue) = CategoricalArrays.unwrap(x)
-# _label(x) = x
+_label(x::CategoricalValue) = CategoricalArrays.unwrap(x)
+_label(x) = x
 
 # function LumenEnsemble(
 #     ::LumenShannonConfig{R,T},

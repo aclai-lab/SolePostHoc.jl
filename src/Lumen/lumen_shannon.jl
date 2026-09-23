@@ -250,9 +250,9 @@ function lumen_shannon(
     # in, or adjacent to, a term of a neighbouring leaf. Dropping the former
     # and merging the latter never changes coverage; they are the only
     # cross-leaf compactions that are safe without re-minimising.
-    # foreach(compact!, terms)
+    foreach(compact!, terms)
 
-    # return decision_set(terms, featurenames, classnames, _ruleorder(model, classnames))
+    return decision_set(terms, featurenames, classnames, _ruleorder(model, classnames))
 end
 
 function lumen_shannon(
