@@ -11,11 +11,45 @@ using CategoricalArrays
 using DataFrames
 using IterTools
 
+using StatsBase: countmap
+
 using ABC_jll
 
-include("config.jl")
+# ---------------------------------------------------------------------------- #
+#                                    types                                     #
+# ---------------------------------------------------------------------------- #
+"""
+    AbstractConfig
 
-export lumen, LumenConfig, LumenResult
+Abstract base type for all LUMEN configuration structs.
+
+Concrete subtypes encapsulate the parameters needed to control a specific
+algorithm variant. Using a common supertype allows generic code to accept
+any configuration object without being tied to a particular implementation.
+
+See also: [`LumenConfig`](@ref)
+"""
+abstract type AbstractConfig end
+
+abstract type AbstractMinimization end
+
+struct Abc <: AbstractMinimization end
+struct MitEspresso <: AbstractMinimization end
+export Abc, MitEspresso
+
+include("dataset_utils.jl")
+include("config.jl")
+include("ensemble.jl")
+include("thresholds.jl")
+include("atoms.jl")
+include("extract.jl")
+
+include("super_minimizer.jl")
+include("lumen_shannon.jl")
+
+
+export lumen, LumenConfig, LumenResult, lumen_sequential, super_lumen, lumen_shannon
+
 
 const Operators = Union{typeof(<),typeof(>),typeof(≤),typeof(≥)}
 const Float = Union{Float32,Float64}
@@ -46,10 +80,12 @@ See also: [`setup_abc`](@ref), [`lumen`](@ref)
 """
 function setup_espresso()
     # auto setup espresso binary if not specified
+    # espressobinary = "/Users/perry/espresso/build/./espresso"  # default path for local build
+
     espressobinary = try
-        joinpath(SD.load(SD.MITESPRESSOLoader()), "espresso")
+       joinpath(SD.load(SD.MITESPRESSOLoader()), "espresso")
     catch e
-        error("Failed to setup espresso binary: $e")
+       error("Failed to setup espresso binary: $e")
     end
 
     # verify that binary exists and is executable
@@ -391,7 +427,8 @@ Inspects all atoms whose feature name matches `feat` and returns:
   the threshold encoding ambiguous.
 """
 function _feature_op_family(
-    atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
+    # atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
+    atoms::Vector{SL.Atom},
     feat::Symbol
 )
     feat_atoms = _atoms_for_feature(atoms, feat)
@@ -472,8 +509,8 @@ end
 #                                 depth utils                                  #
 # ---------------------------------------------------------------------------- #
 """
-    _extract_atoms_bfs_order(tree::SM.AbstractModel)
-        -> Vector{SL.Atom{SD.AbstractCondition}}
+    _extract_atoms_bfs_order(tree::SM.DecisionEnsemble)
+        -> Vector{SL.Atom{SD.ScalarCondition}}
 
 Traverse a decision-tree model in breadth-first order and return the antecedent
 atoms encountered at each `Branch` node.
@@ -482,27 +519,43 @@ The traversal visits left (positive) and right (negative) sub-trees in BFS order
 Only `SM.Branch` nodes contribute atoms; leaf nodes are silently skipped.
 
 # Arguments
-- `tree::SM.AbstractModel`: Root of the decision tree (or sub-tree) to traverse.
+- `tree::SM.DecisionEnsemble`: Root of the decision tree (or sub-tree) to traverse.
 
 # Returns
-- `Vector{SL.Atom{SD.AbstractCondition}}`: Atoms in BFS visitation order.
+- `Vector{SL.Atom{SD.ScalarCondition}}`: Atoms in BFS visitation order, with a
+  CONCRETE element type (required so the result can be passed directly to
+  `Vector{<:Atom{<:ScalarCondition}}`-typed functions like
+  `_take_first_percentage` — see implementation note below).
 """
-function _extract_atoms_bfs_order(tree::SM.AbstractModel)
-    bfs_atoms = SL.Atom{SD.AbstractCondition}[]
-    queue = SM.AbstractModel[tree]
 
-    while !isempty(queue)
-        current = popfirst!(queue)
+function _extract_atoms_bfs_order(
+    model::SM.DecisionEnsemble{R,SM.Branch{S}}
+)::Vector{SM.Atom} where {R,S<:CategoricalValue}
+    bfs_atoms = SL.Atom{<:SD.ScalarCondition}[]
 
-        if current isa SM.Branch
-            push!(bfs_atoms, antecedent(current))
-            push!(queue, SM.posconsequent(current))
-            push!(queue, SM.negconsequent(current))
-        end
+    @inbounds for m in SM.models(model)
+        m isa SM.Branch && _extract_atoms_bfs_order!(bfs_atoms, m)
     end
 
-    return bfs_atoms
+    # narrow eltype at runtime: if all conditions share one concrete
+    # ScalarCondition{U,FT,M}, downstream code specializes on it
+    return identity.(unique!(bfs_atoms))
 end
+
+function _extract_atoms_bfs_order!(
+    bfs_atoms::Vector{<:SL.Atom},
+    model::SM.Branch{S}
+) where {S<:CategoricalValue}
+    push!(bfs_atoms, antecedent(model))
+    _extract_atoms_bfs_order!(bfs_atoms, SM.posconsequent(model))
+    _extract_atoms_bfs_order!(bfs_atoms, SM.negconsequent(model))
+    return nothing
+end
+
+@inline _extract_atoms_bfs_order!(
+    ::Vector{<:SL.Atom},
+    ::SM.LeafModel{S}
+) where {S<:CategoricalValue} = nothing
 
 """
     _take_first_percentage(
@@ -551,7 +604,7 @@ Filter `atoms` to only those whose feature name matches `feat`.
 - Sub-vector of atoms whose feature matches `feat`.
 """
 @inline _atoms_for_feature(
-    atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
+    atoms::Vector{SL.Atom},
     feat::Symbol
 ) = filter(a -> SM.featurename(get_feature(a)) == feat, atoms)
 
@@ -604,113 +657,168 @@ is not found in `thresholds`.
 Broadcast version: element-wise application for a tuple of values paired with a
 vector of per-feature threshold vectors.
 """
-function _truths_by_thresholds(thresholds::Vector{<:Float})
-    ntruths = length(thresholds)
-    truths = Vector{BitVector}(undef, ntruths + 1)
-
-    @inbounds for i = 1:ntruths+1
-        truths[i] = BitVector(undef, ntruths)
-        val = 2^(i - 1) - 1
-        for j = 1:ntruths
-            truths[i][j] = !((val >> (j - 1)) & 1 == 1)
-        end
+@inline function _truths_row!(dst::BitVector, i::Int)
+    n = length(dst)
+    i ≤ 1 && return fill!(dst, true)
+    i > n && return fill!(dst, false)
+    @inbounds begin
+        dst[1:(i-1)] .= false
+        dst[i:n] .= true
     end
-
-    return truths
+    return dst
 end
 
-@inline _truths_by_thresholds(
-    thresholds::Vector{T}
-) where {T<:Vector{<:Float}} = _truths_by_thresholds.(thresholds)
+@inline _truths_row(n::Int, i::Int) = _truths_row!(BitVector(undef, n), i)
 
-function _truths_by_thresholds(value::Float, thresholds::Vector{<:Float})
+function _truths_by_thresholds(
+    values::Vector{S},
+    thresholds::Vector{T}
+)::Vector{BitVector} where {S<:AbstractFloat,T<:Vector{<:AbstractFloat}}
+    n = length(values)
+    out = Vector{BitVector}(undef, n)
+    @inbounds for k in 1:n
+        out[k] = _truths_by_thresholds(values[k], thresholds[k])
+    end
+    return out
+end
+
+function _truths_by_thresholds(
+    value::S,
+    thresholds::AbstractVector{<:AbstractFloat}
+)::BitVector where {S<:AbstractFloat}
     isnan(value) && return BitVector()
 
+    n = length(thresholds)
     idx = findfirst(==(value), thresholds)
-    return isnothing(idx) ?
-           falses(length(thresholds)) :
-           _truths_by_thresholds(thresholds)[idx]
+    # not found  ⇒  boundary region  ⇒  all-false row (row n+1)
+    return isnothing(idx) ? falses(n) : _truths_row(n, idx)
 end
 
-@inline _truths_by_thresholds(
-    values::Tuple{Vararg{<:Float}},
-    thresholds::Vector{T}
-) where {T<:Vector{<:Float}} = _truths_by_thresholds.(values, thresholds)
-
-"""
-    _thrs_with_boundary(
-        thresholds::Vector{T},
-        family::Symbol
-    ) where {T<:Float} -> Vector{Float64}
-
-Append the appropriate boundary point to `thresholds` depending on the operator
-family, ensuring that all `n + 1` ordinal regions induced by `n` thresholds
-are sampled.
-
-- `:lt` family (`<`/`≤`): thresholds sorted **descending** → appends
-  `prevfloat(last(thresholds))` 
-    to cover the region **below the smallest threshold**
-  (i.e. values smaller than every condition).
-
-- `:gt` family (`>`/`≥`): thresholds sorted **ascending** → appends
-  `nextfloat(last(thresholds))` 
-    to cover the region **above the largest threshold**
-  (i.e. values larger than every condition).
-
-Returns `[NaN]` for an empty input vector.
-
-# Examples
-
-```julia
-# :lt  — thresholds [4.8, 4.7, 1.9] (descending)
-# regions: x < 1.9 | 1.9 ≤ x < 4.7 | 4.7 ≤ x < 4.8 | x ≥ 4.8
-# boundary needed: prevfloat(1.9)  ← covers  x < 1.9
-_thrs_with_boundary([4.8, 4.7, 1.9], :lt)
-# → [4.8, 4.7, 1.9, prevfloat(1.9)]
-
-# :gt  — thresholds [1.9, 4.7, 4.8] (ascending)
-# regions: x ≤ 1.9 | 1.9 < x ≤ 4.7 | 4.7 < x ≤ 4.8 | x > 4.8
-# boundary needed: nextfloat(4.8)  ← covers  x > 4.8
-_thrs_with_boundary([1.9, 4.7, 4.8], :gt)
-# → [1.9, 4.7, 4.8, nextfloat(4.8)]
-```
-
----
-
-    _thrs_with_boundary(
-        thresholds::Vector{T},
-        op_families::Vector{Symbol}
-    ) where {T<:Vector{<:Float}} -> Vector{Vector{T}}
-
-Element-wise version: applies `_thrs_with_boundary`
-to each per-feature threshold
-vector using the corresponding operator family.
-"""
-function _thrs_with_boundary(
-    thresholds::Vector{T},
-    family::Symbol
-) where {T<:Float}
-    isempty(thresholds) && return T[NaN]
-
-    nthrs = length(thresholds)
-    result = Vector{T}(undef, nthrs + 1)
-    result[1:nthrs] .= thresholds
-
-    # :lt (descending) → boundary point is BELOW the minimum threshold
-    #                    prevfloat(last) because last is the smallest value
-    # :gt (ascending)  → boundary point is ABOVE the maximum threshold
-    #                    nextfloat(last) because last is the largest value
-    result[end] = family === :lt ?
-                  prevfloat(last(thresholds)) :
-                  nextfloat(last(thresholds))
-
-    return result
+function _truths_by_thresholds(
+    thresholds::Vector{<:AbstractFloat}
+)::Vector{BitVector}
+    n = length(thresholds)
+    return [_truths_row(n, i) for i in 1:(n+1)]
 end
 
-@inline _thrs_with_boundary(
-    thresholds::Vector{T},
-    op_families::Vector{Symbol}
-) where {T<:Vector{<:Float}} = _thrs_with_boundary.(thresholds, op_families)
+# function _truths_by_thresholds(
+#     values::Vector{S},
+#     thresholds::Vector{T}
+# )::Vector{BitVector} where {S<:AbstractFloat,T<:Vector{<:AbstractFloat}}
+#     _truths_by_thresholds.(values, thresholds)
+# end
+
+# function _truths_by_thresholds(value::S, thresholds::Vector{<:S})::BitVector where {S<:AbstractFloat}
+#     isnan(value) && return BitVector()
+
+#     idx = findfirst(==(value), thresholds)
+#     return isnothing(idx) ?
+#            falses(length(thresholds)) :
+#            _truths_by_thresholds(thresholds)[idx]
+# end
+
+# function _truths_by_thresholds(thresholds::Vector{<:AbstractFloat})::Vector{BitVector}
+#     ntruths = length(thresholds)
+#     truths = Vector{BitVector}(undef, ntruths + 1)
+
+#     @inbounds for i = 1:(ntruths+1)
+#         truths[i] = BitVector(undef, ntruths)
+#         val = 2^(i - 1) - 1
+#         for j = 1:ntruths
+#             truths[i][j] = !((val >> (j - 1)) & 1 == 1)
+#         end
+#     end
+
+#     return truths
+# end
+
+# function _truths_by_thresholds(
+#     thresholds::Vector{T}
+# ) where {T<:Vector{<:AbstractFloat}}
+#     _truths_by_thresholds.(thresholds)
+# end
+
+# function _truths_by_thresholds(
+#     values::Tuple{Vararg{<:AbstractFloat}},
+#     thresholds::Vector{T}
+# ) where {T<:Vector{<:AbstractFloat}}
+#     _truths_by_thresholds.(values, thresholds)
+# end
+
+# """
+#     _thrs_with_boundary(
+#         thresholds::Vector{T},
+#         family::Symbol
+#     ) where {T<:Float} -> Vector{Float64}
+
+# Append the appropriate boundary point to `thresholds` depending on the operator
+# family, ensuring that all `n + 1` ordinal regions induced by `n` thresholds
+# are sampled.
+
+# - `:lt` family (`<`/`≤`): thresholds sorted **descending** → appends
+#   `prevfloat(last(thresholds))` 
+#     to cover the region **below the smallest threshold**
+#   (i.e. values smaller than every condition).
+
+# - `:gt` family (`>`/`≥`): thresholds sorted **ascending** → appends
+#   `nextfloat(last(thresholds))` 
+#     to cover the region **above the largest threshold**
+#   (i.e. values larger than every condition).
+
+# Returns `[NaN]` for an empty input vector.
+
+# # Examples
+
+# ```julia
+# # :lt  — thresholds [4.8, 4.7, 1.9] (descending)
+# # regions: x < 1.9 | 1.9 ≤ x < 4.7 | 4.7 ≤ x < 4.8 | x ≥ 4.8
+# # boundary needed: prevfloat(1.9)  ← covers  x < 1.9
+# _thrs_with_boundary([4.8, 4.7, 1.9], :lt)
+# # → [4.8, 4.7, 1.9, prevfloat(1.9)]
+
+# # :gt  — thresholds [1.9, 4.7, 4.8] (ascending)
+# # regions: x ≤ 1.9 | 1.9 < x ≤ 4.7 | 4.7 < x ≤ 4.8 | x > 4.8
+# # boundary needed: nextfloat(4.8)  ← covers  x > 4.8
+# _thrs_with_boundary([1.9, 4.7, 4.8], :gt)
+# # → [1.9, 4.7, 4.8, nextfloat(4.8)]
+# ```
+
+# ---
+
+#     _thrs_with_boundary(
+#         thresholds::Vector{T},
+#         op_families::Vector{Symbol}
+#     ) where {T<:Vector{<:Float}} -> Vector{Vector{T}}
+
+# Element-wise version: applies `_thrs_with_boundary`
+# to each per-feature threshold
+# vector using the corresponding operator family.
+# """
+# function _thrs_with_boundary(
+#     thresholds::Vector{T},
+#     family::Symbol
+# ) where {T<:Float}
+#     isempty(thresholds) && return T[NaN]
+
+#     nthrs = length(thresholds)
+#     result = Vector{T}(undef, nthrs + 1)
+#     result[1:nthrs] .= thresholds
+
+#     # :lt (descending) → boundary point is BELOW the minimum threshold
+#     #                    prevfloat(last) because last is the smallest value
+#     # :gt (ascending)  → boundary point is ABOVE the maximum threshold
+#     #                    nextfloat(last) because last is the largest value
+#     result[end] = family === :lt ?
+#                   prevfloat(last(thresholds)) :
+#                   nextfloat(last(thresholds))
+
+#     return result
+# end
+
+# @inline _thrs_with_boundary(
+#     thresholds::Vector{T},
+#     op_families::Vector{Symbol}
+# ) where {T<:Vector{<:Float}} = _thrs_with_boundary.(thresholds, op_families)
 
 # ---------------------------------------------------------------------------- #
 #                              generate disjunts                               #
@@ -859,8 +967,8 @@ function _product_columntable(
 
     names = Tuple(featurenames)
     cols = ntuple(j -> _ProductColumn{T,typeof(thrs_with_p)}(
-            thrs_with_p, lens, strides, j, nrows
-        ), n)
+        thrs_with_p, lens, strides, j, nrows
+    ), n)
 
     return NamedTuple{names}(cols)
 end
@@ -894,7 +1002,7 @@ minimize per-class DNF formulas.
 ExtractRulesData(grp_truths, thresholds, features, classnames, op_families)
 
 # High-level constructor: derive everything from a LumenConfig and a model.
-ExtractRulesData(extractor::LumenConfig, model::SM.AbstractModel)
+ExtractRulesData(extractor::LumenConfig, model::SM.DecisionEnsemble)
 ```
 
 The high-level constructor:
@@ -939,7 +1047,7 @@ struct ExtractRulesData{
         predictions, combinations, thresholds, featurenames, classnames, op_families
     )
 
-    function ExtractRulesData(extractor::LumenConfig, model::SM.AbstractModel)
+    function ExtractRulesData(extractor::LumenConfig, model::SM.DecisionEnsemble)
         # -------------------------------------------------------------------- #
         # STEP 1 — Read the depth parameter from the configuration.
         # `depth ∈ (0, 1]`: if < 1.0, only atoms from the upper levels of the
@@ -976,8 +1084,19 @@ struct ExtractRulesData{
         # DecisionList mixes operator families across its rules.
         # -------------------------------------------------------------------- #
         atoms = unique!(_normalize_atom.(if depth < 1.0
+            # NOTE: `init` must be concretely typed `Atom{ScalarCondition}[]`,
+            # NOT `Atom{AbstractCondition}[]`. Even after fixing
+            # `_extract_atoms_bfs_order` to return a concretely-typed vector,
+            # an abstractly-typed `init` here would still cause `vcat` to
+            # widen (typejoin) the accumulated result back to
+            # `Vector{Atom{AbstractCondition}}`, which would then make the
+            # `_normalize_atom.(...)` broadcast below fail with the same
+            # kind of MethodError (its signature also requires
+            # `Atom{<:ScalarCondition}`). Julia's parametric types are
+            # invariant, so this has to be fixed at every accumulator, not
+            # just at the source.
             mapreduce(
-                vcat, SM.models(model); init=SL.Atom{SD.AbstractCondition}[]
+                vcat, SM.models(model); init=SL.Atom{SD.ScalarCondition}[]
             ) do t
                 all_atoms_bfs = _extract_atoms_bfs_order(t)
                 _take_first_percentage(all_atoms_bfs, depth)
@@ -996,7 +1115,7 @@ struct ExtractRulesData{
         # -------------------------------------------------------------------- #
         let unsupported = unique(
                 op for op in get_operator.(atoms)
-                if op ∉ _supported_operators
+                       if op ∉ _supported_operators
             )
             isempty(unsupported) || throw(ArgumentError(
                 "Only '<', '≥', '>', '≤' operators are currently supported. " *
@@ -1423,7 +1542,7 @@ Requires at least two terms to perform any pruning; single-term inputs are
 returned immediately.
 """
 function _refine_dnf(
-    terms::Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom},SyntaxStructure}}
+    terms
 )
     length(terms) ≤ 1 && return terms
 
@@ -1432,7 +1551,7 @@ function _refine_dnf(
     # find terms not strictly dominated by any other term
     keep_mask = map(enumerate(all_bounds)) do (i, bounds_i)
         !any(j -> i ≠ j && SD.strictly_dominates(
-                all_bounds[j], bounds_i), eachindex(all_bounds))
+            all_bounds[j], bounds_i), eachindex(all_bounds))
     end
 
     kept_terms = terms[keep_mask]
@@ -1446,7 +1565,7 @@ end
 # ---------------------------------------------------------------------------- #
 """
     run_minimization(
-        ::Val{:abc},
+        ::Type{Abc},
         extractor::LumenConfig,
         atoms::Vector{Vector{SL.Atom}}
     ) -> Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, SyntaxStructure}}
@@ -1465,32 +1584,40 @@ applies [`_refine_dnf`](@ref) to remove dominated terms.
 - Minimized and refined vector of conjunctive terms.
 """
 function run_minimization(
-    ::Val{:abc},
+    ::Type{Abc},
     extractor::LumenConfig,
-    atoms::Vector{Vector{SL.Atom}}
-)
-    # minimized_formula =
-    #     SD.abc_minimize(
-    #         atoms,
-    #         get_binary(extractor);
-    #         fast=1,
-    #         depth=get_depth(extractor),
-    #         float_type=get_float_type(extractor)
-    #     )
-
-    # return _refine_dnf(minimized_formula)
-
+    atoms::Vector{Vector{SL.Atom}},
+    universe_conditions::Vector{<:SD.AbstractScalarCondition}
+)::Vector{TERM}
     ABC_jll.abc() do binary
         minimized_formula = SD.abc_minimize(
             atoms,
             binary;
-            fast=1,
+            fast=3,
             depth=get_depth(extractor),
-            float_type=get_float_type(extractor)
+            float_type=get_float_type(extractor),
+            universe_conditions=universe_conditions,
         )
-        return refine_dnf(minimized_formula)
+        return _as_terms(refine_dnf(minimized_formula))
     end
 end
+
+# function run_minimization(
+#     ::Type{Abc},
+#     extractor::LumenConfig{U,T},
+#     atoms::Vector{Vector{SL.Atom}}
+# )::Vector{TERM} where {U,T<:AbstractFloat}
+#     ABC_jll.abc() do binary
+#         minimized_formula = SD.abc_minimize(
+#             atoms,
+#             binary;
+#             fast=3,
+#             depth=extractor.depth,
+#             float_type=T
+#         )
+#         return _as_terms(refine_dnf(minimized_formula))
+#     end
+# end
 
 """
     run_minimization(
@@ -1512,28 +1639,120 @@ applies [`_refine_dnf`](@ref) to remove dominated terms.
 # Returns
 - Minimized and refined vector of conjunctive terms.
 """
+#=
 function run_minimization(
     ::Val{:mitespresso},
     extractor::LumenConfig,
     atoms::Vector{Vector{SL.Atom}}
-    # TODO mitespresso_kwargs...
 )
+    n_in = length(atoms)
+    binary = get_binary(extractor)
+    println("[run_minimization:mitespresso] INPUT: ", n_in, " atom-vectors, binary=", binary)
+
+    binary === nothing && println("[run_minimization:mitespresso] ⚠ binary is NOTHING — espresso non puo' partire")
+
+    t0 = time()
     minimized_formula =
         SD.espresso_minimize(
             atoms,
-            get_binary(extractor);
+            binary;
             depth=get_depth(extractor),
             float_type=get_float_type(extractor)
         )
+    elapsed = time() - t0
 
-    return _refine_dnf(minimized_formula)
+    refined = _refine_dnf(minimized_formula)
+    println("[run_minimization:mitespresso] OUTPUT: ", length(minimized_formula),
+        " terms pre-refine, ", length(refined), " post-refine (was ", n_in,
+        "), elapsed=", round(elapsed, digits=4), "s")
+    if elapsed < 0.001
+        println("[run_minimization:mitespresso] ⚠ elapsed quasi zero: sospetto no-op")
+    end
+
+    return refined
 end
+=#
 
+# ============================================================================ #
+#  PATCH: run_minimization(::Val{:mitespresso}, ...) accetta offset opzionale  #
+#                                                                              #
+#  Firma ancora "compatibile all'indietro": chi chiama con 3 argomenti (come
+#  fa `lumen()` stesso) ottiene `offset=nothing` -> comportamento IDENTICO a
+#  prima. `super_lumen`'s `_fold_in!` (vedi file successivo) è l'unico
+#  chiamante che passerà `offset` esplicitamente.
+# ============================================================================ #
+
+"""
+    run_minimization(
+        ::Val{:mitespresso},
+        extractor::LumenConfig,
+        atoms::Vector{Vector{SL.Atom}};
+        offset::Union{Nothing,Vector{Vector{SL.Atom}}}=nothing
+    ) -> Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, SyntaxStructure}}
+
+Minimize the DNF formula encoded by `atoms` using the MIT Espresso minimizer.
+
+# `offset` (NEW)
+Cubes CONFIRMED to be off for this call (e.g., in `super_lumen`, cubes
+already routed to OTHER classes' buffers). Forwarded to
+`SD.espresso_minimize(atoms, binary; ..., offset)`, which in turn emits an
+explicit `.type fr` PLA (see `PLA.jl` patch): everything neither in `atoms`
+nor in `offset` is left as an IMPLICIT don't-care, instead of being folded
+into Espresso's default absolute-complement OFF-set. `nothing` (default)
+reproduces the exact previous behavior.
+
+Delegates to `SD.espresso_minimize` with the binary path from `extractor`,
+then applies [`_refine_dnf`](@ref) to remove dominated terms.
+
+# Arguments
+- `extractor::LumenConfig`: Provides the Espresso binary path and depth
+  parameter.
+- `atoms::Vector{Vector{SL.Atom}}`: Per-combination atom lists (the ON-set).
+- `offset`: see above.
+
+# Returns
+- Minimized and refined vector of conjunctive terms.
+"""
+function run_minimization(
+    ::Val{:mitespresso},
+    extractor::LumenConfig,
+    atoms::Vector{Vector{SL.Atom}};
+    offset::Union{Nothing,Vector{Vector{SL.Atom}}}=nothing
+)::Vector{TERM}
+    n_in = length(atoms)
+    n_off = isnothing(offset) ? 0 : length(offset)
+    binary = get_binary(extractor)
+    println("[run_minimization:mitespresso] INPUT: ", n_in, " atom-vectors (ON), ",
+        n_off, " atom-vectors (OFF, explicit), binary=", binary)
+
+    binary === nothing && println("[run_minimization:mitespresso] ⚠ binary is NOTHING — espresso non puo' partire")
+
+    t0 = time()
+    minimized_formula =
+        SD.espresso_minimize(
+            atoms,
+            binary;
+            depth=get_depth(extractor),
+            float_type=get_float_type(extractor),
+            offset=offset
+        )
+    elapsed = time() - t0
+
+    refined = _refine_dnf(minimized_formula)
+    println("[run_minimization:mitespresso] OUTPUT: ", length(minimized_formula),
+        " terms pre-refine, ", length(refined), " post-refine (was ", n_in,
+        "), elapsed=", round(elapsed, digits=4), "s")
+    if elapsed < 0.001
+        println("[run_minimization:mitespresso] ⚠ elapsed quasi zero: sospetto no-op")
+    end
+
+    return refined
+end
 # ---------------------------------------------------------------------------- #
 #                                    lumen                                     #
 # ---------------------------------------------------------------------------- #
 """
-    lumen(config::LumenConfig, model::SM.AbstractModel) -> SM.DecisionSet
+    lumen(config::LumenConfig, model::SM.DecisionEnsemble) -> SM.DecisionSet
 
 Core single-model entry point for the LUMEN algorithm.
 
@@ -1551,28 +1770,28 @@ encoded in `config`.
 # Arguments
 - `config::LumenConfig`: Algorithm configuration
   (minimization scheme, depth, etc.).
-- `model::SM.AbstractModel`: A single decision-tree model.
+- `model::SM.DecisionEnsemble`: A single decision-tree model.
 
 # Returns
 - `SM.DecisionSet`: The minimized rule set.
 
 ---
 
-    lumen(config::LumenConfig, model::Vector{SM.AbstractModel}) -> LumenResult
+    lumen(config::LumenConfig, model::Vector{SM.DecisionEnsemble}) -> LumenResult
 
 Batch variant: applies `lumen(config, m)` to every model in the vector and
 collects the results into a [`LumenResult`](@ref).
 
 ---
 
-    lumen(model::SM.AbstractModel, args...; kwargs...) -> SM.DecisionSet
+    lumen(model::SM.DecisionEnsemble, args...; kwargs...) -> SM.DecisionSet
 
 Convenience wrapper: constructs a `LumenConfig` from keyword arguments and
 delegates to `lumen(config, model)`.
 
 ---
 
-    lumen(model::Vector{SM.AbstractModel}, args...; kwargs...) -> LumenResult
+    lumen(model::Vector{SM.DecisionEnsemble}, args...; kwargs...) -> LumenResult
 
 Convenience wrapper for vector of models: constructs `LumenConfig` from keyword
 arguments and maps over the vector.
@@ -1598,7 +1817,7 @@ See also: [`LumenConfig`](@ref), [`LumenResult`](@ref),
 """
 function lumen(
     config::LumenConfig,
-    model::SM.AbstractModel
+    model::SM.DecisionEnsemble
 )
     float_type = get_float_type(config)
 
@@ -1633,7 +1852,7 @@ end
 
 function lumen(
     config::LumenConfig,
-    model::Vector{SM.AbstractModel}
+    model::Vector{SM.DecisionEnsemble}
 )
     ds = map(model) do m
         lumen(config, m)
@@ -1643,7 +1862,7 @@ function lumen(
 end
 
 function lumen(
-    model::SM.AbstractModel,
+    model::SM.DecisionEnsemble,
     args...;
     kwargs...
 )
@@ -1651,7 +1870,7 @@ function lumen(
 end
 
 function lumen(
-    model::Vector{SM.AbstractModel},
+    model::Vector{SM.DecisionEnsemble},
     args...;
     kwargs...
 )
