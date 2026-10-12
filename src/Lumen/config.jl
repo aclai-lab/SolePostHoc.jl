@@ -254,3 +254,45 @@ Return `true` if alphabet-analysis diagnostics are enabled in `r`.
 Return the floating-point type stored in `r`.
 """
 @inline get_float_type(r::LumenConfig) = r.float_type
+
+function get_universe_conditions(model)
+    thresholds_per_feature = Dict{Any,Set{Float64}}()
+
+    function traverse(node)
+        if node isa Branch
+            # Estrai la condizione dal nodo (di solito un Atom)
+            cond = node.condition
+            if cond isa SL.Atom
+                scalar_cond = SL.value(cond)
+                feat = SD.feature(scalar_cond)
+                # Estrai la soglia (usa SD.threshold se esiste, altrimenti il campo .threshold)
+                t = SD.threshold(scalar_cond)
+                push!(get!(thresholds_per_feature, feat, Set{Float64}()), t)
+            end
+            # Ricorri sui figli
+            traverse(node.then_branch)   # oppure node.true_branch
+            traverse(node.else_branch)   # oppure node.false_branch
+        elseif node isa Leaf
+            # Foglia: nessuna condizione
+        elseif node isa DecisionEnsemble
+            for tree in node.trees
+                traverse(tree)
+            end
+        elseif node isa AbstractVector
+            for t in node
+                traverse(t)
+            end
+        end
+    end
+
+    traverse(model)
+
+    conds = SD.ScalarCondition[]
+    for (feat, thresholds) in thresholds_per_feature
+        for t in sort!(collect(thresholds))
+            push!(conds, SD.ScalarCondition(feat, (>=), t))
+            push!(conds, SD.ScalarCondition(feat, (<), t))
+        end
+    end
+    return conds
+end
