@@ -65,11 +65,12 @@ function _antecedent(
     disjuncts = Vector{SyntaxStructure}(undef, length(dnf))
 
     for i in 1:length(dnf)
-        disjuncts[i] =
+        disjuncts[i] = length(dnf[i]) == 1 ?
+            _toatom(dnf[i][1], featurenames) :
             SL.LeftmostConjunctiveForm([_toatom(a, featurenames) for a in dnf[i]])
     end
 
-    return SL.LeftmostConjunctiveForm(disjuncts)
+    return SL.LeftmostDisjunctiveForm(disjuncts)
 end
 
 """
