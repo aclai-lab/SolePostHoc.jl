@@ -110,7 +110,7 @@ struct LumenConfig <: AbstractConfig
         importance::Vector=Float64[],
         check_opt::Bool=false,
         check_alphabet::Bool=false,
-        use_multithreads::Bool=true,
+        use_multithreads::Bool=false,
         float_type::Type=Float64
     )
         # validate coverage parameters - must be positive and ≤ 1.0
