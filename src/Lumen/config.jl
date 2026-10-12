@@ -84,34 +84,42 @@ cfg = LumenConfig(
 
 See also: [`lumen`](@ref), [`LumenResult`](@ref), [`AbstractConfig`](@ref)
 """
-struct LumenConfig <: AbstractConfig
+struct LumenConfig{R<:Unsigned,T<:AbstractFloat} <: AbstractConfig
     minimization_scheme::Symbol
+# struct LumenConfig{R<:Unsigned,T<:AbstractFloat,MS,S} <: AbstractConfig
+    # minimization_scheme::Type{MS}
     binary::Union{Nothing,String}
-    depth::Float64
-    vertical::Float64
-    horizontal::Float64
+    depth::T
+    vertical::T
+    horizontal::T
     minimization_kwargs::NamedTuple
+    # minimization_setup::Type{<:AbstractMinimizeSetup}
     filt_alphabet::Base.Callable
     apply_function::Base.Callable
     importance::Vector
     check_opt::Bool
     check_alphabet::Bool
-    use_multithreads::Bool
-    float_type::Type
+    # use_multithreads::Bool
+    # float_type::Type
+
 
     function LumenConfig(;
         minimization_scheme::Symbol=:abc,
-        depth::Float64=1.0,
-        vertical::Float64=1.0,
-        horizontal::Float64=1.0,
+        depth::Real=1.0,
+        vertical::Real=1.0,
+        horizontal::Real=1.0,
         minimization_kwargs::NamedTuple=(;),
+        # minimization_setup::Type{S}=Fast,
         filt_alphabet::Base.Callable=identity,
         apply_function::Base.Callable=SM.apply,
-        importance::Vector=Float64[],
+        importance::Vector=Real[],
         check_opt::Bool=false,
         check_alphabet::Bool=false,
-        use_multithreads::Bool=false,
-        float_type::Type=Float64
+        # use_multithreads::Bool=false,
+        # float_type::Type=Real,
+        M::Int=20_000,
+        internal_resolution::Type=UInt32,
+        float_resolution::Type=Float32
     )
         # validate coverage parameters - must be positive and ≤ 1.0
         # these parameters control the proportion of instances
@@ -148,7 +156,12 @@ struct LumenConfig <: AbstractConfig
 
         binary = valid_schemes[minimization_scheme]
 
-        new(
+        new{
+            internal_resolution,
+            float_resolution,
+            # minimization_scheme,
+            # minimization_setup
+        }(
             minimization_scheme,
             binary,
             depth,
@@ -160,8 +173,8 @@ struct LumenConfig <: AbstractConfig
             importance,
             check_opt,
             check_alphabet,
-            use_multithreads,
-            float_type
+            # use_multithreads,
+            # float_type
         )
     end
 end
@@ -246,14 +259,14 @@ Return `true` if alphabet-analysis diagnostics are enabled in `r`.
 """
 @inline get_check_alphabet(r::LumenConfig) = r.check_alphabet
 
-@inline get_use_multithreads(r::LumenConfig) = r.use_multithreads
+# @inline get_use_multithreads(r::LumenConfig) = r.use_multithreads
 
-"""
-    get_float_type(r::LumenConfig) -> Type
+# """
+#     get_float_type(r::LumenConfig) -> Type
 
-Return the floating-point type stored in `r`.
-"""
-@inline get_float_type(r::LumenConfig) = r.float_type
+# Return the floating-point type stored in `r`.
+# """
+# @inline get_float_type(r::LumenConfig) = r.float_type
 
 function get_universe_conditions(model)
     thresholds_per_feature = Dict{Any,Set{Float64}}()

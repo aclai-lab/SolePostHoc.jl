@@ -266,7 +266,10 @@ A `NamedTuple` with:
 - `op_families::Vector{Symbol}`
 - `lens::Vector{Int}`, `strides::Vector{Int}`, `n_total::Int`
 """
-function _prepare_sequential_context(config::LumenConfig, model::SM.AbstractModel)
+function _prepare_sequential_context(
+    config::LumenConfig{R,T},
+    model::SM.AbstractModel
+) where {R,T}
     depth = get_depth(config)
 
     atoms = unique!(_normalize_atom.(if depth < 1.0
@@ -299,7 +302,7 @@ function _prepare_sequential_context(config::LumenConfig, model::SM.AbstractMode
     featurenames = SM.info(model, :featurenames)
     classnames = unique!(SM.info(model, :supporting_labels))
 
-    type = get_float_type(config)
+    type = T
     thresholds = Vector{Vector{type}}(undef, length(featurenames))
     op_families = Vector{Symbol}(undef, length(featurenames))
 
@@ -606,7 +609,7 @@ function _sequential_pass(
         d = PropositionalLogiset(tbl)
         preds = get_apply_function(config)(
             model, d;
-            use_multithreads=get_use_multithreads(config),
+            # use_multithreads=get_use_multithreads(config),
             suppress_parity_warning=true
         )
 
@@ -853,7 +856,7 @@ function _verify_and_repair_sensitivity(
             d = PropositionalLogiset(tbl)
             preds = get_apply_function(config)(
                 model, d;
-                use_multithreads=get_use_multithreads(config),
+                # use_multithreads=get_use_multithreads(config),
                 suppress_parity_warning=true
             )
 

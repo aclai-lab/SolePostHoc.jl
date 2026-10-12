@@ -1156,7 +1156,7 @@ struct ExtractRulesData{
         predictions = get_apply_function(extractor)(
             model,
             d;
-            use_multithreads=get_use_multithreads(extractor),
+            # use_multithreads=get_use_multithreads(extractor),
             suppress_parity_warning=true
         )
 
@@ -1515,16 +1515,16 @@ end
 
 function run_minimization(
     ::Val{:abc},
-    extractor::LumenConfig,
+    extractor::LumenConfig{R,T},
     atoms::Vector{Vector{SL.Atom}}
-)
+) where {R,T}
     ABC_jll.abc() do binary
         minimized_formula = SD.abc_minimize(
             atoms,
             binary;
             fast=3,
             depth=get_depth(extractor),
-            float_type=get_float_type(extractor)
+            float_type=T
         )
         return refine_dnf(minimized_formula)
     end

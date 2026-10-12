@@ -14,7 +14,8 @@ using ModalDecisionTrees, SoleLogics
 using BenchmarkTools, StatProfilerHTML, Profile
 using Base: intersect
 using Base.Threads: @threads, Atomic, atomic_add!
-using ConcurrentCollections, ProgressMeter
+# using ConcurrentCollections
+using ProgressMeter
 
 import DecisionTree as DT
 

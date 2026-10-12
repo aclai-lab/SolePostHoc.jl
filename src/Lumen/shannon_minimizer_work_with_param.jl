@@ -142,7 +142,7 @@ function _leaf_extract(
         d = PropositionalLogiset(tbl)
         preds = get_apply_function(config)(
             model, d;
-            use_multithreads=get_use_multithreads(config),
+            # use_multithreads=get_use_multithreads(config),
             suppress_parity_warning=true
         )
 
