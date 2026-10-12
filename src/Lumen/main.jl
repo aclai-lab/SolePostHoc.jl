@@ -51,13 +51,11 @@ See also: [`setup_abc`](@ref), [`lumen`](@ref)
 """
 function setup_espresso()
     # auto setup espresso binary if not specified
-    espressobinary = "/Users/perry/espresso/build/./espresso"  # default path for local build
-
-    #try
-    #    joinpath(SD.load(SD.MITESPRESSOLoader()), "espresso")
-    #catch e
-    #    error("Failed to setup espresso binary: $e")
-    #end
+    espressobinary = try
+        joinpath(SD.load(SD.MITESPRESSOLoader()), "espresso")
+    catch e
+        error("Failed to setup espresso binary: $e")
+    end
 
     # verify that binary exists and is executable
     isfile(espressobinary) ||
@@ -409,7 +407,7 @@ function _feature_op_family(
 
     (has_lt && has_gt) && throw(ArgumentError(
         "Feature '$feat' mixes '<'/'≤' and '>'/'≥' operators. " *
-        "Each feature must use operators from a single comparison family."
+            "Each feature must use operators from a single comparison family."
     ))
 
     return has_lt ? :lt : :gt
@@ -1030,10 +1028,10 @@ struct ExtractRulesData{
             )
             isempty(unsupported) || throw(ArgumentError(
                 "Only '<', '≥', '>', '≤' operators are currently supported. " *
-                "Found unsupported operators: $(unsupported). " *
-                "This limitation may be addressed in future versions. " *
-                "Consider preprocessing your model to use only " *
-                "supported conditions.",
+                    "Found unsupported operators: $(unsupported). " *
+                    "This limitation may be addressed in future versions. " *
+                    "Consider preprocessing your model to use only " *
+                    "supported conditions.",
             ))
         end
 
