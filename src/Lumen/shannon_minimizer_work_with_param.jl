@@ -329,12 +329,12 @@ tail for why this exact widening is required to avoid a `DNF` vs
 function _finalize_decision_set(
     ctx::NamedTuple,
     per_class_terms::Vector{Vector{Any}},
-    config::LumenConfig
-)
+    config::LumenConfig{R,T}
+) where {R,T}
     valid_mask = .!isempty.(per_class_terms)
     classes = ctx.classnames[valid_mask]
 
-    float_type = get_float_type(config)
+    float_type = T
     formulas = Vector{Vector{Union{
         SL.LeftmostConjunctiveForm{SL.Atom{float_type}},
         SyntaxStructure

@@ -1,20 +1,4 @@
 # ---------------------------------------------------------------------------- #
-#                                    types                                     #
-# ---------------------------------------------------------------------------- #
-"""
-    AbstractConfig
-
-Abstract base type for all LUMEN configuration structs.
-
-Concrete subtypes encapsulate the parameters needed to control a specific
-algorithm variant. Using a common supertype allows generic code to accept
-any configuration object without being tied to a particular implementation.
-
-See also: [`LumenConfig`](@ref)
-"""
-abstract type AbstractConfig end
-
-# ---------------------------------------------------------------------------- #
 #                                 Lumen struct                                 #
 # ---------------------------------------------------------------------------- #
 """
@@ -32,7 +16,7 @@ validation and resolves the correct minimizer binary before storing anything.
 |-------|------|---------|-------------|
 | `minimization_scheme` | `Symbol` | `:abc` | DNF minimization algorithm to use. |
 | `binary` | `String` | *(auto)* | Absolute path to the minimizer executable, resolved automatically from `minimization_scheme`. |
-| `depth` | `Float64` | `1.0` | Fraction of each tree's BFS-ordered atoms to include ∈ (0, 1]. `1.0` uses the full alphabet. |
+| `depth` | `AbstractFloat` | `1.0` | Fraction of each tree's BFS-ordered atoms to include ∈ (0, 1]. `1.0` uses the full alphabet. |
 | `vertical` | `Float64` | `1.0` | Instance-coverage parameter α ∈ (0, 1]. |
 | `horizontal` | `Float64` | `1.0` | Feature-coverage parameter β ∈ (0, 1]. |
 | `minimization_kwargs` | `NamedTuple` | `(;)` | Extra keyword arguments forwarded verbatim to the chosen minimizer. |
@@ -84,32 +68,32 @@ cfg = LumenConfig(
 
 See also: [`lumen`](@ref), [`LumenResult`](@ref), [`AbstractConfig`](@ref)
 """
-struct LumenConfig{R<:Unsigned,T<:AbstractFloat} <: AbstractConfig
+struct LumenConfig{R<:Unsigned,T<:AbstractFloat,MS,S} <: AbstractConfig
     minimization_scheme::Symbol
-# struct LumenConfig{R<:Unsigned,T<:AbstractFloat,MS,S} <: AbstractConfig
-    # minimization_scheme::Type{MS}
     binary::Union{Nothing,String}
     depth::T
     vertical::T
     horizontal::T
     minimization_kwargs::NamedTuple
-    # minimization_setup::Type{<:AbstractMinimizeSetup}
+    p_minimization_setup::Type{<:AbstractMinimizeSetup}
     filt_alphabet::Base.Callable
     apply_function::Base.Callable
     importance::Vector
     check_opt::Bool
     check_alphabet::Bool
+    M::R
     # use_multithreads::Bool
     # float_type::Type
 
 
     function LumenConfig(;
         minimization_scheme::Symbol=:abc,
+        p_minimization_scheme::Type{MS}=Abc,
         depth::Real=1.0,
         vertical::Real=1.0,
         horizontal::Real=1.0,
         minimization_kwargs::NamedTuple=(;),
-        # minimization_setup::Type{S}=Fast,
+        p_minimization_setup::Type{S}=Fast,
         filt_alphabet::Base.Callable=identity,
         apply_function::Base.Callable=SM.apply,
         importance::Vector=Real[],
@@ -117,10 +101,10 @@ struct LumenConfig{R<:Unsigned,T<:AbstractFloat} <: AbstractConfig
         check_alphabet::Bool=false,
         # use_multithreads::Bool=false,
         # float_type::Type=Real,
-        M::Int=20_000,
+        M::Int=4096,
         internal_resolution::Type=UInt32,
         float_resolution::Type=Float32
-    )
+    ) where {MS<:AbstractMinimization,S<:AbstractMinimizeSetup}
         # validate coverage parameters - must be positive and ≤ 1.0
         # these parameters control the proportion of instances
         # that must be covered by rules
@@ -159,8 +143,8 @@ struct LumenConfig{R<:Unsigned,T<:AbstractFloat} <: AbstractConfig
         new{
             internal_resolution,
             float_resolution,
-            # minimization_scheme,
-            # minimization_setup
+            p_minimization_scheme,
+            p_minimization_setup
         }(
             minimization_scheme,
             binary,
@@ -168,11 +152,13 @@ struct LumenConfig{R<:Unsigned,T<:AbstractFloat} <: AbstractConfig
             vertical,
             horizontal,
             minimization_kwargs,
+            p_minimization_setup,
             filt_alphabet,
             apply_function,
             importance,
             check_opt,
             check_alphabet,
+            M
             # use_multithreads,
             # float_type
         )

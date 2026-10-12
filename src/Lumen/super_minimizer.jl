@@ -61,7 +61,7 @@
 #
 #   Tutto il resto (OFF-set esplicito via `.type fr` per evitare che
 #   Espresso tratti come OFF territorio non ancora enumerato o di altre
-#   classi, LazyPermutation, derivazione soglie/feature, loop di restart
+#   classi, SuperLazyPermutation, derivazione soglie/feature, loop di restart
 #   con scoring) resta come nella revisione precedente -- vedi la vecchia
 #   nota di patch qui sotto per il dettaglio di quel fix, che è ancora
 #   quello che rende sound l'OFF-set passato a ogni sigillo/combine.
@@ -97,7 +97,7 @@ end
 # ---------------------------------------------------------------------------- #
 #                     LAZY RANDOM PERMUTATION (no materialization)             #
 # ---------------------------------------------------------------------------- #
-struct LazyPermutation
+struct SuperLazyPermutation
     n::Int
     half_bits::Int
     mask::UInt64
@@ -105,23 +105,23 @@ struct LazyPermutation
     key::UInt64
 end
 
-function LazyPermutation(n::Integer; seed::Integer=rand(UInt64), rounds::Int=4)
+function SuperLazyPermutation(n::Integer; seed::Integer=rand(UInt64), rounds::Int=4)
     n <= 0 && throw(ArgumentError("n must be positive, got $n"))
     total_bits = max(2, ceil(Int, log2(n)))
     total_bits = iseven(total_bits) ? total_bits : total_bits + 1
     half_bits = total_bits ÷ 2
     mask = (UInt64(1) << half_bits) - UInt64(1)
-    return LazyPermutation(Int(n), half_bits, mask, rounds, UInt64(seed))
+    return SuperLazyPermutation(Int(n), half_bits, mask, rounds, UInt64(seed))
 end
 
-@inline function _feistel_round(l::UInt64, r::UInt64, round::Int, p::LazyPermutation)
+@inline function _feistel_round(l::UInt64, r::UInt64, round::Int, p::SuperLazyPermutation)
     h = (hash((r, round, p.key)) & p.mask)
     newl = r
     newr = (l ⊻ h) & p.mask
     return newl, newr
 end
 
-@inline function _feistel_permute(x::UInt64, p::LazyPermutation)
+@inline function _feistel_permute(x::UInt64, p::SuperLazyPermutation)
     l = (x >> p.half_bits) & p.mask
     r = x & p.mask
     for round in 1:p.rounds
@@ -130,7 +130,7 @@ end
     return (l << p.half_bits) | r
 end
 
-function permute(p::LazyPermutation, i::Integer)
+function permute(p::SuperLazyPermutation, i::Integer)
     (0 <= i < p.n) || throw(BoundsError(p, i))
     x = UInt64(i)
     while true
@@ -143,7 +143,7 @@ end
 # ---------------------------------------------------------------------------- #
 #                    O(1) linear-index -> combo tuple decoding                 #
 # ---------------------------------------------------------------------------- #
-function _strides(lens::Vector{Int})
+function _super_strides(lens::Vector{Int})
     n = length(lens)
     strides = ones(Int, n)
     @inbounds for j in 2:n
@@ -152,7 +152,7 @@ function _strides(lens::Vector{Int})
     return strides
 end
 
-@inline function _combo_at(
+@inline function _super_combo_at(
     thrs_with_p::Vector{<:AbstractVector},
     lens::Vector{Int},
     strides::Vector{Int},
@@ -168,7 +168,7 @@ end
 # ---------------------------------------------------------------------------- #
 #                       shared threshold/family derivation                     #
 # ---------------------------------------------------------------------------- #
-function _prepare_sequential_context(
+function _super_prepare_sequential_context(
     config::LumenConfig{R,T},
     model::SM.AbstractModel
 ) where {R,T}
@@ -214,7 +214,7 @@ function _prepare_sequential_context(
 
     thrs_with_p = _thrs_with_boundary(thresholds, op_families)
     lens = length.(thrs_with_p)
-    strides = _strides(lens)
+    strides = _super_strides(lens)
     n_total = prod(lens)
 
     _dbg("context prepared: n_total=", n_total, " nfeatures=", length(featurenames),
@@ -231,7 +231,7 @@ end
 #                             per-class raw buffer                             #
 # ---------------------------------------------------------------------------- #
 """
-    _SeqBuffer
+    _Super_SeqBuffer
 
 Stato per-classe durante un restart.
 
@@ -247,23 +247,23 @@ Stato per-classe durante un restart.
 - `n_rows_seen`: solo per debug/diagnostica, conteggio totale di righe
   osservate per questa classe in questo restart.
 """
-mutable struct _SeqBuffer
+mutable struct _Super_SeqBuffer
     raw::Vector{Vector{SL.Atom}}
     phi_groups::Vector{Vector{Any}}
     n_rows_seen::Int
 end
 
-_SeqBuffer() = _SeqBuffer(Vector{Vector{SL.Atom}}(), Vector{Vector{Any}}(), 0)
+_Super_SeqBuffer() = _Super_SeqBuffer(Vector{Vector{SL.Atom}}(), Vector{Vector{Any}}(), 0)
 
 # Occupazione ai fini del trigger di sigillo: SOLO il raw non ancora
 # sigillato conta verso M. I φ già sigillati sono "fuori budget" perché
 # non vengono più ri-processati da Espresso finché non si arriva alla
 # combine finale (fuori dal loop di enumerazione).
-@inline _raw_occupancy(buf::_SeqBuffer) = length(buf.raw)
+@inline _raw_occupancy(buf::_Super_SeqBuffer) = length(buf.raw)
 
 # Solo per debug: quanti termini totali sono già stati sigillati finora
 # per questa classe, sommando tutti i gruppi.
-@inline _n_sealed_terms(buf::_SeqBuffer) = sum(length, buf.phi_groups; init=0)
+@inline _n_sealed_terms(buf::_Super_SeqBuffer) = sum(length, buf.phi_groups; init=0)
 
 
 # ---------------------------------------------------------------------------- #
@@ -318,7 +318,7 @@ function _lit_to_atom(child::SL.Literal)
     cond = SL.value(SL.atom(child))
     if !SD.hasdual(cond)
         throw(ArgumentError(
-            "_term_to_cube: negative literal on condition $(cond) has no " *
+            "_super_term_to_cube: negative literal on condition $(cond) has no " *
             "dual condition to rewrite it to -- cannot round-trip this " *
             "term back into unsigned-atom cube form."
         ))
@@ -326,8 +326,8 @@ function _lit_to_atom(child::SL.Literal)
     return SL.Atom(SD.dual(cond))
 end
 
-_term_to_cube(term::Vector{<:SL.Atom}) = term
-function _term_to_cube(term)
+_super_term_to_cube(term::Vector{<:SL.Atom}) = term
+function _super_term_to_cube(term)
     term === SL.⊤ && return SL.Atom[]
     children = (term isa SL.Atom || term isa SL.Literal) ? (term,) : SL.grandchildren(term)
     return collect(SL.Atom, _lit_to_atom(c) for c in children)
@@ -338,24 +338,24 @@ end
 #                    OFF-set construction (shared by seal + combine)           #
 # ---------------------------------------------------------------------------- #
 """
-    _collect_offset_cubes(buffers::Vector{_SeqBuffer}, exclude_idx::Int)
+    _collect_offset_cubes(buffers::Vector{_Super_SeqBuffer}, exclude_idx::Int)
         -> Vector{Vector{SL.Atom}}
 
 OFF-set esplicito per la classe `exclude_idx`: union dei cubi di TUTTE LE
 ALTRE classi osservate finora in questo restart -- sia quelli già
-sigillati in `phi_groups` (riconvertiti a cubo via `_term_to_cube`) sia
+sigillati in `phi_groups` (riconvertiti a cubo via `_super_term_to_cube`) sia
 quelli ancora in `raw` (non ancora sigillati, ma già sicuramente
 osservati e quindi confermati OFF per `exclude_idx`, essendo il modello
 deterministico). Usata sia per sigillare un batch (`_seal_raw_batch!`) sia
 per la ri-minimizzazione finale in fase di combine
 (`_combine_phi_groups`).
 """
-function _collect_offset_cubes(buffers::Vector{_SeqBuffer}, exclude_idx::Int)
+function _collect_offset_cubes(buffers::Vector{_Super_SeqBuffer}, exclude_idx::Int)
     pieces = Vector{Vector{SL.Atom}}()
     for (j, other) in enumerate(buffers)
         j == exclude_idx && continue
         for grp in other.phi_groups
-            isempty(grp) || append!(pieces, _term_to_cube.(grp))
+            isempty(grp) || append!(pieces, _super_term_to_cube.(grp))
         end
         isempty(other.raw) || append!(pieces, other.raw)
     end
@@ -367,7 +367,7 @@ end
 #              STEP 1: sigillo isolato di un singolo batch di raw              #
 # ---------------------------------------------------------------------------- #
 """
-    _seal_raw_batch!(buf::_SeqBuffer, config::LumenConfig, M::Int;
+    _seal_raw_batch!(buf::_Super_SeqBuffer, config::LumenConfig, M::Int;
                       offset::Vector{Vector{SL.Atom}}=Vector{Vector{SL.Atom}}()) -> Bool
 
 STEP 1 della strategia seal-then-combine (vedi nota di patch in testa al
@@ -396,7 +396,7 @@ totale cumulativo della classe, perché con seal-then-combine il totale
 cumulativo emerge solo dopo la combine finale (vedi nota di patch).
 """
 function _seal_raw_batch!(
-    buf::_SeqBuffer,
+    buf::_Super_SeqBuffer,
     config::LumenConfig,
     M::Int;
     offset::Vector{Vector{SL.Atom}}=Vector{Vector{SL.Atom}}()
@@ -414,7 +414,7 @@ function _seal_raw_batch!(
 
     minimized_cubes = convert(
         Vector{Vector{SL.Atom}},
-        _term_to_cube.(collect(Any, minimized))
+        _super_term_to_cube.(collect(Any, minimized))
     )
     _verify_fold_coverage(batch, minimized_cubes; class_label=nothing, M=M)
 
@@ -435,7 +435,7 @@ end
 #           STEP 2: combine finale dei φ sigillati + ri-minimizzazione         #
 # ---------------------------------------------------------------------------- #
 """
-    _combine_phi_groups(buffers::Vector{_SeqBuffer}, config::LumenConfig, M::Int;
+    _combine_phi_groups(buffers::Vector{_Super_SeqBuffer}, config::LumenConfig, M::Int;
                          reminimize::Bool=true) -> Vector{Vector{Any}}
 
 STEP 2 della strategia seal-then-combine, eseguito UNA SOLA VOLTA per
@@ -465,7 +465,7 @@ sigillo finale del raw residuo sotto M).
    OFF-set grande quanto tutte le altre classi messe insieme.
 """
 function _combine_phi_groups(
-    buffers::Vector{_SeqBuffer},
+    buffers::Vector{_Super_SeqBuffer},
     config::LumenConfig,
     M::Int;
     reminimize::Bool=true
@@ -492,12 +492,12 @@ function _combine_phi_groups(
         offset = Vector{Vector{SL.Atom}}()
         for (j, other) in enumerate(combined_per_class)
             j == ci && continue
-            isempty(other) || append!(offset, _term_to_cube.(other))
+            isempty(other) || append!(offset, _super_term_to_cube.(other))
         end
 
         cubes = convert(
             Vector{Vector{SL.Atom}},
-            _term_to_cube.(combined_per_class[ci])
+            _super_term_to_cube.(combined_per_class[ci])
         )
 
         _dbg("combine: class_idx=", ci, " pre_reminimize_terms=", length(cubes),
@@ -580,7 +580,7 @@ function _reconcile_against_model!(
         this_chunk = clamp(min(max_apply_batch, ctx.n_total - i0), 1, ctx.n_total - i0)
         rows = Vector{NTuple{length(ctx.featurenames),eltype(ctx.thresholds[1])}}(undef, this_chunk)
         @inbounds for k in 1:this_chunk
-            rows[k] = _combo_at(ctx.thrs_with_p, ctx.lens, ctx.strides, i0 + k - 1)
+            rows[k] = _super_combo_at(ctx.thrs_with_p, ctx.lens, ctx.strides, i0 + k - 1)
         end
         i0 += this_chunk
 
@@ -607,7 +607,7 @@ function _reconcile_against_model!(
             for cj in 1:nclasses
                 dirty[cj] && continue
                 covered = !isempty(per_class_terms[cj]) && any(
-                    t -> _cube_satisfies_term(cube, _term_to_cube(t)),
+                    t -> _cube_satisfies_term(cube, _super_term_to_cube(t)),
                     per_class_terms[cj]
                 )
                 if (cj == true_ci) != covered
@@ -633,7 +633,7 @@ function _reconcile_against_model!(
         this_chunk = clamp(min(max_apply_batch, ctx.n_total - i0), 1, ctx.n_total - i0)
         rows = Vector{NTuple{length(ctx.featurenames),eltype(ctx.thresholds[1])}}(undef, this_chunk)
         @inbounds for k in 1:this_chunk
-            rows[k] = _combo_at(ctx.thrs_with_p, ctx.lens, ctx.strides, i0 + k - 1)
+            rows[k] = _super_combo_at(ctx.thrs_with_p, ctx.lens, ctx.strides, i0 + k - 1)
         end
         i0 += this_chunk
 
@@ -667,7 +667,7 @@ function _reconcile_against_model!(
             if dirty[cj]
                 append!(offset, exact_on_dirty[cj])
             elseif !isempty(per_class_terms[cj])
-                append!(offset, _term_to_cube.(per_class_terms[cj]))
+                append!(offset, _super_term_to_cube.(per_class_terms[cj]))
             end
         end
 
@@ -701,9 +701,9 @@ function _sequential_pass(
 )
     nclasses = length(ctx.classnames)
     class_index = Dict(c => i for (i, c) in enumerate(ctx.classnames))
-    buffers = [_SeqBuffer() for _ in 1:nclasses]
+    buffers = [_Super_SeqBuffer() for _ in 1:nclasses]
 
-    perm = LazyPermutation(ctx.n_total; seed=seed)
+    perm = SuperLazyPermutation(ctx.n_total; seed=seed)
     ok = true
 
     _dbg("pass start: seed=", seed, " n_total=", ctx.n_total, " M=", M,
@@ -722,7 +722,7 @@ function _sequential_pass(
         rows = Vector{NTuple{length(ctx.featurenames),eltype(ctx.thresholds[1])}}(undef, this_chunk)
         @inbounds for k in 1:this_chunk
             linidx = permute(perm, i0 + k - 1)
-            rows[k] = _combo_at(ctx.thrs_with_p, ctx.lens, ctx.strides, linidx)
+            rows[k] = _super_combo_at(ctx.thrs_with_p, ctx.lens, ctx.strides, linidx)
         end
         i0 += this_chunk
 
@@ -836,7 +836,7 @@ Tutto il resto -- restart loop, scoring, DecisionSet assembly -- è
 invariato rispetto alla revisione precedente.
 """
 function super_lumen(
-    config::LumenConfig,
+    config::LumenConfig{R,T},
     model::SM.AbstractModel;
     M::Int=100_000,
     N::Int=10,
@@ -844,14 +844,14 @@ function super_lumen(
     score::Symbol=:n_terms,
     reminimize_after_combine::Bool=true,
     reconcile_final::Bool=true
-)
+) where {R,T}
     score === :n_terms || throw(ArgumentError(
         "Only score=:n_terms is currently supported."
     ))
     M >= 1 || throw(ArgumentError("M must be positive, got $M"))
     N >= 1 || throw(ArgumentError("N must be positive, got $N"))
 
-    ctx = _prepare_sequential_context(config, model)
+    ctx = _super_prepare_sequential_context(config, model)
 
     _dbg("super_lumen start: M=", M, " N=", N,
         " max_apply_batch=", max_apply_batch, " scheme=mitespresso (hardcoded)",
@@ -906,7 +906,7 @@ function super_lumen(
     valid_mask = .!isempty.(best_terms)
     classes = ctx.classnames[valid_mask]
 
-    float_type = get_float_type(config)
+    float_type = T
     formulas = Vector{Vector{Union{
         SL.LeftmostConjunctiveForm{SL.Atom{float_type}},
         SyntaxStructure

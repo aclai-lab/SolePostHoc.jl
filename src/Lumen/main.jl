@@ -1,27 +1,3 @@
-module Lumen
-
-using SoleLogics
-const SL = SoleLogics
-using SoleModels
-const SM = SoleModels
-using SoleData
-const SD = SoleData
-
-using CategoricalArrays
-using DataFrames
-using IterTools
-
-using ABC_jll
-
-include("config.jl")
-include("sequential_minimizer.jl")
-include("super_minimizer.jl")
-include("lumen_shannon.jl")
-
-
-export lumen, LumenConfig, LumenResult, lumen_sequential, super_lumen, lumen_shannon
-
-
 const Operators = Union{typeof(<),typeof(>),typeof(≤),typeof(≥)}
 const Float = Union{Float32,Float64}
 
@@ -526,7 +502,7 @@ end
 """
     _take_first_percentage(
         atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
-        depth::Float64
+        depth::AbstractFloat
     ) -> Vector{<:SL.Atom{<:SD.ScalarCondition}}
 
 Return the first `ceil(length(atoms) × depth)` elements of `atoms`.
@@ -536,14 +512,14 @@ of a decision tree (as visited in BFS order) are retained.
 
 # Arguments
 - `atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}}`: Ordered list of atoms.
-- `depth::Float64`: Fraction ∈ (0, 1] of atoms to keep.
+- `depth::AbstractFloat`: Fraction ∈ (0, 1] of atoms to keep.
 
 # Returns
 - A sub-vector containing at most `ceil(n × depth)` elements.
 """
 function _take_first_percentage(
     atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
-    depth::Float64
+    depth::AbstractFloat
 )
     n_total = length(atoms)
     n_to_take = Int(ceil(n_total * depth))
@@ -958,7 +934,7 @@ struct ExtractRulesData{
         predictions, combinations, thresholds, featurenames, classnames, op_families
     )
 
-    function ExtractRulesData(extractor::LumenConfig, model::SM.AbstractModel)
+    function ExtractRulesData(extractor::LumenConfig{R,T}, model::SM.AbstractModel) where {R,T}
         # -------------------------------------------------------------------- #
         # STEP 1 — Read the depth parameter from the configuration.
         # `depth ∈ (0, 1]`: if < 1.0, only atoms from the upper levels of the
@@ -1084,7 +1060,7 @@ struct ExtractRulesData{
         #             encoding, where larger thresholds correspond to
         #             later bits).
         # -------------------------------------------------------------------- #
-        type = get_float_type(extractor)
+        type = T
         thresholds = Vector{Vector{type}}(undef, length(featurenames))
         op_families = Vector{Symbol}(undef, length(featurenames))
 
@@ -1496,17 +1472,17 @@ applies [`_refine_dnf`](@ref) to remove dominated terms.
 """
 function run_minimization(
     ::Val{:abc},
-    extractor::LumenConfig,
+    extractor::LumenConfig{R,T},
     atoms::Vector{Vector{SL.Atom}},
     universe_conditions::Vector{<:SD.AbstractScalarCondition}
-)
+) where {R,T}
     ABC_jll.abc() do binary
         minimized_formula = SD.abc_minimize(
             atoms,
             binary;
             fast=3,
             depth=get_depth(extractor),
-            float_type=get_float_type(extractor),
+            float_type=T,
             universe_conditions=universe_conditions,
         )
         return refine_dnf(minimized_formula)
@@ -1553,9 +1529,9 @@ applies [`_refine_dnf`](@ref) to remove dominated terms.
 #=
 function run_minimization(
     ::Val{:mitespresso},
-    extractor::LumenConfig,
+    extractor::LumenConfig{R,T},
     atoms::Vector{Vector{SL.Atom}}
-)
+) where {R,T}
     n_in = length(atoms)
     binary = get_binary(extractor)
     println("[run_minimization:mitespresso] INPUT: ", n_in, " atom-vectors, binary=", binary)
@@ -1568,7 +1544,7 @@ function run_minimization(
             atoms,
             binary;
             depth=get_depth(extractor),
-            float_type=get_float_type(extractor)
+            float_type=T
         )
     elapsed = time() - t0
 
@@ -1626,10 +1602,10 @@ then applies [`_refine_dnf`](@ref) to remove dominated terms.
 """
 function run_minimization(
     ::Val{:mitespresso},
-    extractor::LumenConfig,
+    extractor::LumenConfig{R,T},
     atoms::Vector{Vector{SL.Atom}};
     offset::Union{Nothing,Vector{Vector{SL.Atom}}}=nothing
-)
+) where {R,T}
     n_in = length(atoms)
     n_off = isnothing(offset) ? 0 : length(offset)
     binary = get_binary(extractor)
@@ -1643,8 +1619,8 @@ function run_minimization(
         SD.espresso_minimize(
             atoms,
             binary;
-            depth=get_depth(extractor),
-            float_type=get_float_type(extractor),
+            depth=Float64(get_depth(extractor)),
+            float_type=T,
             offset=offset
         )
     elapsed = time() - t0
@@ -1727,10 +1703,10 @@ See also: [`LumenConfig`](@ref), [`LumenResult`](@ref),
 [`ExtractRulesData`](@ref)
 """
 function lumen(
-    config::LumenConfig,
+    config::LumenConfig{R,T},
     model::SM.AbstractModel
-)
-    float_type = get_float_type(config)
+) where {R,T}
+    float_type = T
 
     # extract conjuncts
     extractrulesdata = ExtractRulesData(config, model)
@@ -1790,6 +1766,4 @@ function lumen(
     end
 
     return LumenResult(ds)
-end
-
 end

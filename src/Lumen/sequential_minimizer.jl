@@ -814,7 +814,7 @@ SoleLogics version only exposes a per-instance signature
 `covered[ci] = SL.check(formulas[ci], d)` line with a loop over `k`.
 """
 function _verify_and_repair_sensitivity(
-    config::LumenConfig,
+    config::LumenConfig{R,T},
     model::SM.AbstractModel,
     ctx::NamedTuple,
     scheme::Symbol,
@@ -822,13 +822,13 @@ function _verify_and_repair_sensitivity(
     classnames::AbstractVector;
     max_apply_batch::Int,
     max_repair_rounds::Int=3
-)
+) where {R,T}
     nclasses = length(classnames)
     class_index = Dict(c => i for (i, c) in enumerate(classnames))
     terms = deepcopy(per_class_terms)
     # Needed by `_class_formula` to force the wide, non-`DNF`-matching
     # element type -- see the dispatch-ambiguity note in its docstring.
-    float_type = get_float_type(config)
+    float_type = T
 
     for round in 1:max_repair_rounds
         formulas = [_class_formula(terms[i], float_type) for i in 1:nclasses]
@@ -1049,7 +1049,7 @@ two extractors' outputs structurally interchangeable everywhere downstream.
   for exceeding the memory budget even after folding.
 """
 function lumen_sequential(
-    config::LumenConfig,
+    config::LumenConfig{R,T},
     model::SM.AbstractModel;
     M::Int=100_000,
     N::Int=10,
@@ -1057,7 +1057,7 @@ function lumen_sequential(
     score::Symbol=:n_terms,
     repair_sensitivity::Bool=true,
     max_repair_rounds::Int=3
-)
+) where {R,T}
     score === :n_terms || throw(ArgumentError(
         "Only score=:n_terms is currently supported."
     ))
@@ -1142,7 +1142,7 @@ function lumen_sequential(
     # anything downstream behaves identically regardless of which extractor
     # produced the rules.
     # ------------------------------------------------------------------ #
-    float_type = get_float_type(config)
+    float_type = T
     formulas = Vector{Vector{Union{
         SL.LeftmostConjunctiveForm{SL.Atom{float_type}},
         SyntaxStructure
