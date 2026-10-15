@@ -276,17 +276,10 @@ end
 #     return s
 # end
 
-# ---------------------------------------------------------------------------- #
-#                    combining two cofactors: PLAIN UNION ONLY                 #
-# ---------------------------------------------------------------------------- #
-# Sibling cofactors are combined by plain set union of their terms, class by
-# class, and never re-minimised: a term that dropped the literal of the split
-# feature is a don't-care only INSIDE the sub-rectangle it came from, and
-# feeding it back to the minimiser together with the sibling's terms would let
-# other terms be discarded as "redundant" when they are not. Each cofactor is
-# already exact for its own (disjoint) sub-rectangle, and the two exactly
-# partition the parent's, so the union is exact too. This is intentionally the
-# ONLY combination strategy in this file.
+# NOTE: no `_combine_cofactors` here: `_extract!` accumulates both cofactors
+# into the shared `out` in place, so no explicit combination step is needed
+# (the plain-union `_combine_cofactors` used by the non-mutating driver lives
+# in lumen_shannon.jl).
 
 # ---------------------------------------------------------------------------- #
 #                           extractor, shannon lumen                           #
@@ -302,8 +295,6 @@ function _extract!(
     hi::Vector{R},
 ) where {R<:Unsigned,T<:AbstractFloat}
     prod(hi .- lo .+ one(R)) ≤ config.M &&
-    # _rect_size(lo, hi, config.M) ≤ config.M &&
-        # return _leaf_minimize!(out, ws, m, config, thrs, ensemble, lo, hi)
         return _leaf_minimize!(config, out, ws, thrs, ensemble, lo, hi)
 
     # widest axis, without a temporary

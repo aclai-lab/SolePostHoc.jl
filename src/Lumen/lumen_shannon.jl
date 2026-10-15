@@ -61,6 +61,7 @@ function _leaf_extract(
     scheme::Symbol;
     max_apply_batch::Int
 )
+max_apply_batch = 10000
     nfeat = length(ctx.featurenames)
     nclasses = length(ctx.classnames)
     class_index = Dict(c => i for (i, c) in enumerate(ctx.classnames))

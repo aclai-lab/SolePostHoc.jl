@@ -64,7 +64,7 @@ function _antecedent(
 
     disjuncts = Vector{SyntaxStructure}(undef, length(dnf))
 
-    for i in 1:length(dnf)
+    for i in eachindex(dnf)
         disjuncts[i] = length(dnf[i]) == 1 ?
             _toatom(dnf[i][1], featurenames) :
             SL.LeftmostConjunctiveForm([_toatom(a, featurenames) for a in dnf[i]])
@@ -84,7 +84,7 @@ function decision_set(
     terms::Vector{LumenDNF{R,T}},
     featurenames::AbstractVector,
     classnames::AbstractVector,
-    order::AbstractVector{<:Integer}=eachindex(classnames),
+    order::AbstractVector{R}=eachindex(classnames),
 ) where {R<:Unsigned,T<:AbstractFloat}
     C = eltype(classnames)
     rules = SM.Rule[

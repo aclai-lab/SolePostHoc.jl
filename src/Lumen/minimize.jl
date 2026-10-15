@@ -69,6 +69,8 @@ Base.@propagate_inbounds Base.getindex(d::LumenDNF, i::Int) =
 Base.iterate(d::LumenDNF, i::Int=1) = i > nterms(d) ? nothing : (d[i], i + 1)
 Base.firstindex(::LumenDNF) = 1
 Base.lastindex(d::LumenDNF) = nterms(d)
+Base.eachindex(d::LumenDNF) = Base.OneTo(nterms(d))
+Base.keys(d::LumenDNF) = Base.OneTo(nterms(d))
 natoms(d::LumenDNF) = length(d.atoms)
 
 function Base.push!(d::LumenDNF{R,T}, term::AbstractVector{LumenAtom{R,T}}) where {R,T}
@@ -93,9 +95,9 @@ function Base.empty!(d::LumenDNF)
     return d
 end
 
-function Base.show(io::IO, d::LumenDNF{R,T}) where {R,T}
-    print(io, "LumenDNF{", R, ",", T, "}(", nterms(d), " terms, ", natoms(d), " atoms)")
-end
+# function Base.show(io::IO, d::LumenDNF{R,T}) where {R,T}
+#     print(io, "LumenDNF{", R, ",", T, "}(", nterms(d), " terms, ", natoms(d), " atoms)")
+# end
 
 # ---------------------------------------------------------------------------- #
 #                                 PLA layout                                   #
