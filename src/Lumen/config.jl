@@ -245,15 +245,6 @@ Return `true` if alphabet-analysis diagnostics are enabled in `r`.
 """
 @inline get_check_alphabet(r::LumenConfig) = r.check_alphabet
 
-# @inline get_use_multithreads(r::LumenConfig) = r.use_multithreads
-
-# """
-#     get_float_type(r::LumenConfig) -> Type
-
-# Return the floating-point type stored in `r`.
-# """
-# @inline get_float_type(r::LumenConfig) = r.float_type
-
 function get_universe_conditions(model)
     thresholds_per_feature = Dict{Any,Set{Float64}}()
 

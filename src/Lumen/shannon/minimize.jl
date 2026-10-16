@@ -95,9 +95,9 @@ function Base.empty!(d::LumenDNF)
     return d
 end
 
-# function Base.show(io::IO, d::LumenDNF{R,T}) where {R,T}
-#     print(io, "LumenDNF{", R, ",", T, "}(", nterms(d), " terms, ", natoms(d), " atoms)")
-# end
+function Base.show(io::IO, d::LumenDNF{R,T}) where {R,T}
+    print(io, "LumenDNF{", R, ",", T, "}(", nterms(d), " terms, ", natoms(d), " atoms)")
+end
 
 # ---------------------------------------------------------------------------- #
 #                                 PLA layout                                   #

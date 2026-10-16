@@ -53,14 +53,14 @@ export Univariate, Multivariate
 export LumenConfig, minimization_scheme, p_minimization_scheme
 include("config.jl")
 export LumenEnsemble
-include("ensemble.jl")
+include("shannon/ensemble.jl")
 export ThresholdSpace
-include("thresholds.jl")
+include("shannon/thresholds.jl")
 export LumenDNF, PlaLayout, Minimizer
 export write_pla, read_pla, run_minimization, refine!, compact!
-include("minimize.jl")
+include("shannon/minimize.jl")
 export gather_atoms
-include("extract.jl")
+include("shannon/extract.jl")
 export lumen_shannon, assign, decision_set, leafclasses
 export lumen, LumenResult, lumen_sequential, super_lumen
 include("sequential_minimizer.jl")

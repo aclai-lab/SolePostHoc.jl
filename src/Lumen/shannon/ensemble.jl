@@ -1,3 +1,6 @@
+# ---------------------------------------------------------------------------- #
+#                                 operators                                    #
+# ---------------------------------------------------------------------------- #
 @inline evalop(::typeof(<)) = 0x01
 @inline evalop(::typeof(>)) = 0x02
 @inline evalop(::typeof(≥)) = 0x03
@@ -92,11 +95,12 @@ Base.hash(n::LumenNode, h::UInt) =
 # ---------------------------------------------------------------------------- #
 #                               Lumen Ensemble                                 #
 # ---------------------------------------------------------------------------- #
-struct LumenEnsemble{R<:Unsigned,T<:AbstractFloat}
+struct LumenEnsemble{R<:Unsigned,T<:AbstractFloat,S,A<:Base.Callable}
     atoms::Vector{LumenAtom{R,T}}
     nodes::Vector{LumenNode{R}}
     roots::Vector{R}
-    # weights::Vector{T}
+    classes::Vector{S}
+    aggregate::A
 end
 
 # the plain label behind an outcome (a categorical value unwraps to its level)
@@ -118,6 +122,7 @@ function LumenEnsemble(
     atoms = LumenAtom{R,T}[]
     nodes = LumenNode{R}[]
     roots = R[]
+    classes = S[]
 
     function fillensemble(node)::R
         # reserve slot first so children get higher ids
@@ -126,11 +131,14 @@ function LumenEnsemble(
         id = R(length(nodes))
 
         if node isa SM.ConstantModel
+            o = outcome(node)
+            c = levelcode(o)
+            if c > length(classes)
+                resize!(classes, length(CategoricalArrays.levels(o)))
+            end
+            classes[c] = o
             atoms[id] = LumenAtom{R,T}()
-            nodes[id] = LumenNode{R}(
-                zero(R), zero(R),
-                R(levelcode(outcome(node)))
-            )
+            nodes[id] = LumenNode{R}(zero(R), zero(R), R(c))
         elseif node isa SM.Branch
             cond = SL.value(antecedent(node))
             left = fillensemble(posconsequent(node))
@@ -152,7 +160,8 @@ function LumenEnsemble(
         push!(roots, fillensemble(m))
     end
 
-    return LumenEnsemble{R,T}(atoms, nodes, roots)
+    aggregate = SM.weighted_aggregation(model)
+    return LumenEnsemble{R,T,S,typeof(aggregate)}(atoms, nodes, roots, classes, aggregate)
 end
 
 Base.length(e::LumenEnsemble) = length(e.nodes)
@@ -235,7 +244,8 @@ function apply!(
     n = size(d, 1)
     counts = Vector{Float64}(undef, nclasses)
     roots = f.roots
-    # weights = f.weights
+    votes = Vector{R}(undef, length(roots)) # leaf class of every tree
+    tied = similar(f.classes, length(roots)) # touched only on a tie
 
     @inbounds for i in 1:n
         fill!(counts, 0.0)
@@ -251,6 +261,7 @@ function apply!(
             end
             # counts[node.leaf] += weights[k]
             counts[node.leaf] += 1
+            votes[k] = node.leaf
         end
 
         best = 1
@@ -262,15 +273,16 @@ function apply!(
                 tie = true
             end
         end
-        # SoleModels parity rule (DecisionTreeExt `:alphanumeric` tiebreaker,
-        # the one SoleXplorer sets): on a tie, `first(sort(keys(countmap)))`,
-        # i.e. the lowest class (in `leafclasses` order) that received at
-        # least one vote, even when that class is not among the tied maxima.
+        # A tie is broken by the model's own aggregation, fed the leaf
+        # outcomes in tree order exactly as `SM.apply` does: its parity rule
+        # depends on the model (default `bestguess` takes `argmax` of a
+        # countmap, the DecisionTreeExt `:alphanumeric` tiebreaker the lowest
+        # voted class), so no fixed rule here can match every model.
         if tie
-            best = 1
-            @inbounds while iszero(counts[best])
-                best += 1
+            @inbounds for k in eachindex(votes)
+                tied[k] = f.classes[votes[k]]
             end
+            best = levelcode(f.aggregate(tied; suppress_parity_warning=true))
         end
         preds[i] = best
     end

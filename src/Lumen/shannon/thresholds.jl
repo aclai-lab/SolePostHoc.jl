@@ -49,23 +49,23 @@ function ThresholdSpace(
         thrs, thrs_offset, op_families, feat_idxs, class_idxs, nlev)
 end
 
-# function Base.show(io::IO, ts::ThresholdSpace{R,T}) where {R,T}
-#     print(io, "ThresholdSpace{", R, ",", T, "}(",
-#         length(ts.feat_idxs), " features, ",
-#         length(ts.class_idxs), " classes)")
-# end
+function Base.show(io::IO, ts::ThresholdSpace{R,T}) where {R,T}
+    print(io, "ThresholdSpace{", R, ",", T, "}(",
+        length(ts.feat_idxs), " features, ",
+        length(ts.class_idxs), " classes)")
+end
 
-# function Base.show(
-#     io::IO, ::MIME"text/plain", ts::ThresholdSpace{R,T}
-# ) where {R,T}
-#     show(io, ts)
-#     isempty(ts.feat_idxs) && return
-#     println(io)
-#     for (i, f) in enumerate(ts.feat_idxs)
-#         println(io, "  V", Int(f), ": ", Int(ts.nlev[i]) - 1, " thresholds")
-#     end
-#     print(io, "  classes: ", length(ts.class_idxs))
-# end
+function Base.show(
+    io::IO, ::MIME"text/plain", ts::ThresholdSpace{R,T}
+) where {R,T}
+    show(io, ts)
+    isempty(ts.feat_idxs) && return
+    println(io)
+    for (i, f) in enumerate(ts.feat_idxs)
+        println(io, "  V", Int(f), ": ", Int(ts.nlev[i]) - 1, " thresholds")
+    end
+    print(io, "  classes: ", length(ts.class_idxs))
+end
 
 # ---------------------------------------------------------------------------- #
 #                            thresholds boundaries                             #

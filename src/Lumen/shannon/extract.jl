@@ -41,10 +41,6 @@ function LeafScratch(
         Matrix{T}(undef, nrows, nfeats),
         Vector{Int}(undef, nrows),
         Vector{R}(undef, nrows),
-        # zeros(Int, nclasses),
-        # zeros(Int, nclasses),
-        # zeros(Int, nclasses),
-        # zeros(Int, nclasses),
         Vector{Int}(undef, nclasses),
         Vector{Int}(undef, nclasses),
         Vector{Int}(undef, nclasses),
@@ -94,8 +90,6 @@ function gather_atoms(
     return pos
 end
 
-# TODO PROVA A VEDERE CHE SUCCEDE SU ELIMINI ENTRAMBI I DUALI,NON UNO SOLO
-# drop atoms whose dual (same feat/thr, complementary op) was already kept.
 function removeduals!(atoms::Vector{LumenAtom{R,T}}) where {R,T}
     seen = Set{LumenAtom{R,T}}()
     filter!(atoms) do a
@@ -117,7 +111,7 @@ backed by `ws.pool`) and is overwritten by the next leaf, so consume it
 before calling again.
 """
 function _leaf_extract!(
-    config::LumenConfig{R,T,MS},
+    ::LumenConfig{R,T,MS},
     ws::LeafScratch{R,T},
     thrs::ThresholdSpace{R,T},
     ensemble::LumenEnsemble{R,T},
@@ -127,23 +121,10 @@ function _leaf_extract!(
     nfeats = length(thrs.feat_idxs)
     nclasses = length(thrs.class_idxs)
 
-    # widths = hi .- lo .+ one(R)
-    # total = prod(widths)
-    # nrows = min(Int(config.M), total)
-
-    # widths = ws.widths
     ws.widths .= hi .- lo .+ one(R)
-    # total = ws.total
-
-    # tbl = Matrix{T}(undef, nrows, nfeats) # apply input, one chunk at a time
-    # nat = Vector{Int}(undef, nrows) # atoms produced by row k of the chunk
-    # preds = Vector{R}(undef, total) # class of every row
-    # natoms_c = zeros(Int, nclasses)
-    # ncubes_c = zeros(Int, nclasses)
-
-    # tbl = ws.tbl; nat = ws.nat; preds = ws.preds
-    # natoms_c = fill!(ws.natoms_c, 0)
-    # ncubes_c = fill!(ws.ncubes_c, 0)
+    # this leaf's own size: `ws.total` is only the buffers' capacity, and
+    # looping over it would revisit the leaf's points as duplicates
+    total = prod(Int, ws.widths)
 
     # pass 0: reset the counters
     fill!(ws.natoms_c, 0)
@@ -152,7 +133,7 @@ function _leaf_extract!(
     fill!(ws.ccur, 0)
 
     # pass 1: classify every row and size the per-class output
-    @inbounds for k in 1:ws.total
+    @inbounds for k in 1:total
         r = k - 1
         n = 0
         for f in 1:nfeats
@@ -165,9 +146,9 @@ function _leaf_extract!(
         ws.nat[k] = n
     end
 
-    apply!(ws.preds, ensemble, view(ws.tbl, 1:ws.total, :), nclasses)
+    apply!(ws.preds, ensemble, view(ws.tbl, 1:total, :), nclasses)
 
-    @inbounds for k in 1:ws.total
+    @inbounds for k in 1:total
         c = ws.preds[k]
         ws.natoms_c[c] += ws.nat[k]
         ws.ncubes_c[c] += 1
@@ -187,7 +168,7 @@ function _leaf_extract!(
 
     # pass 2: rewind the odometer and fill by cursor, straight from its digits
     cur = copyto!(ws.cur, lo)
-    @inbounds for i in 1:ws.total
+    @inbounds for i in 1:total
         c = ws.preds[i]
         d = ws.cube[c]
         a0 = ws.acur[c]
@@ -252,7 +233,6 @@ function _leaf_minimize!(
     config::LumenConfig{R,T,MS},
     out::Vector{LumenDNF{R,T}},
     ws::LeafScratch{R,T},
-    # m::Minimizer,
     thrs::ThresholdSpace{R,T},
     ensemble::LumenEnsemble{R,T},
     lo::Vector{R},
@@ -260,32 +240,15 @@ function _leaf_minimize!(
 ) where {R<:Unsigned,T<:AbstractFloat,MS}
     alphabet, cube = _leaf_extract!(config, ws, thrs, ensemble, lo, hi)
     Threads.@threads for c in eachindex(out)
-        # append!(out[c], run_minimization(m, alphabet[c], cube[c]))
         append!(out[c], run_minimization(MS, config, alphabet[c], cube[c]))
     end
     return out
 end
 
-# product of the widths, saturating at `M + 1` so it can never overflow `R`
-# function _rect_size(lo::Vector{R}, hi::Vector{R}, M::R) where {R<:Unsigned}
-#     s = one(UInt64)
-#     @inbounds for j in eachindex(lo)
-#         s *= UInt64(hi[j] - lo[j]) + one(UInt64)
-#         s > M && return UInt64(M) + one(UInt64)
-#     end
-#     return s
-# end
-
-# NOTE: no `_combine_cofactors` here: `_extract!` accumulates both cofactors
-# into the shared `out` in place, so no explicit combination step is needed
-# (the plain-union `_combine_cofactors` used by the non-mutating driver lives
-# in lumen_shannon.jl).
-
 # ---------------------------------------------------------------------------- #
 #                           extractor, shannon lumen                           #
 # ---------------------------------------------------------------------------- #
 function _extract!(
-    # m::Minimizer,
     config::LumenConfig{R,T},
     out::Vector{LumenDNF{R,T}},
     ws::LeafScratch{R,T},
@@ -338,51 +301,3 @@ function _extract(
     # return _extract!(out, ws, m, config, thrs, ensemble, copy(lo), copy(hi))
     return _extract!(config, out, ws, thrs, ensemble, copy(lo), copy(hi))
 end
-
-# function _extract(
-#     thrs::ThresholdSpace{R,T},
-#     st::ShannonState
-# ) where {R<:Unsigned,T<:AbstractFloat}
-#     nfeat = length(thrs.feat_idxs)
-#     stack = R[]
-#     # empty!(stack)
-
-#     lo = ones(R, nfeat)
-#     hi = copy(st.sp.nlev)
-#     append!(stack, lo)
-#     append!(stack, hi)
-
-#     while !isempty(stack)
-#         base = length(stack) - 2 * nfeat
-#         @inbounds for j in 1:nfeat
-#             lo[j] = stack[base+j]
-#             hi[j] = stack[base+nfeat+j]
-#         end
-#         resize!(stack, base)
-
-#         class, ns = classify_box!(st.cf, lo, hi, st.votes, st.treeclasses, st.straddles)
-
-#         if ns == 0
-#             _emit!(st, class, lo, hi)
-#             continue
-#         end
-
-#         j, c = best_split(st.straddles, ns)
-#         st.nsplits += 1
-
-#         # The stack is LIFO, so the upper half goes on first and the lower half
-#         # comes off first. Emitting boxes in increasing region order is what
-#         # lets `trymerge_last!` absorb siblings as they arrive.
-#         let saved = lo[j]
-#             lo[j] = c                       # upper half [c, hi[j]]
-#             append!(stack, lo); append!(stack, hi)
-#             lo[j] = saved
-#         end
-#         let saved = hi[j]
-#             hi[j] = c - R(1)            # lower half [lo[j], c-1]
-#             append!(stack, lo); append!(stack, hi)
-#             hi[j] = saved
-#         end
-#     end
-#     return nothing
-# end
