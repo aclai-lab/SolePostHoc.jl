@@ -84,8 +84,8 @@ function decision_set(
     terms::Vector{LumenDNF{R,T}},
     featurenames::AbstractVector,
     classnames::AbstractVector,
-    order::AbstractVector{R}=eachindex(classnames),
-) where {R<:Unsigned,T<:AbstractFloat}
+    order::AbstractVector{O}=eachindex(classnames),
+) where {R<:Unsigned,T<:AbstractFloat,O<:Integer}
     C = eltype(classnames)
     rules = SM.Rule[
         SM.Rule{C}(_antecedent(terms[c], featurenames), classnames[c])
@@ -144,9 +144,6 @@ function lumen_paso_shannon(
     lo = ones(R, length(hi))
 
     terms = _extract(config, thrs, ensemble, lo, hi)
-    # finally
-    #     close(m)
-    # end
 
     # leaves were minimised in isolation: a term of one leaf may be contained
     # in, or adjacent to, a term of a neighbouring leaf. Dropping the former
@@ -154,7 +151,8 @@ function lumen_paso_shannon(
     # cross-leaf compactions that are safe without re-minimising.
     foreach(compact!, terms)
 
-    return decision_set(terms, featurenames, categorical(classnames), _ruleorder(model, classnames))
+    return decision_set(
+        terms, featurenames, categorical(classnames), _ruleorder(model, classnames))
 end
 
 function lumen_paso_shannon(
@@ -167,6 +165,5 @@ function lumen_paso_shannon(
         assign(R, unique!(SM.info(model, :supporting_labels)), true)
 
     lumen_paso_shannon(
-        config,
-        model, featurenames, feat_idxs, String.(classnames), class_idxs)
+        config, model, featurenames, feat_idxs, String.(classnames), class_idxs)
 end

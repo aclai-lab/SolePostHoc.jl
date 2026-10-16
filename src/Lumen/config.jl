@@ -93,7 +93,7 @@ struct LumenConfig{R<:Unsigned,T<:AbstractFloat,MS,S} <: AbstractConfig
         vertical::Real=1.0,
         horizontal::Real=1.0,
         minimization_kwargs::NamedTuple=(;),
-        p_minimization_setup::Type{S}=Fast,
+        p_minimization_setup::Type{S}=Sop,
         filt_alphabet::Base.Callable=identity,
         apply_function::Base.Callable=SM.apply,
         importance::Vector=Real[],
@@ -109,8 +109,8 @@ struct LumenConfig{R<:Unsigned,T<:AbstractFloat,MS,S} <: AbstractConfig
         # these parameters control the proportion of instances
         # that must be covered by rules
         if vertical ≤ 0.0 || vertical > 1.0 ||
-           horizontal ≤ 0.0 || horizontal > 1.0 ||
-           depth ≤ 0.0 || depth > 1.0
+            horizontal ≤ 0.0 || horizontal > 1.0 ||
+            depth ≤ 0.0 || depth > 1.0
             throw(ArgumentError(
                 "vertical, depth and horizontal parameters must be in range " *
                 "(0.0, 1.0]. Got vertical=$(vertical), depth=$(depth), " *

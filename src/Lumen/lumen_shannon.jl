@@ -278,5 +278,7 @@ function lumen_shannon(
         M, max_apply_batch
     )
 
+    # @show per_class_terms
+
     return _finalize_decision_set(ctx, per_class_terms, config)
 end

@@ -246,7 +246,7 @@ end
 # error rather than a silent misdecode.
 function _read_ilb!(perm::Vector{Int}, pla::AbstractVector{UInt8}, i::Int, e::Int, nc::Int)
     empty!(perm)
-    p = i + 4                       # past ".ilb"
+    p = i + 4 # past ".ilb"
     @inbounds while p ≤ e
         if pla[p] == UInt8(' ')
             p += 1
@@ -258,8 +258,7 @@ function _read_ilb!(perm::Vector{Int}, pla::AbstractVector{UInt8}, i::Int, e::In
             1 ≤ c ≤ nc || throw(ArgumentError("PLA column label x$c out of range"))
             push!(perm, c)
         else
-            throw(ArgumentError("unexpected PLA column label in: " *
-                                String(pla[i:e])))
+            throw(ArgumentError("unexpected PLA column label in: " * String(pla[i:e])))
         end
     end
     return perm
@@ -291,8 +290,10 @@ function _decode_row!(
             resize!(out, n0)
             return false
         end
-        last1 != 0 && push!(out, LumenAtom{R,T}(L.feat[last1], L.thr[last1], L.upop[last1]))
-        first0 != 0 && push!(out, LumenAtom{R,T}(L.feat[first0], L.thr[first0], dualop(L.upop[first0])))
+        last1 != 0 && push!(
+            out, LumenAtom{R,T}(L.feat[last1], L.thr[last1], L.upop[last1]))
+        first0 != 0 && push!(
+            out, LumenAtom{R,T}(L.feat[first0], L.thr[first0], dualop(L.upop[first0])))
         c = e + 1
     end
     return true
@@ -307,7 +308,10 @@ with output `1` are terms; rows whose block pattern is inconsistent are
 dropped. Handles a permuted `.ilb` and the `# comment` lines ABC emits. Works
 on the raw bytes, one pass, no per-line strings.
 """
-function read_pla(pla::AbstractVector{UInt8}, L::PlaLayout{R,T}) where {R<:Unsigned,T<:AbstractFloat}
+function read_pla(
+    pla::AbstractVector{UInt8},
+    L::PlaLayout{R,T}
+) where {R<:Unsigned,T<:AbstractFloat}
     nc = ncolumns(L)
     perm = collect(1:nc)
     vals = Vector{UInt8}(undef, nc)
@@ -318,7 +322,7 @@ function read_pla(pla::AbstractVector{UInt8}, L::PlaLayout{R,T}) where {R<:Unsig
 
     @inbounds while i ≤ n
         j = findnext(==(UInt8('\n')), pla, i)
-        e = isnothing(j) ? n : j - 1          # line is pla[i:e]
+        e = isnothing(j) ? n : j - 1 # line is pla[i:e]
         next = e + 2
         if e < i
             i = next; continue
@@ -332,8 +336,8 @@ function read_pla(pla::AbstractVector{UInt8}, L::PlaLayout{R,T}) where {R<:Unsig
         if h == UInt8('0') || h == UInt8('1') || h == UInt8('-')
             sp = findnext(==(UInt8(' ')), pla, i)
             if !isnothing(sp) && sp ≤ e
-                sp - i == length(perm) ||
-                    throw(ArgumentError("PLA row has $(sp - i) inputs, expected $(length(perm))"))
+                sp - i == length(perm) || throw(ArgumentError("PLA row has $(sp - i) " *
+                    "inputs, expected $(length(perm))"))
                 ob = sp + 1
                 while ob ≤ e && pla[ob] == UInt8(' ')
                     ob += 1
