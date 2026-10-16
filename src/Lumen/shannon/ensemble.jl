@@ -365,7 +365,6 @@ function apply!(
                     node.left : node.right
                 node = f.nodes[r]
             end
-            # counts[node.leaf] += weights[k]
             counts[node.leaf] += 1
             votes[k] = node.leaf
         end

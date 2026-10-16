@@ -345,13 +345,15 @@ function read_pla(
         e = isnothing(j) ? n : j - 1 # line is pla[i:e]
         next = e + 2
         if e < i
-            i = next; continue
+            i = next
+            continue
         end
         h = pla[i]
         if h == UInt8('.')
             e - i ≥ 3 && pla[i+1] == UInt8('i') && pla[i+2] == UInt8('l') &&
                 pla[i+3] == UInt8('b') && _read_ilb!(perm, pla, i, e, nc)
-            i = next; continue
+            i = next
+            continue
         end
         if h == UInt8('0') || h == UInt8('1') || h == UInt8('-')
             sp = findnext(==(UInt8(' ')), pla, i)
@@ -545,6 +547,7 @@ function _mergepass!(boxes::Vector{_Box{R,T}}) where {R,T}
             end
         end
     end
+
     return changed
 end
 
@@ -563,7 +566,6 @@ function compact!(d::LumenDNF{R,T}) where {R,T}
     empty!(d)
     for b in boxes
         isempty(b) && continue
-        n0 = length(d.atoms)
         for (f, lo, hi, up) in b
             hi != typemax(T) && push!(d.atoms, LumenAtom{R,T}(f, hi, up))
             lo != typemin(T) && push!(d.atoms, LumenAtom{R,T}(f, lo, dualop(up)))
@@ -572,8 +574,10 @@ function compact!(d::LumenDNF{R,T}) where {R,T}
     end
     # an unbounded box is the tautology, and it stands alone
     if any(i -> d.offsets[i+1] == d.offsets[i], 1:nterms(d))
-        empty!(d); push!(d.offsets, 0)
+        empty!(d)
+        push!(d.offsets, 0)
     end
+
     return refine!(d)
 end
 
@@ -601,12 +605,14 @@ mutable struct Minimizer{MS<:AbstractMinimization}
 end
 
 Minimizer(::Type{Abc}, config::LumenConfig) =
-    Minimizer{Abc}(ABC_jll.abc(), evalst(config.p_minimization_setup), mktempdir(; prefix="lumen_"))
+    Minimizer{Abc}(
+        ABC_jll.abc(), evalst(config.p_minimization_setup), mktempdir(; prefix="lumen_"))
 
 function Minimizer(::Type{MitEspresso}, config::LumenConfig)
     binary = joinpath(SD.load(SD.MITESPRESSOLoader()), "espresso")
     isfile(binary) || error("espresso binary not found at $binary")
-    Minimizer{MitEspresso}(Cmd([binary]), evalst(config.minimization_setup), mktempdir(; prefix="lumen_"))
+    Minimizer{MitEspresso}(
+        Cmd([binary]), evalst(config.minimization_setup), mktempdir(; prefix="lumen_"))
 end
 
 # remove the scratch directory and everything left in it

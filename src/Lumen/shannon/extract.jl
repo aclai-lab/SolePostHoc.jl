@@ -90,14 +90,14 @@ function gather_atoms(
 
         if thrs.op_families[j] === evalop(<)
             # '<' family, thresholds descending: region t = [thr_t, thr_{t-1})
-            t > 1    && (out[pos += 1] = LumenAtom{R,T}(feat, thr_p, evalop(<)))
-            t < nlev && (out[pos += 1] = LumenAtom{R,T}(feat, thr_t, evalop(≥)))
+            t > 1 && (out[pos+=1] = LumenAtom{R,T}(feat, thr_p, evalop(<)))
+            t < nlev && (out[pos+=1] = LumenAtom{R,T}(feat, thr_t, evalop(≥)))
         else
             # '≤' family, thresholds ascending: region t = (thr_{t-1}, thr_t].
             # Unreachable today: `ThresholdSpace` normalizes every feature to
             # the '<' family; kept for a space built without normalization.
-            t < nlev && (out[pos += 1] = LumenAtom{R,T}(feat, thr_t, evalop(≤)))
-            t > 1    && (out[pos += 1] = LumenAtom{R,T}(feat, thr_p, evalop(>)))
+            t < nlev && (out[pos+=1] = LumenAtom{R,T}(feat, thr_t, evalop(≤)))
+            t > 1 && (out[pos+=1] = LumenAtom{R,T}(feat, thr_p, evalop(>)))
         end
     end
 
