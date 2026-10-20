@@ -66,8 +66,6 @@ export lumen, LumenResult, lumen_sequential, super_lumen
 include("sequential_minimizer.jl")
 include("super_minimizer.jl")
 include("lumen_shannon.jl")
-export lumen_paso_shannon
-include("lumen_paso_shannon.jl")
 
 include("main.jl")
 end
