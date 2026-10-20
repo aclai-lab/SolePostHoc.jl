@@ -31,8 +31,15 @@ function evalop(op::UInt8, x::T, thr::T)::Bool where {T<:AbstractFloat}
     op == 0x03 ? (x ≥ thr) : (x ≤ thr)
 end
 
-# the complementary operator, so that `x op t` and `x dualop(op) t` partition
-# ℝ: < ↔ ≥ , > ↔ ≤
+"""
+    dualop(op::UInt8) -> UInt8
+
+The complementary operator byte, so that `x op t` and `x dualop(op) t`
+partition ℝ: `<` ↔ `≥` and `>` ↔ `≤`. It is an involution,
+`dualop(dualop(op)) == op`.
+
+See also [`evalop`](@ref), [`dual`](@ref).
+"""
 @inline dualop(op::UInt8) =
     op == 0x01 ? 0x03 :
     op == 0x03 ? 0x01 :
@@ -75,15 +82,40 @@ end
 Base.isless(a::LumenAtom, b::LumenAtom) =
     isless(_lumenatom_sortby(a), _lumenatom_sortby(b))
 
+"""
+    LumenAtom{R,T}() -> LumenAtom{R,T}
+    LumenAtom() -> LumenAtom{UInt32,Float64}
+
+The empty atom (`feat = 0`, `thr = NaN`, `op = 0xff`), the placeholder that
+fills the atom slot of every leaf in a [`LumenEnsemble`](@ref). The
+zero-argument form uses `UInt32` indices and `Float64` thresholds.
+
+See also [`isempty_atom`](@ref).
+"""
 LumenAtom{R,T}() where {R<:Unsigned,T<:AbstractFloat} =
     LumenAtom{R,T}(zero(R), T(NaN), 0xff)
 LumenAtom() = LumenAtom{UInt32,Float64}()
 
-# true for the empty atom `LumenAtom{R,T}()`, the placeholder of tree leaves
+"""
+    isempty_atom(a::LumenAtom) -> Bool
+
+`true` for the empty atom `LumenAtom{R,T}()`, the placeholder of tree leaves.
+Its `NaN` threshold makes `==` useless for this test, so it checks the
+operator byte `0xff` and the zero feature instead.
+"""
 isempty_atom(a::LumenAtom) = a.op == 0xff && iszero(a.feat)
 
-# field accessors over a vector of atoms; `get_thresholds(atoms, id)` keeps
-# only the atoms on feature `id`, `featidxs` returns their positions
+"""
+    get_features(atoms::Vector{LumenAtom}) -> Vector{R}
+    get_thresholds(atoms::Vector{LumenAtom}) -> Vector{T}
+    get_thresholds(atoms::Vector{LumenAtom}, id) -> Vector{T}
+    get_op(atoms::Vector{LumenAtom}) -> Vector{UInt8}
+    featidxs(atoms::Vector{LumenAtom}, feat) -> Vector{Int}
+
+Field accessors over a vector of atoms, each returning one entry per atom in
+the input order. `get_thresholds(atoms, id)` keeps only the atoms on feature
+`id`; `featidxs` returns the positions of the atoms on feature `feat`.
+"""
 @inline get_features(atoms::Vector{LumenAtom{R,T}}) where {R,T} =
     [a.feat for a in atoms]
 @inline get_thresholds(atoms::Vector{LumenAtom{R,T}}) where {R,T} =
@@ -95,19 +127,36 @@ isempty_atom(a::LumenAtom) = a.op == 0xff && iszero(a.feat)
 @inline featidxs(atoms::Vector{LumenAtom{R,T}}, feat::R) where {R,T} =
     findall(a -> a.feat == feat, atoms)
 
-# the complementary atom: same feature and threshold, `dualop` operator
+"""
+    dual(a::LumenAtom) -> LumenAtom
+
+The complementary atom: same feature and threshold, [`dualop`](@ref)
+operator. `a` and `dual(a)` split the feature's axis into two halves and
+share one PLA column (see [`PlaLayout`](@ref)).
+"""
 @inline dual(a::LumenAtom{R,T}) where {R,T} =
     LumenAtom{R,T}(a.feat, a.thr, dualop(a.op))
 
-# Concrete view types, spelled out so that functions taking them stay
-# type-stable. `LumenSlice` is `view(v, :)` of a whole atom vector, the buffer
-# `gather_atoms` writes into; `LumenCube` is a contiguous range of one, i.e.
-# one term of a `LumenDNF` (`d[i]`).
+"""
+    LumenSlice{R,T}
+
+The concrete type of `view(v, :)` over a whole `Vector{LumenAtom{R,T}}`: the
+buffer [`gather_atoms`](@ref) writes into. Spelled out so that functions
+taking it stay type-stable.
+"""
 const LumenSlice{R,T} = SubArray{
     LumenAtom{R,T},1,
     Vector{LumenAtom{R,T}},Tuple{Base.Slice{Base.OneTo{Int64}}},true
 }
-const LumenCube{R,T} = 
+
+"""
+    LumenCube{R,T}
+
+The concrete type of a contiguous range view over a `Vector{LumenAtom{R,T}}`,
+i.e. one term `d[i]` of a [`LumenDNF`](@ref): a conjunction of atoms
+describing a box. Spelled out so that functions taking it stay type-stable.
+"""
+const LumenCube{R,T} =
     SubArray{LumenAtom{R,T},1,Vector{LumenAtom{R,T}},Tuple{UnitRange{Int}},true}
 
 # ---------------------------------------------------------------------------- #
@@ -134,6 +183,13 @@ Base.:(==)(a::LumenNode, b::LumenNode) =
 Base.isequal(a::LumenNode, b::LumenNode) = a == b
 Base.hash(n::LumenNode, h::UInt) =
     hash(n.leaf, hash(n.right, hash(n.left, h)))
+
+"""
+    isleaf(n::LumenNode) -> Bool
+
+`true` when `n` is a leaf, i.e. its `leaf` field holds a class levelcode
+(always ≥ 1); internal nodes store `leaf = 0`.
+"""
 @inline isleaf(n::LumenNode{R}) where {R} = n.leaf != zero(R)
 
 # ---------------------------------------------------------------------------- #
@@ -170,7 +226,13 @@ struct LumenEnsemble{R<:Unsigned,T<:AbstractFloat,S,A<:Base.Callable}
     aggregate::A
 end
 
-# the plain label behind an outcome (a categorical value unwraps to its level)
+"""
+    _label(x) -> Any
+
+The plain label behind an outcome: a `CategoricalValue` unwraps to its
+level, anything else is returned as is. Used to compare a model's
+`supporting_labels` with plain class names.
+"""
 _label(x::CategoricalValue) = CategoricalArrays.unwrap(x)
 _label(x) = x
 
@@ -254,7 +316,14 @@ Base.eltype(::LumenEnsemble{R,T}) where {R,T} = LumenAtom{R,T}
 @inline get_thresholds(e::LumenEnsemble) = get_thresholds(e.atoms)
 @inline get_thresholds(e::LumenEnsemble, id::R) where R =
     get_thresholds(e.atoms, id)
-# every distinct split condition of the forest, leaf placeholders excluded
+
+"""
+    get_atoms(e::LumenEnsemble) -> Vector{LumenAtom}
+
+Every distinct split condition of the forest, in node order, leaf
+placeholders (empty atoms) excluded. This is the full alphabet
+[`ThresholdSpace`](@ref) uses when `depth ≥ 1`.
+"""
 @inline get_atoms(e::LumenEnsemble) = unique!(filter(!isempty_atom, e.atoms))
 
 """

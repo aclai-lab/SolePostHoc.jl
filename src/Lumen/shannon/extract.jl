@@ -26,7 +26,13 @@ struct LeafScratch{R<:Unsigned,T<:AbstractFloat}
     total::Int # row capacity of the buffers, NOT the size of the current leaf
 end
 
-# scratch space sized for the largest leaf `_extract!` can produce on `thrs`
+"""
+    LeafScratch(config::LumenConfig, thrs::ThresholdSpace) -> LeafScratch
+
+Scratch space sized for the largest leaf `_extract!` can produce on `thrs`:
+row buffers for `min(config.M, prod(thrs.nlev))` points, plus one empty cube
+buffer and alphabet per class.
+"""
 function LeafScratch(
     config::LumenConfig{R,T},
     thrs::ThresholdSpace{R,T}
@@ -104,9 +110,13 @@ function gather_atoms(
     return pos
 end
 
-# Drop, in place, every atom whose dual (same feature and threshold,
-# complementary operator) appears earlier in `atoms`: the pair stands for a
-# single PLA column, so one of the two is enough to build the layout.
+"""
+    removeduals!(atoms::Vector{LumenAtom}) -> atoms
+
+Drop, in place, every atom whose [`dual`](@ref) (same feature and threshold,
+complementary operator) appears earlier in `atoms`. The pair stands for a
+single PLA column, so one of the two is enough to build the layout.
+"""
 function removeduals!(atoms::Vector{LumenAtom{R,T}}) where {R,T}
     seen = Set{LumenAtom{R,T}}()
     filter!(atoms) do a
@@ -119,26 +129,24 @@ end
 # ---------------------------------------------------------------------------- #
 #                        leaf extractor (Lumen legacy)                         #
 # ---------------------------------------------------------------------------- #
-"""
-    _leaf_extract!(config, ws, thrs, ensemble, lo, hi) -> (alphabet, cube)
+#     _leaf_extract!(config, ws, thrs, ensemble, lo, hi) -> (alphabet, cube)
 
-Materialise and classify every point of the sub-rectangle `[lo, hi]` of the
-level grid (inclusive, one range per feature) and sort its cubes by class.
-Returns, per class `c`, `cube[c]`: one tight cube per point classified `c`,
-and `alphabet[c]`: the distinct atoms of those cubes, duals removed, which
-are the columns of that class' PLA.
+# Materialise and classify every point of the sub-rectangle `[lo, hi]` of the
+# level grid (inclusive, one range per feature) and sort its cubes by class.
+# Returns, per class `c`, `cube[c]`: one tight cube per point classified `c`,
+# and `alphabet[c]`: the distinct atoms of those cubes, duals removed, which
+# are the columns of that class' PLA.
 
-Two passes over the leaf's rows, row `k` being point `k` of the leaf in
-odometer order (first feature fastest):
-1. decode each row's levels, write its sample values into `ws.tbl` and count
-   its atoms; classify all rows with one `apply!` call; size each class'
-   buffers from the counts.
-2. walk the same points again with an odometer and write each cube's atoms
-   straight into its class' buffer, so nothing is pushed or grown.
+# Two passes over the leaf's rows, row `k` being point `k` of the leaf in
+# odometer order (first feature fastest):
+# 1. decode each row's levels, write its sample values into `ws.tbl` and count
+#    its atoms; classify all rows with one `apply!` call; size each class'
+#    buffers from the counts.
+# 2. walk the same points again with an odometer and write each cube's atoms
+#    straight into its class' buffer, so nothing is pushed or grown.
 
-The result lives in `ws` (`ws.alphabet`, `ws.cube`) and is overwritten by
-the next leaf, so consume it before calling again.
-"""
+# The result lives in `ws` (`ws.alphabet`, `ws.cube`) and is overwritten by
+# the next leaf, so consume it before calling again.
 function _leaf_extract!(
     ::LumenConfig{R,T,MS},
     ws::LeafScratch{R,T},
@@ -225,8 +233,11 @@ function _leaf_extract!(
     return ws.alphabet, ws.cube
 end
 
-# distinct atoms of `pool`, sorted, duals removed, written into `out`: the
-# columns of one class' PLA (see `PlaLayout`)
+#     _alphabet!(out, pool) -> out
+
+# Write into `out` the distinct atoms of `pool`, sorted, with duals removed
+# (see [`removeduals!`](@ref)): the columns of one class' PLA (see
+# [`PlaLayout`](@ref)). `pool` is not modified.
 function _alphabet!(out::Vector{LumenAtom{R,T}}, pool::Vector{LumenAtom{R,T}}) where {R,T}
     empty!(out)
     seen = Set{LumenAtom{R,T}}()
@@ -237,12 +248,10 @@ function _alphabet!(out::Vector{LumenAtom{R,T}}, pool::Vector{LumenAtom{R,T}}) w
     return removeduals!(sort!(out))
 end
 
-"""
-    _leaf_extract(config, thrs, ensemble, lo, hi) -> (alphabet, cube)
+#     _leaf_extract(config, thrs, ensemble, lo, hi) -> (alphabet, cube)
 
-One-off form of `_leaf_extract!` with its own scratch space, sized for the
-whole space (or `M`) rather than reused across leaves.
-"""
+# One-off form of `_leaf_extract!` with its own scratch space, sized for the
+# whole space (or `M`) rather than reused across leaves.
 _leaf_extract(
     config::LumenConfig{R,T},
     thrs::ThresholdSpace{R,T},
@@ -255,11 +264,13 @@ _leaf_extract(
 # ---------------------------------------------------------------------------- #
 #                            leaf: minimise per class                          #
 # ---------------------------------------------------------------------------- #
-# Materialise the sub-rectangle `[lo, hi]`, minimise each class' cubes in
-# isolation (backend `MS`, see `run_minimization`) and append the resulting
-# terms to `out[c]`. Classes are independent and the backend is an external
-# process, so they run in parallel; each thread only ever touches its own
-# `out[c]`.
+#     _leaf_minimize!(config, out, ws, thrs, ensemble, lo, hi) -> out
+
+# Materialise the sub-rectangle `[lo, hi]` with [`_leaf_extract!`](@ref),
+# minimise each class' cubes in isolation (backend `MS` of `config`, see
+# [`run_minimization`](@ref)) and append the resulting terms to `out[c]`.
+# Classes are independent and the backend is an external process, so they run
+# in parallel; each thread only ever touches its own `out[c]`.
 function _leaf_minimize!(
     config::LumenConfig{R,T,MS},
     out::Vector{LumenDNF{R,T}},
@@ -279,12 +290,14 @@ end
 # ---------------------------------------------------------------------------- #
 #                           extractor, shannon lumen                           #
 # ---------------------------------------------------------------------------- #
-# In-place recursion behind `_extract`. A rectangle of at most `config.M`
-# points is a leaf and goes to `_leaf_minimize!`; a larger one is cut at the
-# midpoint of its widest axis and both halves recurse. `lo` and `hi` are
-# mutated to describe each half and restored before returning, so the whole
-# recursion allocates no rectangles. Both halves append to the same `out`:
-# their regions are disjoint, so the plain union is exact.
+#     _extract!(config, out, ws, thrs, ensemble, lo, hi) -> out
+
+# In-place recursion behind [`_extract`](@ref). A rectangle of at most
+# `config.M` points is a leaf and goes to [`_leaf_minimize!`](@ref); a larger
+# one is cut at the midpoint of its widest axis and both halves recurse. `lo`
+# and `hi` are mutated to describe each half and restored before returning, so
+# the whole recursion allocates no rectangles. Both halves append to the same
+# `out`: their regions are disjoint, so the plain union is exact.
 function _extract!(
     config::LumenConfig{R,T},
     out::Vector{LumenDNF{R,T}},
@@ -317,19 +330,17 @@ function _extract!(
     return out
 end
 
-"""
-    _extract(config, thrs, ensemble, lo, hi) -> Vector{LumenDNF}
+#     _extract(config, thrs, ensemble, lo, hi) -> Vector{LumenDNF}
 
-Recursive Shannon-style cofactor decomposition of the rectangle `[lo, hi]`
-of the threshold-level space: halve the widest axis until a piece holds at
-most `config.M` points, minimise every piece per class, union the results.
-Returns one `LumenDNF` per class, indexed by class levelcode. `lo` and `hi`
-are copied, never mutated; pass `ones` and `thrs.nlev` for the whole space.
+# Recursive Shannon-style cofactor decomposition of the rectangle `[lo, hi]`
+# of the threshold-level space: halve the widest axis until a piece holds at
+# most `config.M` points, minimise every piece per class, union the results.
+# Returns one `LumenDNF` per class, indexed by class levelcode. `lo` and `hi`
+# are copied, never mutated; pass `ones` and `thrs.nlev` for the whole space.
 
-Peak memory is one leaf's scratch space (`LeafScratch`) plus the output.
-The terms of different leaves are never minimised together, so the result
-is exact but not globally minimal; `compact!` recovers part of the gap.
-"""
+# Peak memory is one leaf's scratch space (`LeafScratch`) plus the output.
+# The terms of different leaves are never minimised together, so the result
+# is exact but not globally minimal; `compact!` recovers part of the gap.
 function _extract(
     config::LumenConfig{R,T},
     thrs::ThresholdSpace{R,T},

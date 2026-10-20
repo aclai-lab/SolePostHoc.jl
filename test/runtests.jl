@@ -16,6 +16,7 @@ println("Julia version: ", VERSION)
 test_suites = [
     ("Generic rule Extraction test with rule_extraction.jl", ["rule_extraction.jl"]),
     ("InTrees", ["intrees.jl"]),
+    ("Lumen Shannon", ["lumen_shannon.jl"]),
     ("ORCA Forest Compression", ["orca_compression.jl"])
 ]
 

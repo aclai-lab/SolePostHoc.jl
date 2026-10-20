@@ -38,16 +38,30 @@
 # ---------------------------------------------------------------------------- #
 #                                   operators                                  #
 # ---------------------------------------------------------------------------- #
+#     _opfun(op::UInt8) -> Function
+
+# The comparison function behind an operator byte, the inverse of
+# `evalop(::Function)`: `0x01` → `<`, `0x02` → `>`, `0x03` → `≥`, else `≤`.
 @inline _opfun(op::UInt8) =
     op == 0x01 ? (<) :
     op == 0x02 ? (>) :
     op == 0x03 ? (≥) : (≤)
 
+#     _toatom(a::LumenAtom, featurenames) -> SoleLogics.Atom
+
+# Convert `a` to a SoleLogics `Atom` wrapping the `ScalarCondition`
+# `V[a.feat] op a.thr`, the feature named `featurenames[a.feat]`.
 function _toatom(a::LumenAtom{R,T}, featurenames::AbstractVector) where {R,T}
     feature = SD.VariableValue(Int(a.feat), Symbol(featurenames[a.feat]))
     return SL.Atom(SD.ScalarCondition(feature, _opfun(a.op), a.thr))
 end
 
+#     _antecedent(dnf::LumenDNF, featurenames) -> SyntaxStructure
+
+# The SoleLogics formula of `dnf`: a `LeftmostDisjunctiveForm` with one
+# disjunct per term, each a single `Atom` or a `LeftmostConjunctiveForm` of
+# atoms (see [`_toatom`](@ref)). If any term is empty (the tautology) the
+# whole formula is `⊤`.
 function _antecedent(
     dnf::LumenDNF{R,T},
     featurenames::AbstractVector,
@@ -63,6 +77,33 @@ function _antecedent(
     end
 
     return SL.LeftmostDisjunctiveForm(disjuncts)
+end
+
+#     _featurenames(model, ensemble::LumenEnsemble) -> AbstractVector
+
+# The model's feature names in column order, taken from its `info`. When the
+# model carries none, `[:V1, …, :Vn]` up to the largest feature index used by
+# `ensemble`.
+function _featurenames(model::SM.AbstractModel, ensemble::LumenEnsemble)
+    info = SM.info(model)
+    haskey(info, :featurenames) && return info.featurenames
+    nfeat = maximum(a.feat for a in ensemble.atoms if !isempty_atom(a); init=0)
+    return [Symbol("V", i) for i in 1:nfeat]
+end
+
+#     _ruleorder(model, classnames) -> Vector{Int}
+
+# The order in which [`decision_set`](@ref) emits the rules, as indices into
+# `classnames`. Classic Lumen emits one rule per class in order of first
+# appearance in the model's `supporting_labels`; that order is kept when the
+# model carries them, and class order is used otherwise. Classes not listed
+# there come last, in class order. Never mutates the model's info.
+function _ruleorder(model::SM.AbstractModel, classnames::AbstractVector)
+    info = SM.info(model)
+    haskey(info, :supporting_labels) || return collect(eachindex(classnames))
+    seen = unique(_label.(info.supporting_labels))
+    pos = [something(findfirst(==(c), seen), typemax(Int)) for c in classnames]
+    return sortperm(pos) # stable: unlisted classes keep class order
 end
 
 """
@@ -86,8 +127,20 @@ function decision_set(
     return SM.DecisionSet{C}(rules)
 end
 
-# map categorical labels onto unsigned integer of type `R`
-# sort classlabels
+"""
+    assign(R::Type{<:Unsigned}, y::Vector, sorted::Bool=false) -> (labels, codes)
+
+Map the values of `y` onto unsigned integer codes of type `R`. `labels` are
+the distinct values of `y`, in order of first appearance or sorted when
+`sorted` is `true`; `codes[i]` is the position of `y[i]` in `labels`, so
+`labels[codes] == y`.
+
+# Examples
+```julia
+assign(UInt32, ["b", "a", "b"])        # (["b", "a"], UInt32[1, 2, 1])
+assign(UInt32, ["b", "a", "b"], true)  # (["a", "b"], UInt32[2, 1, 2])
+```
+"""
 function assign(
     ::Type{R},
     y::Vector{S},
@@ -98,28 +151,49 @@ function assign(
     return labels, [dict[t] for t in y]
 end
 
-# the model's feature names, column order; V<i> when the model carries none
-function _featurenames(model::SM.AbstractModel, ensemble::LumenEnsemble)
-    info = SM.info(model)
-    haskey(info, :featurenames) && return info.featurenames
-    nfeat = maximum(a.feat for a in ensemble.atoms if !isempty_atom(a); init=0)
-    return [Symbol("V", i) for i in 1:nfeat]
-end
-
-# classic Lumen emits one rule per class in the order of the model's
-# `supporting_labels`; keep that order when the model carries them, and fall
-# back to class order otherwise. Never mutates the model's info.
-function _ruleorder(model::SM.AbstractModel, classnames::AbstractVector)
-    info = SM.info(model)
-    haskey(info, :supporting_labels) || return collect(eachindex(classnames))
-    seen = unique(_label.(info.supporting_labels))
-    pos = [something(findfirst(==(c), seen), typemax(Int)) for c in classnames]
-    return sortperm(pos) # stable: unlisted classes keep class order
-end
-
 # ---------------------------------------------------------------------------- #
 #                              lumen paso shannon                              #
 # ---------------------------------------------------------------------------- #
+"""
+    lumen_shannon(config::LumenConfig, model::AbstractModel) -> DecisionSet
+    lumen_shannon(config, model::DecisionEnsemble, featurenames, feat_idxs,
+                  classnames, class_idxs) -> DecisionSet
+
+Extract from a tree ensemble an equivalent `DecisionSet` with one DNF rule
+per predicted class, by exhaustive exploration of the input space the
+model's thresholds induce, split into pieces of bounded size.
+
+The steps are:
+1. compile `model` into a [`LumenEnsemble`](@ref);
+2. build the [`ThresholdSpace`](@ref) grid of its thresholds (only the
+   BFS-first `config.depth` fraction of each tree when `depth < 1`);
+3. recursively halve the grid until a piece holds at most `config.M` points,
+   classify one sample per box of each piece and minimise each class' cubes
+   with the backend `MS` of `config` (`Abc` or `MitEspresso`, at the setup
+   level `config.p_minimization_setup`), see [`_extract`](@ref);
+4. union the pieces' terms per class and [`compact!`](@ref) them;
+5. convert the result to Sole types with [`decision_set`](@ref).
+
+Pieces are disjoint and never re-minimised together, so the rules describe
+the model exactly on the grid (with `depth = 1`) but are not globally
+minimal. `config.M` trades memory and backend-call size against the number
+of pieces. Classes the model never predicts get no rule.
+
+The first form reads the feature names (`:featurenames`) and class labels
+(`:supporting_labels`) from the model's `info`; class labels are sorted.
+The second form takes them explicitly: `feat_idxs` and `class_idxs` give the
+index of each feature and class position, as returned by [`assign`](@ref).
+Only ensembles of trees with categorical outcomes and scalar conditions are
+supported.
+
+# Examples
+```julia
+config = LumenConfig(; M=4096, p_minimization_setup=Fast)
+ds = lumen_shannon(config, forest)
+```
+
+See also: [`LumenConfig`](@ref), [`lumen`](@ref).
+"""
 function lumen_shannon(
     config::LumenConfig{R,T},
     model::SM.DecisionEnsemble,

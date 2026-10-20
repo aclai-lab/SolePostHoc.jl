@@ -71,16 +71,17 @@ extracted_rules = RuleExtraction.extractrules(
 # ---------------------------------------------------------------------------- #
 #                          batrees rules extraction                            #
 # ---------------------------------------------------------------------------- #
-extractor=BATreesRuleExtractor()
+#TODO BROKEN!
+# extractor=BATreesRuleExtractor()
 
-extracted_rules =
-    RuleExtraction.extractrules(extractor, solem_rf; dataset_name="Sole_Analysis")
-extracted_rules = RuleExtraction.extractrules(
-    extractor,
-    solem_rf;
-    dataset_name="Sole_Analysis",
-    num_trees=5,
-)
+# extracted_rules =
+#     RuleExtraction.extractrules(extractor, solem_rf; dataset_name="Sole_Analysis")
+# extracted_rules = RuleExtraction.extractrules(
+#     extractor,
+#     solem_rf;
+#     dataset_name="Sole_Analysis",
+#     num_trees=5,
+# )
 
 # ---------------------------------------------------------------------------- #
 #                         rulecosi rules extraction                            #

@@ -33,18 +33,35 @@
 #  so the MIT binary comes from SoleData's artifact loader.                    #
 # ---------------------------------------------------------------------------- #
 
-# byte code of a minimization setup level, from the fastest and coarsest to
-# the slowest and tightest; `Minimizer` stores it and the backends map it to
-# their own options (`_abc_script`, `_espresso_flags`)
+"""
+    evalst(::Type{<:AbstractMinimizeSetup}) -> UInt8
+    evalst(s::AbstractMinimizeSetup) -> UInt8
+
+Byte code of a minimization setup level, from the fastest and coarsest to
+the slowest and tightest: `Fast` → `0x01`, `Balanced` → `0x02`, `Sop` →
+`0x03`. [`Minimizer`](@ref) stores it and each backend maps it to its own
+options (`_abc_script`, `_espresso_flags`).
+"""
 @inline evalst(::Type{Fast}) = 0x01
 @inline evalst(::Type{Balanced}) = 0x02
 @inline evalst(::Type{Sop}) = 0x03
 @inline evalst(s::AbstractMinimizeSetup) = evalst(typeof(s))
 
-# '<' and '≤' bound a region from above, '≥' and '>' from below. `upperop`
-# maps an operator to the upper-bound member of its family ('<' or '≤'),
-# the polarity a PLA column's '1' stands for.
+"""
+    isupper(op::UInt8) -> Bool
+
+`true` when the operator byte bounds a region from above (`<` or `≤`),
+`false` when it bounds it from below (`≥` or `>`).
+"""
 @inline isupper(op::UInt8) = op == 0x01 || op == 0x04
+
+"""
+    upperop(op::UInt8) -> UInt8
+
+The upper-bound member of `op`'s family: `op` itself for `<` and `≤`, its
+[`dualop`](@ref) for `≥` and `>`. It is the polarity a PLA column's `'1'`
+stands for.
+"""
 @inline upperop(op::UInt8) = isupper(op) ? op : dualop(op)
 
 # ---------------------------------------------------------------------------- #
@@ -69,10 +86,20 @@ struct LumenDNF{R<:Unsigned,T<:AbstractFloat}
     offsets::Vector{Int}
 end
 
-# the empty disjunction: no atoms, a single offset 0
+"""
+    LumenDNF{R,T}() -> LumenDNF{R,T}
+
+The empty disjunction (no terms, hence the contradiction): no atoms and a
+single offset `0`.
+"""
 LumenDNF{R,T}() where {R<:Unsigned,T<:AbstractFloat} =
     LumenDNF{R,T}(LumenAtom{R,T}[], Int[0])
 
+"""
+    nterms(d::LumenDNF) -> Int
+
+Number of terms (conjunctions) of `d`; the same as `length(d)`.
+"""
 @inline nterms(d::LumenDNF) = length(d.offsets) - 1
 Base.length(d::LumenDNF) = nterms(d)
 Base.isempty(d::LumenDNF) = nterms(d) == 0
@@ -84,6 +111,12 @@ Base.firstindex(::LumenDNF) = 1
 Base.lastindex(d::LumenDNF) = nterms(d)
 Base.eachindex(d::LumenDNF) = Base.OneTo(nterms(d))
 Base.keys(d::LumenDNF) = Base.OneTo(nterms(d))
+
+"""
+    natoms(d::LumenDNF) -> Int
+
+Total number of atoms over all terms of `d`, a measure of the formula's size.
+"""
 natoms(d::LumenDNF) = length(d.atoms)
 
 # append one term (its atoms are copied)
@@ -136,9 +169,20 @@ struct PlaLayout{R<:Unsigned,T<:AbstractFloat}
     col::Dict{Tuple{R,T},Int}
 end
 
-# number of PLA input columns
+"""
+    ncolumns(L::PlaLayout) -> Int
+
+Number of PLA input columns, one per distinct (feature, threshold) pair.
+"""
 @inline ncolumns(L::PlaLayout) = length(L.feat)
-# number of don't-care rows: one per adjacent column pair inside a block
+
+"""
+    ndontcares(L::PlaLayout) -> Int
+
+Number of don't-care rows [`write_pla`](@ref) emits: one per adjacent column
+pair inside a feature's block, i.e. `ncolumns(L)` minus the number of
+features.
+"""
 ndontcares(L::PlaLayout) = count(c -> L.blast[c] > c, 1:ncolumns(L))
 
 """
@@ -186,10 +230,14 @@ end
 # ---------------------------------------------------------------------------- #
 #                                  write pla                                   #
 # ---------------------------------------------------------------------------- #
-# Fill `row[off+1:off+nc]` with the tight encoding of `term`. An upper bound
-# at column c implies '1' on every column of the block with a larger
-# threshold, a lower bound implies '0' on every column with a smaller one; the
-# two never overlap because a cube's bounds are adjacent thresholds.
+#     _encode_row!(row, off, L::PlaLayout, term) -> row
+
+# Fill `row[off+1:off+ncolumns(L)]` with the tight PLA encoding of `term`, as
+# ASCII bytes. Columns start as `'-'`; an upper bound at column `c` implies
+# `'1'` on every column of the block with a larger threshold, a lower bound
+# implies `'0'` on every column with a smaller one. The two never overlap
+# because a cube's bounds are adjacent thresholds. Every atom of `term` must
+# have a column in `L`.
 @inline function _encode_row!(
     row::Vector{UInt8},
     off::Int,
@@ -215,14 +263,12 @@ end
     return row
 end
 
-"""
-    write_pla(io::IO, L::PlaLayout, cubes)
+#     write_pla(io::IO, L::PlaLayout, cubes)
 
-Stream the on-set `cubes` (any indexable collection of atom vectors, e.g. a
-`LumenDNF`) as a `.type fd` PLA on `L`'s columns, followed by the don't-care
-rows for the impossible column patterns. One row of scratch is the only
-buffer: the text never exists in memory as a whole.
-"""
+# Stream the on-set `cubes` (any indexable collection of atom vectors, e.g. a
+# `LumenDNF`) as a `.type fd` PLA on `L`'s columns, followed by the don't-care
+# rows for the impossible column patterns. One row of scratch is the only
+# buffer: the text never exists in memory as a whole.
 function write_pla(
     io::IO,
     L::PlaLayout{R,T},
@@ -258,10 +304,13 @@ end
 # ---------------------------------------------------------------------------- #
 #                                   read pla                                   #
 # ---------------------------------------------------------------------------- #
-# ".ilb x3 x1 x2" (bytes i:e) -> [3, 1, 2]: output column k is layout column
-# perm[k]. Labels are the ones `write_pla` emitted, so anything else is an
-# error rather than a silent misdecode. Backends may reorder the inputs, ABC
-# in particular, hence the permutation.
+#     _read_ilb!(perm, pla, i, e, nc) -> perm
+
+# Parse the `.ilb` line held in `pla[i:e]` into `perm`, so that output column
+# `k` is layout column `perm[k]`: `".ilb x3 x1 x2"` gives `[3, 1, 2]`.
+# Backends may reorder the inputs, ABC in particular, hence the permutation.
+# Labels must be the `x<c>` ones [`write_pla`](@ref) emitted, with `1 ≤ c ≤ nc`;
+# anything else throws an `ArgumentError` rather than silently misdecoding.
 function _read_ilb!(perm::Vector{Int}, pla::AbstractVector{UInt8}, i::Int, e::Int, nc::Int)
     empty!(perm)
     p = i + 4 # past ".ilb"
@@ -282,11 +331,15 @@ function _read_ilb!(perm::Vector{Int}, pla::AbstractVector{UInt8}, i::Int, e::In
     return perm
 end
 
-# Decode one product term (already permuted into layout column order, one
-# byte per column) into atoms appended to `out`; false if the term is empty
-# as a region, i.e. it has a '0' before a '1' inside some block. Per block,
-# the last '1' is the tightest upper bound and the first '0' the tightest
-# lower bound; a block of '-' only puts no bound on its feature.
+#     _decode_row!(out, vals, L::PlaLayout) -> Bool
+
+# Decode one product term `vals` (already permuted into layout column order,
+# one ASCII byte per column) into atoms appended to `out`. Per block, the last
+# `'1'` is the tightest upper bound and the first `'0'` the tightest lower
+# bound; a block of `'-'` only puts no bound on its feature.
+
+# Returns `false`, leaving `out` as it was, if the term is empty as a region,
+# i.e. it has a `'0'` before a `'1'` inside some block.
 function _decode_row!(
     out::Vector{LumenAtom{R,T}},
     vals::Vector{UInt8},
@@ -319,15 +372,13 @@ function _decode_row!(
     return true
 end
 
-"""
-    read_pla(pla::AbstractVector{UInt8}, L::PlaLayout) -> LumenDNF
-    read_pla(pla::AbstractString, L::PlaLayout) -> LumenDNF
+#     read_pla(pla::AbstractVector{UInt8}, L::PlaLayout) -> LumenDNF
+#     read_pla(pla::AbstractString, L::PlaLayout) -> LumenDNF
 
-Parse a minimiser's output PLA back into terms on `L`'s columns. Only rows
-with output `1` are terms; rows whose block pattern is inconsistent are
-dropped. Handles a permuted `.ilb` and the `# comment` lines ABC emits. Works
-on the raw bytes, one pass, no per-line strings.
-"""
+# Parse a minimiser's output PLA back into terms on `L`'s columns. Only rows
+# with output `1` are terms; rows whose block pattern is inconsistent are
+# dropped. Handles a permuted `.ilb` and the `# comment` lines ABC emits. Works
+# on the raw bytes, one pass, no per-line strings.
 function read_pla(
     pla::AbstractVector{UInt8},
     L::PlaLayout{R,T}
@@ -383,9 +434,13 @@ read_pla(pla::AbstractString, L::PlaLayout) = read_pla(codeunits(pla), L)
 # ---------------------------------------------------------------------------- #
 #                             dominance refinement                             #
 # ---------------------------------------------------------------------------- #
-# a ⊇ b as regions: every bound of `a` is matched in `b` by a bound on the
-# same feature and side that is at least as tight. Terms hold at most one
-# bound per (feature, side), so this is a plain double loop.
+#     dominates(a, b) -> Bool
+
+# `true` when term `a` contains term `b` as regions (`a ⊇ b`): every bound of
+# `a` is matched in `b` by a bound on the same feature and side that is at
+# least as tight. A term with no atoms (the tautology) dominates everything.
+# Terms hold at most one bound per (feature, side), so this is a plain double
+# loop.
 function dominates(
     a::AbstractVector{LumenAtom{R,T}},
     b::AbstractVector{LumenAtom{R,T}}
@@ -403,9 +458,12 @@ function dominates(
     return true
 end
 
-# (upper, lower) bound signature of a term, one bit per feature modulo 64.
-# `a ⊇ b` needs every (feature, side) of `a` to be present in `b`, so
-# `mask(a) ⊆ mask(b)` is a necessary condition that costs two ANDs.
+#     _sidemask(term) -> Tuple{UInt64,UInt64}
+
+# The `(upper, lower)` bound signature of `term`, one bit per feature modulo
+# 64. `a ⊇ b` needs every (feature, side) of `a` to be present in `b`, so
+# `mask(a) ⊆ mask(b)` is a necessary condition for [`dominates`](@ref) that
+# costs two ANDs. It is a filter only: features 64 apart share a bit.
 function _sidemask(term::AbstractVector{LumenAtom{R,T}}) where {R,T}
     up = zero(UInt64); lo = zero(UInt64)
     @inbounds for a in term
@@ -415,12 +473,10 @@ function _sidemask(term::AbstractVector{LumenAtom{R,T}}) where {R,T}
     return up, lo
 end
 
-"""
-    refine!(d::LumenDNF) -> d
+#     refine!(d::LumenDNF) -> d
 
-Drop every term contained in another term of `d` (duplicates included).
-Coverage is unchanged; only redundant terms go.
-"""
+# Drop every term contained in another term of `d` (duplicates included).
+# Coverage is unchanged; only redundant terms go.
 function refine!(d::LumenDNF{R,T}) where {R,T}
     n = nterms(d)
     n ≤ 1 && return d
@@ -465,11 +521,18 @@ end
 # behind (siblings differing only in the split feature's complementary bound)
 # and what a minimiser working on one leaf could never see.
 
-# (feature, lower, upper, upper-bound op); a missing bound is ±Inf
+#     _Box{R,T}
+
+# A term as a box: one `(feature, lower, upper, upper-bound op)` entry per
+# feature it bounds, sorted by feature. A missing bound is `typemin(T)` or
+# `typemax(T)`. The upper-bound op (`<` or `≤`) fixes the family, so the lower
+# bound's operator is its `dualop`.
 const _Box{R,T} = Vector{Tuple{R,T,T,UInt8}}
 
-# a term as a box: one (feature, lower, upper, upper op) entry per feature it
-# bounds, the tightest bound kept on each side, sorted by feature
+#     _tobox(term) -> _Box
+
+# Convert a term to a `_Box`, keeping the tightest bound on each side
+# of each feature.
 function _tobox(term::AbstractVector{LumenAtom{R,T}}) where {R,T}
     box = _Box{R,T}()
     for a in term
@@ -481,8 +544,11 @@ function _tobox(term::AbstractVector{LumenAtom{R,T}}) where {R,T}
     return sort!(box; by=first)
 end
 
-# hash of the box with entry `skip` left out: boxes that may merge along a
-# feature share it, so it buckets the merge candidates
+#     _boxhash(box::_Box, skip::Int) -> UInt64
+
+# Hash of `box` with entry `skip` left out. Boxes that may merge along a
+# feature agree on every other entry and so share this hash, which buckets
+# the merge candidates in `_mergepass!`.
 function _boxhash(box::_Box, skip::Int)
     h = hash(length(box) - 1)
     @inbounds for (i, e) in enumerate(box)
@@ -492,6 +558,11 @@ function _boxhash(box::_Box, skip::Int)
     return h
 end
 
+#     _sameexcept(a::_Box, ia::Int, b::_Box, ib::Int) -> Bool
+
+# `true` when boxes `a` and `b` have the same length, skip the same position
+# (`ia == ib`) and are equal on every other entry. It is the exact check
+# behind a `_boxhash` bucket hit.
 function _sameexcept(a::_Box, ia::Int, b::_Box, ib::Int)
     # same feature set, same position of the skipped feature
     (length(a) == length(b) && ia == ib) || return false
@@ -502,8 +573,14 @@ function _sameexcept(a::_Box, ia::Int, b::_Box, ib::Int)
     return true
 end
 
-# one merging pass over `boxes`; dead boxes are emptied. Returns whether
-# anything merged.
+#     _mergepass!(boxes::Vector{_Box}) -> Bool
+
+# One merging pass over `boxes`. For each feature, boxes that agree on every
+# other feature are swept by lower bound, and any whose intervals on that
+# feature touch or overlap are fused into the first one; the absorbed box is
+# emptied (a dead box), not removed. A fused interval that becomes unbounded on
+# both sides drops the feature from the box. Returns whether anything merged;
+# `compact!` repeats passes until it returns `false`.
 function _mergepass!(boxes::Vector{_Box{R,T}}) where {R,T}
     changed = false
     feats = unique!(sort!([e[1] for b in boxes for e in b]))
@@ -551,12 +628,10 @@ function _mergepass!(boxes::Vector{_Box{R,T}}) where {R,T}
     return changed
 end
 
-"""
-    compact!(d::LumenDNF) -> d
+#     compact!(d::LumenDNF) -> d
 
-Drop dominated terms and merge adjacent boxes, to a fixed point. Coverage
-is unchanged; only the description gets shorter.
-"""
+# Drop dominated terms and merge adjacent boxes, to a fixed point. Coverage
+# is unchanged; only the description gets shorter.
 function compact!(d::LumenDNF{R,T}) where {R,T}
     refine!(d)
     nterms(d) ≤ 1 && return d
@@ -604,6 +679,15 @@ mutable struct Minimizer{MS<:AbstractMinimization}
     dir::String
 end
 
+"""
+    Minimizer(::Type{Abc}, config::LumenConfig) -> Minimizer{Abc}
+    Minimizer(::Type{MitEspresso}, config::LumenConfig) -> Minimizer{MitEspresso}
+
+Resolve the backend and create a fresh scratch directory. ABC comes from
+`ABC_jll`; the MIT Espresso binary from SoleData's `MITESPRESSOLoader`
+artifact, and an error is thrown if it is missing. The setup level comes
+from `config.p_minimization_setup` (see [`evalst`](@ref)).
+"""
 Minimizer(::Type{Abc}, config::LumenConfig) =
     Minimizer{Abc}(
         ABC_jll.abc(), evalst(config.p_minimization_setup), mktempdir(; prefix="lumen_"))
@@ -615,15 +699,29 @@ function Minimizer(::Type{MitEspresso}, config::LumenConfig)
         Cmd([binary]), evalst(config.minimization_setup), mktempdir(; prefix="lumen_"))
 end
 
-# remove the scratch directory and everything left in it
+"""
+    close(m::Minimizer)
+
+Remove `m`'s scratch directory and everything left in it.
+"""
 Base.close(m::Minimizer) = (rm(m.dir; force=true, recursive=true); nothing)
 
-# a fresh input file name; classes are minimised concurrently, so one fixed
-# name per session would not do
+"""
+    _tempfile(m::Minimizer) -> String
+
+A fresh file name base inside `m`'s scratch directory. Classes are minimised
+concurrently, so one fixed name per session would not do.
+"""
 _tempfile(m::Minimizer) = tempname(m.dir; cleanup=false)
 
-# ABC command scripts, one per setup level. `read_pla -d` folds the dc-set
-# into the on-set (ABC has no other way to use it); `collapse` yields the SOP.
+"""
+    _abc_script(setup::UInt8, inp::String, outp::String) -> String
+
+The ABC command script for setup level `setup` (see [`evalst`](@ref)),
+reading the PLA `inp` and writing the minimised cover to `outp`. `read_pla -d`
+folds the dc-set into the on-set (ABC has no other way to use it);
+`collapse` yields the SOP.
+"""
 function _abc_script(setup::UInt8, inp::String, outp::String)
     body = setup == evalst(Fast) ?
         "strash; collapse" :
@@ -634,19 +732,26 @@ function _abc_script(setup::UInt8, inp::String, outp::String)
     return "read_pla -d $inp; $body; write_pla $outp"
 end
 
-# Espresso flags per setup level: heuristic, strong heuristic, exact.
+#     _espresso_flags(setup::UInt8) -> Vector{String}
+
+# Espresso command-line flags for setup level `setup` (see `evalst`:
+# none (heuristic) for `Fast`, `-estrong` for `Balanced`, `-Dexact` for `Sop`.
 function _espresso_flags(setup::UInt8)
     setup == evalst(Fast) ? String[] :
     setup == evalst(Balanced) ? ["-estrong"] : ["-Dexact"]
 end
 
+#     _minimize(m::Minimizer, L::PlaLayout, cubes) -> LumenDNF
+
 # Run one problem through the backend: write `cubes` as a PLA on layout `L`,
-# run the tool, read its cover back as a `LumenDNF`, delete the files.
+# run the tool, read its cover back as a `LumenDNF` and delete the files, even
+# on error. A failing tool throws, with its stderr in the message.
+
 # Every stream is a file, never a pipe: Julia backs each captured pipe with a
-# 122 KiB buffer per spawn, which on a run of thousands of small leaves is
-# the dominant allocation. The backend's diagnostics are read only on failure.
-# ABC's output is `refine!`d to drop the surplus terms its dc-set folding
-# leaves (see the header); Espresso's cover is irredundant already.
+# 122 KiB buffer per spawn, which on a run of thousands of small leaves is the
+# dominant allocation. The backend's diagnostics are read only on failure.
+# ABC's output is `refine!` to drop the surplus terms its dc-set
+# folding leaves (see the header); Espresso's cover is irredundant already.
 function _minimize(m::Minimizer{Abc}, L::PlaLayout, cubes)
     base = _tempfile(m)
     inp = base * ".in.pla"; outp = base * ".out.pla"; errp = base * ".err"
