@@ -3,6 +3,9 @@ using Test
 using IterTools
 using Random
 
+# fill your Artifacts.toml file;
+fillartifacts() # comment this line in debug
+
 function run_tests(list)
     println("\n" * ("#"^50))
     for test in list
@@ -16,6 +19,7 @@ println("Julia version: ", VERSION)
 test_suites = [
     ("Generic rule Extraction test with rule_extraction.jl", ["rule_extraction.jl"]),
     ("InTrees", ["intrees.jl"]),
+    ("Lumen Shannon", ["lumen_shannon.jl"]),
     ("ORCA Forest Compression", ["orca_compression.jl"])
 ]
 
