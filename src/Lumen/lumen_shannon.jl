@@ -231,5 +231,5 @@ function lumen_shannon(
         assign(R, unique!(SM.info(model, :supporting_labels)), true)
 
     lumen_shannon(
-        config, model, featurenames, feat_idxs, String.(classnames), class_idxs)
+        config, model, featurenames, feat_idxs, string.(classnames), class_idxs)
 end
