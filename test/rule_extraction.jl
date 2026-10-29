@@ -74,12 +74,10 @@ extracted_rules = RuleExtraction.extractrules(
 extractor=BATreesRuleExtractor()
 
 extracted_rules =
-    RuleExtraction.extractrules(extractor, solem_rf; dataset_name="Sole_Analysis")
+    RuleExtraction.extractrules(extractor, solem_rf)
 extracted_rules = RuleExtraction.extractrules(
     extractor,
-    solem_rf;
-    dataset_name="Sole_Analysis",
-    num_trees=5,
+    solem_rf
 )
 
 # ---------------------------------------------------------------------------- #

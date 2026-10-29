@@ -1,22 +1,3 @@
-module Lumen
-
-using SoleLogics
-const SL = SoleLogics
-using SoleModels
-const SM = SoleModels
-using SoleData
-const SD = SoleData
-
-using CategoricalArrays
-using DataFrames
-using IterTools
-
-using ABC_jll
-
-include("config.jl")
-
-export lumen, LumenConfig, LumenResult
-
 const Operators = Union{typeof(<),typeof(>),typeof(≤),typeof(≥)}
 const Float = Union{Float32,Float64}
 
@@ -46,10 +27,12 @@ See also: [`setup_abc`](@ref), [`lumen`](@ref)
 """
 function setup_espresso()
     # auto setup espresso binary if not specified
+    # espressobinary = "/Users/perry/espresso/build/./espresso"  # default path for local build
+
     espressobinary = try
-        joinpath(SD.load(SD.MITESPRESSOLoader()), "espresso")
+       joinpath(SD.load(SD.MITESPRESSOLoader()), "espresso")
     catch e
-        error("Failed to setup espresso binary: $e")
+       error("Failed to setup espresso binary: $e")
     end
 
     # verify that binary exists and is executable
@@ -473,7 +456,7 @@ end
 # ---------------------------------------------------------------------------- #
 """
     _extract_atoms_bfs_order(tree::SM.AbstractModel)
-        -> Vector{SL.Atom{SD.AbstractCondition}}
+        -> Vector{SL.Atom{SD.ScalarCondition}}
 
 Traverse a decision-tree model in breadth-first order and return the antecedent
 atoms encountered at each `Branch` node.
@@ -485,10 +468,22 @@ Only `SM.Branch` nodes contribute atoms; leaf nodes are silently skipped.
 - `tree::SM.AbstractModel`: Root of the decision tree (or sub-tree) to traverse.
 
 # Returns
-- `Vector{SL.Atom{SD.AbstractCondition}}`: Atoms in BFS visitation order.
+- `Vector{SL.Atom{SD.ScalarCondition}}`: Atoms in BFS visitation order, with a
+  CONCRETE element type (required so the result can be passed directly to
+  `Vector{<:Atom{<:ScalarCondition}}`-typed functions like
+  `_take_first_percentage` — see implementation note below).
 """
 function _extract_atoms_bfs_order(tree::SM.AbstractModel)
-    bfs_atoms = SL.Atom{SD.AbstractCondition}[]
+    # NOTE: must be declared with the CONCRETE `ScalarCondition` element type,
+    # not the abstract `AbstractCondition`. Julia's parametric container types
+    # are invariant: `Vector{Atom{AbstractCondition}}` is NOT a subtype of
+    # `Vector{<:Atom{<:ScalarCondition}}`, no matter what concrete elements
+    # are `push!`-ed into it at runtime. Declaring it abstract here silently
+    # poisons every downstream call that dispatches on
+    # `Vector{<:Atom{<:ScalarCondition}}` (e.g. `_take_first_percentage`,
+    # `_atoms_for_feature`), causing a MethodError even though every element
+    # inside is, in fact, a `ScalarCondition` atom.
+    bfs_atoms = SL.Atom{SD.ScalarCondition}[]
     queue = SM.AbstractModel[tree]
 
     while !isempty(queue)
@@ -507,7 +502,7 @@ end
 """
     _take_first_percentage(
         atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
-        depth::Float64
+        depth::AbstractFloat
     ) -> Vector{<:SL.Atom{<:SD.ScalarCondition}}
 
 Return the first `ceil(length(atoms) × depth)` elements of `atoms`.
@@ -517,14 +512,14 @@ of a decision tree (as visited in BFS order) are retained.
 
 # Arguments
 - `atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}}`: Ordered list of atoms.
-- `depth::Float64`: Fraction ∈ (0, 1] of atoms to keep.
+- `depth::AbstractFloat`: Fraction ∈ (0, 1] of atoms to keep.
 
 # Returns
 - A sub-vector containing at most `ceil(n × depth)` elements.
 """
 function _take_first_percentage(
     atoms::Vector{<:SL.Atom{<:SD.ScalarCondition}},
-    depth::Float64
+    depth::AbstractFloat
 )
     n_total = length(atoms)
     n_to_take = Int(ceil(n_total * depth))
@@ -608,7 +603,7 @@ function _truths_by_thresholds(thresholds::Vector{<:Float})
     ntruths = length(thresholds)
     truths = Vector{BitVector}(undef, ntruths + 1)
 
-    @inbounds for i = 1:ntruths+1
+    @inbounds for i = 1:(ntruths+1)
         truths[i] = BitVector(undef, ntruths)
         val = 2^(i - 1) - 1
         for j = 1:ntruths
@@ -859,8 +854,8 @@ function _product_columntable(
 
     names = Tuple(featurenames)
     cols = ntuple(j -> _ProductColumn{T,typeof(thrs_with_p)}(
-            thrs_with_p, lens, strides, j, nrows
-        ), n)
+        thrs_with_p, lens, strides, j, nrows
+    ), n)
 
     return NamedTuple{names}(cols)
 end
@@ -939,7 +934,7 @@ struct ExtractRulesData{
         predictions, combinations, thresholds, featurenames, classnames, op_families
     )
 
-    function ExtractRulesData(extractor::LumenConfig, model::SM.AbstractModel)
+    function ExtractRulesData(extractor::LumenConfig{R,T}, model::SM.AbstractModel) where {R,T}
         # -------------------------------------------------------------------- #
         # STEP 1 — Read the depth parameter from the configuration.
         # `depth ∈ (0, 1]`: if < 1.0, only atoms from the upper levels of the
@@ -976,8 +971,19 @@ struct ExtractRulesData{
         # DecisionList mixes operator families across its rules.
         # -------------------------------------------------------------------- #
         atoms = unique!(_normalize_atom.(if depth < 1.0
+            # NOTE: `init` must be concretely typed `Atom{ScalarCondition}[]`,
+            # NOT `Atom{AbstractCondition}[]`. Even after fixing
+            # `_extract_atoms_bfs_order` to return a concretely-typed vector,
+            # an abstractly-typed `init` here would still cause `vcat` to
+            # widen (typejoin) the accumulated result back to
+            # `Vector{Atom{AbstractCondition}}`, which would then make the
+            # `_normalize_atom.(...)` broadcast below fail with the same
+            # kind of MethodError (its signature also requires
+            # `Atom{<:ScalarCondition}`). Julia's parametric types are
+            # invariant, so this has to be fixed at every accumulator, not
+            # just at the source.
             mapreduce(
-                vcat, SM.models(model); init=SL.Atom{SD.AbstractCondition}[]
+                vcat, SM.models(model); init=SL.Atom{SD.ScalarCondition}[]
             ) do t
                 all_atoms_bfs = _extract_atoms_bfs_order(t)
                 _take_first_percentage(all_atoms_bfs, depth)
@@ -996,7 +1002,7 @@ struct ExtractRulesData{
         # -------------------------------------------------------------------- #
         let unsupported = unique(
                 op for op in get_operator.(atoms)
-                if op ∉ _supported_operators
+                       if op ∉ _supported_operators
             )
             isempty(unsupported) || throw(ArgumentError(
                 "Only '<', '≥', '>', '≤' operators are currently supported. " *
@@ -1054,7 +1060,7 @@ struct ExtractRulesData{
         #             encoding, where larger thresholds correspond to
         #             later bits).
         # -------------------------------------------------------------------- #
-        type = get_float_type(extractor)
+        type = T
         thresholds = Vector{Vector{type}}(undef, length(featurenames))
         op_families = Vector{Symbol}(undef, length(featurenames))
 
@@ -1126,7 +1132,7 @@ struct ExtractRulesData{
         predictions = get_apply_function(extractor)(
             model,
             d;
-            use_multithreads=get_use_multithreads(extractor),
+            # use_multithreads=get_use_multithreads(extractor),
             suppress_parity_warning=true
         )
 
@@ -1423,7 +1429,7 @@ Requires at least two terms to perform any pruning; single-term inputs are
 returned immediately.
 """
 function _refine_dnf(
-    terms::Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom},SyntaxStructure}}
+    terms
 )
     length(terms) ≤ 1 && return terms
 
@@ -1432,7 +1438,7 @@ function _refine_dnf(
     # find terms not strictly dominated by any other term
     keep_mask = map(enumerate(all_bounds)) do (i, bounds_i)
         !any(j -> i ≠ j && SD.strictly_dominates(
-                all_bounds[j], bounds_i), eachindex(all_bounds))
+            all_bounds[j], bounds_i), eachindex(all_bounds))
     end
 
     kept_terms = terms[keep_mask]
@@ -1466,27 +1472,35 @@ applies [`_refine_dnf`](@ref) to remove dominated terms.
 """
 function run_minimization(
     ::Val{:abc},
-    extractor::LumenConfig,
-    atoms::Vector{Vector{SL.Atom}}
-)
-    # minimized_formula =
-    #     SD.abc_minimize(
-    #         atoms,
-    #         get_binary(extractor);
-    #         fast=1,
-    #         depth=get_depth(extractor),
-    #         float_type=get_float_type(extractor)
-    #     )
-
-    # return _refine_dnf(minimized_formula)
-
+    extractor::LumenConfig{R,T},
+    atoms::Vector{Vector{SL.Atom}},
+    universe_conditions::Vector{<:SD.AbstractScalarCondition}
+) where {R,T}
     ABC_jll.abc() do binary
         minimized_formula = SD.abc_minimize(
             atoms,
             binary;
-            fast=1,
+            fast=3,
             depth=get_depth(extractor),
-            float_type=get_float_type(extractor)
+            float_type=T,
+            universe_conditions=universe_conditions,
+        )
+        return refine_dnf(minimized_formula)
+    end
+end
+
+function run_minimization(
+    ::Val{:abc},
+    extractor::LumenConfig{R,T},
+    atoms::Vector{Vector{SL.Atom}}
+) where {R,T}
+    ABC_jll.abc() do binary
+        minimized_formula = SD.abc_minimize(
+            atoms,
+            binary;
+            fast=3,
+            depth=get_depth(extractor),
+            float_type=T
         )
         return refine_dnf(minimized_formula)
     end
@@ -1512,23 +1526,115 @@ applies [`_refine_dnf`](@ref) to remove dominated terms.
 # Returns
 - Minimized and refined vector of conjunctive terms.
 """
+#=
 function run_minimization(
     ::Val{:mitespresso},
-    extractor::LumenConfig,
+    extractor::LumenConfig{R,T},
     atoms::Vector{Vector{SL.Atom}}
-    # TODO mitespresso_kwargs...
-)
+) where {R,T}
+    n_in = length(atoms)
+    binary = get_binary(extractor)
+    println("[run_minimization:mitespresso] INPUT: ", n_in, " atom-vectors, binary=", binary)
+
+    binary === nothing && println("[run_minimization:mitespresso] ⚠ binary is NOTHING — espresso non puo' partire")
+
+    t0 = time()
     minimized_formula =
         SD.espresso_minimize(
             atoms,
-            get_binary(extractor);
+            binary;
             depth=get_depth(extractor),
-            float_type=get_float_type(extractor)
+            float_type=T
         )
+    elapsed = time() - t0
 
-    return _refine_dnf(minimized_formula)
+    refined = _refine_dnf(minimized_formula)
+    println("[run_minimization:mitespresso] OUTPUT: ", length(minimized_formula),
+        " terms pre-refine, ", length(refined), " post-refine (was ", n_in,
+        "), elapsed=", round(elapsed, digits=4), "s")
+    if elapsed < 0.001
+        println("[run_minimization:mitespresso] ⚠ elapsed quasi zero: sospetto no-op")
+    end
+
+    return refined
 end
+=#
 
+# ============================================================================ #
+#  PATCH: run_minimization(::Val{:mitespresso}, ...) accetta offset opzionale  #
+#                                                                              #
+#  Firma ancora "compatibile all'indietro": chi chiama con 3 argomenti (come
+#  fa `lumen()` stesso) ottiene `offset=nothing` -> comportamento IDENTICO a
+#  prima. `super_lumen`'s `_fold_in!` (vedi file successivo) è l'unico
+#  chiamante che passerà `offset` esplicitamente.
+# ============================================================================ #
+
+"""
+    run_minimization(
+        ::Val{:mitespresso},
+        extractor::LumenConfig,
+        atoms::Vector{Vector{SL.Atom}};
+        offset::Union{Nothing,Vector{Vector{SL.Atom}}}=nothing
+    ) -> Vector{<:Union{SL.LeftmostConjunctiveForm{SL.Atom}, SyntaxStructure}}
+
+Minimize the DNF formula encoded by `atoms` using the MIT Espresso minimizer.
+
+# `offset` (NEW)
+Cubes CONFIRMED to be off for this call (e.g., in `super_lumen`, cubes
+already routed to OTHER classes' buffers). Forwarded to
+`SD.espresso_minimize(atoms, binary; ..., offset)`, which in turn emits an
+explicit `.type fr` PLA (see `PLA.jl` patch): everything neither in `atoms`
+nor in `offset` is left as an IMPLICIT don't-care, instead of being folded
+into Espresso's default absolute-complement OFF-set. `nothing` (default)
+reproduces the exact previous behavior.
+
+Delegates to `SD.espresso_minimize` with the binary path from `extractor`,
+then applies [`_refine_dnf`](@ref) to remove dominated terms.
+
+# Arguments
+- `extractor::LumenConfig`: Provides the Espresso binary path and depth
+  parameter.
+- `atoms::Vector{Vector{SL.Atom}}`: Per-combination atom lists (the ON-set).
+- `offset`: see above.
+
+# Returns
+- Minimized and refined vector of conjunctive terms.
+"""
+function run_minimization(
+    ::Val{:mitespresso},
+    extractor::LumenConfig{R,T},
+    atoms::Vector{Vector{SL.Atom}};
+    offset::Union{Nothing,Vector{Vector{SL.Atom}}}=nothing
+) where {R,T}
+    n_in = length(atoms)
+    n_off = isnothing(offset) ? 0 : length(offset)
+    binary = get_binary(extractor)
+    println("[run_minimization:mitespresso] INPUT: ", n_in, " atom-vectors (ON), ",
+        n_off, " atom-vectors (OFF, explicit), binary=", binary)
+
+    binary === nothing && println("[run_minimization:mitespresso] ⚠ binary is NOTHING — espresso non puo' partire")
+
+    t0 = time()
+    minimized_formula =
+        SD.espresso_minimize(
+            atoms,
+            binary;
+            depth=Float64(get_depth(extractor)),
+            float_type=T,
+            offset=offset
+        )
+    elapsed = time() - t0
+
+    refined = _refine_dnf(minimized_formula)
+    println("[run_minimization:mitespresso] OUTPUT: ", length(minimized_formula),
+        " terms pre-refine, ", length(refined), " post-refine (was ", n_in,
+        "), elapsed=", round(elapsed, digits=4), "s")
+    if elapsed < 0.001
+        println("[run_minimization:mitespresso] ⚠ elapsed quasi zero: sospetto no-op")
+    end
+
+    return refined
+end
 # ---------------------------------------------------------------------------- #
 #                                    lumen                                     #
 # ---------------------------------------------------------------------------- #
@@ -1597,10 +1703,10 @@ See also: [`LumenConfig`](@ref), [`LumenResult`](@ref),
 [`ExtractRulesData`](@ref)
 """
 function lumen(
-    config::LumenConfig,
+    config::LumenConfig{R,T},
     model::SM.AbstractModel
-)
-    float_type = get_float_type(config)
+) where {R,T}
+    float_type = T
 
     # extract conjuncts
     extractrulesdata = ExtractRulesData(config, model)
@@ -1660,6 +1766,4 @@ function lumen(
     end
 
     return LumenResult(ds)
-end
-
 end
