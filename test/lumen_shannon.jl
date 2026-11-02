@@ -96,9 +96,17 @@ function xg_boost(
         classlabels=unique(y))
 end
 
-function decision_list()
+function decision_list(
+    X::DataFrame,
+    y::CategoricalArray,
+    num_models::Int,
+    max_depth::Int,
+    rng
+)
     model = ModalDecisionLists.build_ensemble(
-        plogiset, labels_train, numero_alberi;
+        plogiset,
+        y,
+        num_models;
         model_wrapper=sequentialcovering,
         max_rulebase_length=3,
         max_rule_length=3,
