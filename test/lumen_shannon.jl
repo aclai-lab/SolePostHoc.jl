@@ -306,11 +306,6 @@ end
     cfg = LumenConfig(; float_resolution=T)
     e = LumenEnsemble(cfg, model)
 
-    model = random_forest(X, y, 100, 100, rng)
-    cfg = LumenConfig(; float_resolution=T)
-    @btime LumenEnsemble(cfg, model)
-#   295.493 μs (2966 allocations: 198.94 KiB)
-
     @test length(e.roots) == 3
     # children always come after their parent
     for (i, n) in enumerate(e.nodes)
@@ -330,6 +325,34 @@ end
     model = xg_boost(X, y, 3, 3)
     cfg = LumenConfig(; float_resolution=T)
     e = LumenEnsemble(cfg, model)
+
+    @test length(e.roots) == 3
+    # children always come after their parent
+    for (i, n) in enumerate(e.nodes)
+        LU.isleaf(n) && continue
+        @test n.left > i && n.right > i
+        @test !LU.isempty_atom(e.atoms[i])
+    end
+    for (i, n) in enumerate(e.nodes)
+        LU.isleaf(n) && @test LU.isempty_atom(e.atoms[i])
+    end
+
+    @test_nowarn atoms = LU.get_atoms(e)
+    @test !any(LU.isempty_atom, atoms)
+end
+
+@testset "LumenEnsemble: Decision List" begin
+    model = decision_list(X, y, 3, 3, 3, rng)
+    cfg = LumenConfig(; float_resolution=T)
+    e = LumenEnsemble(cfg, model)
+
+
+m = SoleModels.models(model)[1]
+
+
+
+
+
 
     @test length(e.roots) == 3
     # children always come after their parent

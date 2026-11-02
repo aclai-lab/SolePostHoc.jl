@@ -237,7 +237,7 @@ _label(x::CategoricalValue) = CategoricalArrays.unwrap(x)
 _label(x) = x
 
 function _fillensemble(
-    node,
+    node::SM.ConstantModel,
     atoms::Vector{LumenAtom{R,T}},
     nodes::Vector{LumenNode{R}},
     classes::Vector{S}
@@ -247,30 +247,70 @@ function _fillensemble(
     push!(atoms, LumenAtom{R,T}())
     id = R(length(nodes))
 
-    if node isa SM.ConstantModel
-        # the leaf's class is the levelcode of its outcome; remember the
-        # outcome itself, the tie breaker needs it
-        o = outcome(node)
-        c = levelcode(o)
-        if c > length(classes)
-            resize!(classes, length(CategoricalArrays.levels(o)))
-        end
-        classes[c] = o
-        atoms[id] = LumenAtom{R,T}()
-        nodes[id] = LumenNode{R}(zero(R), zero(R), R(c))
-    elseif node isa SM.Branch
-        cond = SL.value(antecedent(node))
-        left = _fillensemble(posconsequent(node), atoms, nodes, classes)
-        right = _fillensemble(negconsequent(node), atoms, nodes, classes)
-        atoms[id] = LumenAtom{R,T}(
-            R(SD.i_variable(SD.feature(cond))),
-            T(SD.threshold(cond)),
-            evalop(SD.test_operator(cond)),                
-        )
-        nodes[id] = LumenNode{R}(left, right, zero(R))
-    else
-        throw(ArgumentError("unsupported model node $(typeof(node))"))
+    # the leaf's class is the levelcode of its outcome; remember the
+    # outcome itself, the tie breaker needs it
+    o = outcome(node)
+    c = levelcode(o)
+    if c > length(classes)
+        resize!(classes, length(CategoricalArrays.levels(o)))
     end
+    classes[c] = o
+    atoms[id] = LumenAtom{R,T}()
+    nodes[id] = LumenNode{R}(zero(R), zero(R), R(c))
+
+    return id
+end
+
+function _fillensemble(
+    node::SM.Branch,
+    atoms::Vector{LumenAtom{R,T}},
+    nodes::Vector{LumenNode{R}},
+    classes::Vector{S}
+)::R where {R<:Unsigned,T<:AbstractFloat,S}
+    # reserve slot first so children get higher ids
+    push!(nodes, LumenNode{R}(zero(R), zero(R), zero(R)))
+    push!(atoms, LumenAtom{R,T}())
+    id = R(length(nodes))
+
+    cond = SL.value(antecedent(node))
+    left = _fillensemble(posconsequent(node), atoms, nodes, classes)
+    right = _fillensemble(negconsequent(node), atoms, nodes, classes)
+    atoms[id] = LumenAtom{R,T}(
+        R(SD.i_variable(SD.feature(cond))),
+        T(SD.threshold(cond)),
+        evalop(SD.test_operator(cond)),                
+    )
+    nodes[id] = LumenNode{R}(left, right, zero(R))
+
+    return id
+end
+
+function _fillensemble(
+    node::Vector{C},
+    atoms::Vector{LumenAtom{R,T}},
+    nodes::Vector{LumenNode{R}},
+    classes::Vector{S},
+    nlist::R,
+    nmax::R,
+    default::SM.ConstantModel
+)::R where {R<:Unsigned,T<:AbstractFloat,S,C<:ClassificationRule}
+    # reserve slot first so children get higher ids
+    push!(nodes, LumenNode{R}(zero(R), zero(R), zero(R)))
+    push!(atoms, LumenAtom{R,T}())
+    id = R(length(nodes))
+
+    cond = SL.value(antecedent(node[nlist]))
+    left = _fillensemble(consequent(node), atoms, nodes, classes)
+    right = nlist < nmax ? 
+        _fillensemble(node[nlist+=1], atoms, nodes, classes, nlist, nmax) :
+        _fillensemble(default, atoms, nodes, classes)
+
+    atoms[id] = LumenAtom{R,T}(
+        R(SD.i_variable(SD.feature(cond))),
+        T(SD.threshold(cond)),
+        evalop(SD.test_operator(cond)),                
+    )
+    nodes[id] = LumenNode{R}(left, right, zero(R))
 
     return id
 end
@@ -301,22 +341,48 @@ function LumenEnsemble(
     end
 
     aggregate = SM.weighted_aggregation(model)
+
     return LumenEnsemble{R,T,S,typeof(aggregate)}(atoms, nodes, roots, classes, aggregate)
 end
 
+# the structure of a decision list can be intended as a if .. elseif .. else statement
+# instead of defining a new structure for lumen, we can convert to already made
+# tree structure, where only the negative path is growing.
 function LumenEnsemble(
-    ::LumenConfig{R,T},
-    model::SoleModels.DecisionTree
-) where {R<:Unsigned,T<:AbstractFloat}
-    LumenEnsemble(DecisionEnsemble([model.root]), R, T)
+    model::DecisionEnsemble{U,SM.DecisionList{S}},
+    R::Type{<:Unsigned},
+    T::Type{<:AbstractFloat}
+) where {U,S<:CategoricalValue}
+    atoms = LumenAtom{R,T}[]
+    nodes = LumenNode{R}[]
+    roots = R[]
+    classes = S[]
+    nlist = one(R)
+
+    for m in models(model)
+        node = SM.rulebase(m)
+        nmax = R(length(node))
+        default = SM.defaultconsequent(m)
+        push!(
+            roots,
+            _fillensemble(SM.rulebase(m), atoms, nodes, classes, nlist, nmax, default)
+        )
+    end
+
+    aggregate = SM.weighted_aggregation(model)
+    return LumenEnsemble{R,T,S,typeof(aggregate)}(atoms, nodes, roots, classes, aggregate)
 end
 
-function LumenEnsemble(
+@inline LumenEnsemble(
+    model::SoleModels.DecisionTree,
+    R::Type{<:Unsigned},
+    T::Type{<:AbstractFloat}
+) = LumenEnsemble(DecisionEnsemble([model.root]), R, T)
+
+@inline LumenEnsemble(
     ::LumenConfig{R,T},
     model::AbstractModel
-) where {R<:Unsigned,T<:AbstractFloat}
-    LumenEnsemble(model, R, T)
-end
+) where {R<:Unsigned,T<:AbstractFloat} = LumenEnsemble(model, R, T)
 
 # a `LumenEnsemble` indexes and iterates as its vector of nodes
 Base.length(e::LumenEnsemble) = length(e.nodes)
