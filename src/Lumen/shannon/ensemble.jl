@@ -285,34 +285,92 @@ function _fillensemble(
     return id
 end
 
-function _fillensemble(
-    node::Vector{C},
-    atoms::Vector{LumenAtom{R,T}},
-    nodes::Vector{LumenNode{R}},
-    classes::Vector{S},
-    nlist::R,
-    nmax::R,
-    default::SM.ConstantModel
-)::R where {R<:Unsigned,T<:AbstractFloat,S,C<:ClassificationRule}
-    # reserve slot first so children get higher ids
-    push!(nodes, LumenNode{R}(zero(R), zero(R), zero(R)))
-    push!(atoms, LumenAtom{R,T}())
-    id = R(length(nodes))
+# Flatten the rule antecedent `rule` into the atoms of its conjunction, appended
+# to `out`. `rule` may be a single atom, a `SyntaxBranch` or a
+# `LeftmostConjunctiveForm` of `∧`, nested freely; a negated atom becomes its
+# `dual`, and `⊤` contributes nothing. Anything else throws an `ArgumentError`.
+function _conjuncts!(
+    out::Vector{LumenAtom{R,T}},
+    rule::SL.LeftmostConjunctiveForm,
+) where {R<:Unsigned,T<:AbstractFloat}
+    if rule == SL.TOP
+        nothing
+    elseif SL.token(rule) == SL.CONJUNCTION
+        foreach(c -> _conjuncts!(out, c), SL.children(rule))
+    elseif SL.token(rule) == SL.NEGATION && only(SL.children(rule)) isa SL.Atom
+        _conjuncts!(out, only(SL.children(rule)))
+        out[end] = dual(out[end])
+    else
+        throw(ArgumentError("unsupported rule antecedent $(typeof(rule))"))
+    end
 
-    cond = SL.value(antecedent(node[nlist]))
-    left = _fillensemble(consequent(node), atoms, nodes, classes)
-    right = nlist < nmax ? 
-        _fillensemble(node[nlist+=1], atoms, nodes, classes, nlist, nmax) :
-        _fillensemble(default, atoms, nodes, classes)
+    return out
+end
 
-    atoms[id] = LumenAtom{R,T}(
+# _conjuncts! SyntaxBranch still missing
+
+function _conjuncts!(
+    out::Vector{LumenAtom{R,T}},
+    rule::Atom{S},
+) where {R<:Unsigned,T<:AbstractFloat,S<:ScalarCondition}
+    cond = SL.value(rule)
+
+    push!(out, LumenAtom{R,T}(
         R(SD.i_variable(SD.feature(cond))),
         T(SD.threshold(cond)),
-        evalop(SD.test_operator(cond)),                
-    )
-    nodes[id] = LumenNode{R}(left, right, zero(R))
+        evalop(SD.test_operator(cond)),
+    ))
 
-    return id
+    return out
+end
+
+# A decision list is an IF .. ELSEIF .. ELSE chain, compiled into the same
+# node arrays as a tree. Rule `a₁ ∧ … ∧ aₘ → c` becomes `m` nodes chained on
+# their true branch, the last one ending in the leaf `c`; the false branch of
+# every one of them goes to the first node of the next rule, the last rule
+# falling through to the default leaf:
+#
+#   a₁ ─T→ a₂ ─T→ a₃ ─T→ [c]
+#   │F     │F     │F
+#   └──────┴──────┴──→ next rule … → [default]
+#
+# False branches are shared, so the result is a DAG. Nodes are allocated in
+# order (atoms of a rule, its leaf, then the next rule), so the next rule's
+# id is known in advance and children still get higher ids than parents.
+function _fillensemble(
+    m::SM.DecisionList,
+    atoms::Vector{LumenAtom{R,T}},
+    nodes::Vector{LumenNode{R}},
+    classes::Vector{S}
+)::R where {R<:Unsigned,T<:AbstractFloat,S}
+    root = R(length(nodes) + 1)
+    conj = LumenAtom{R,T}[]
+
+    for rule in SM.rulebase(m)
+        empty!(conj)
+        _conjuncts!(conj, antecedent(rule))
+        nconj = length(conj)
+
+        # atom k sits at first + k - 1, the leaf right after the last atom,
+        # and the next rule starts right after the leaf
+        first = R(length(nodes) + 1)
+        leafid = first + R(nconj)
+        next = leafid + one(R)
+
+        for k in 1:nconj
+            left = k < nconj ? first + R(k) : leafid
+            push!(atoms, conj[k])
+            push!(nodes, LumenNode{R}(left, next, zero(R)))
+        end
+
+        _fillensemble(consequent(rule), atoms, nodes, classes)
+
+        # a ⊤ rule always fires: the rules after it are unreachable
+        nconj == 0 && return root
+    end
+
+    _fillensemble(SM.defaultconsequent(m), atoms, nodes, classes)
+    return root
 end
 
 """
@@ -345,9 +403,6 @@ function LumenEnsemble(
     return LumenEnsemble{R,T,S,typeof(aggregate)}(atoms, nodes, roots, classes, aggregate)
 end
 
-# the structure of a decision list can be intended as a if .. elseif .. else statement
-# instead of defining a new structure for lumen, we can convert to already made
-# tree structure, where only the negative path is growing.
 function LumenEnsemble(
     model::DecisionEnsemble{U,SM.DecisionList{S}},
     R::Type{<:Unsigned},
@@ -357,21 +412,22 @@ function LumenEnsemble(
     nodes = LumenNode{R}[]
     roots = R[]
     classes = S[]
-    nlist = one(R)
 
     for m in models(model)
-        node = SM.rulebase(m)
-        nmax = R(length(node))
-        default = SM.defaultconsequent(m)
-        push!(
-            roots,
-            _fillensemble(SM.rulebase(m), atoms, nodes, classes, nlist, nmax, default)
-        )
+        push!(roots, _fillensemble(m, atoms, nodes, classes))
     end
 
     aggregate = SM.weighted_aggregation(model)
+
     return LumenEnsemble{R,T,S,typeof(aggregate)}(atoms, nodes, roots, classes, aggregate)
 end
+
+# single list is a one-member ensemble, binary classification ?
+# @inline LumenEnsemble(
+#     model::SM.DecisionList,
+#     R::Type{<:Unsigned},
+#     T::Type{<:AbstractFloat}
+# ) = LumenEnsemble(DecisionEnsemble([model], SM.info(model)), R, T)
 
 @inline LumenEnsemble(
     model::SoleModels.DecisionTree,
@@ -417,11 +473,16 @@ function bfs_atoms(e::LumenEnsemble{R,T}, depth::Real) where {R,T}
     out = LumenAtom{R,T}[]
     queue = R[]
     order = LumenAtom{R,T}[]
+    # decision lists share false branches (a DAG): without this, the rest of
+    # a list is visited once per atom of every rule before it
+    seen = falses(length(e.nodes))
     for r in e.roots
         empty!(order); empty!(queue)
         push!(queue, r)
         while !isempty(queue)
             id = popfirst!(queue)
+            seen[id] && continue
+            seen[id] = true
             n = e.nodes[id]
             isleaf(n) && continue
             push!(order, e.atoms[id])

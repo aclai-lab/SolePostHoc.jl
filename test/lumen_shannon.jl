@@ -297,7 +297,7 @@ end
         LU.isleaf(n) && @test LU.isempty_atom(e.atoms[i])
     end
 
-    @test_nowarn atoms = LU.get_atoms(e)
+    atoms = @test_nowarn LU.get_atoms(e)
     @test !any(LU.isempty_atom, atoms)
 end
 
@@ -317,7 +317,7 @@ end
         LU.isleaf(n) && @test LU.isempty_atom(e.atoms[i])
     end
 
-    @test_nowarn atoms = LU.get_atoms(e)
+    atoms = @test_nowarn LU.get_atoms(e)
     @test !any(LU.isempty_atom, atoms)
 end
 
@@ -337,7 +337,7 @@ end
         LU.isleaf(n) && @test LU.isempty_atom(e.atoms[i])
     end
 
-    @test_nowarn atoms = LU.get_atoms(e)
+    atoms = @test_nowarn LU.get_atoms(e)
     @test !any(LU.isempty_atom, atoms)
 end
 
@@ -345,14 +345,6 @@ end
     model = decision_list(X, y, 3, 3, 3, rng)
     cfg = LumenConfig(; float_resolution=T)
     e = LumenEnsemble(cfg, model)
-
-
-m = SoleModels.models(model)[1]
-
-
-
-
-
 
     @test length(e.roots) == 3
     # children always come after their parent
@@ -365,8 +357,55 @@ m = SoleModels.models(model)[1]
         LU.isleaf(n) && @test LU.isempty_atom(e.atoms[i])
     end
 
-    @test_nowarn atoms = LU.get_atoms(e)
+    atoms = @test_nowarn LU.get_atoms(e)
     @test !any(LU.isempty_atom, atoms)
+
+    # the compiled lists classify exactly as the model, on the data and on
+    # points at, just below and just above every threshold
+    nclasses = length(levels(y))
+    agrees(Xp) = LU.apply(e, view(Matrix(Xp), :, :), nclasses) ==
+        levelcode.(SoleModels.apply(model, scalarlogiset(Xp; allow_propositional=true);
+            suppress_parity_warning=true))
+    @test agrees(X)
+
+    cand = map(1:ncol(X)) do f
+        ts = [a.thr for a in LU.get_atoms(e) if a.feat == f]
+        isempty(ts) ? T[0] : unique!(vcat(ts, prevfloat.(ts), nextfloat.(ts),
+            minimum(ts) - 1, maximum(ts) + 1))
+    end
+    Xp = DataFrame([n => [rand(rng, cand[j]) for _ in 1:500]
+        for (j, n) in enumerate(propertynames(X))])
+    @test agrees(Xp)
+
+    # every atom of the lists is reached by bfs_atoms, each once
+    @test Set(LU.bfs_atoms(e, 1.0)) == Set(LU.get_atoms(e))
+end
+
+@testset "LumenEnsemble: Decision List layout" begin
+    fn = [:V1, :V2]
+    a1, a2, a3 = atom(fn, 1, <, 2.0), atom(fn, 2, ≥, 1.0), atom(fn, 1, >, 4.0)
+    conj(as...) = SoleLogics.LeftmostConjunctiveForm(collect(as))
+
+    # IF a1 ∧ a2 THEN a ELSEIF ¬a3 THEN b ELSE c
+    dl = DecisionList([Rule(conj(a1, a2), leaf(1)), Rule(¬a3, leaf(2))], leaf(3))
+    e = LumenEnsemble(dl, R, T)
+    n = e.nodes
+
+    @test e.roots == R[1]
+    @test length(n) == 6        # a1, a2, [a], a3*, [b], [c]
+    @test n[1] == LU.LumenNode{R}(2, 4, 0)   # a1: true → a2, false → next rule
+    @test n[2] == LU.LumenNode{R}(3, 4, 0)   # a2: true → [a], false → next rule
+    @test n[4] == LU.LumenNode{R}(5, 6, 0)   # ¬a3: true → [b], false → default
+    @test [n[i].leaf for i in (3, 5, 6)] == R[1, 2, 3]
+    @test e.atoms[4] == lumenatom(1, 4.0, ≤)  # ¬(V1 > 4) is V1 ≤ 4
+
+    # a ⊤ rule ends the list: nothing after it is compiled
+    dl = DecisionList([Rule(conj(a1), leaf(1)), Rule(⊤, leaf(2)),
+        Rule(conj(a2), leaf(3))], leaf(3))
+    e = LumenEnsemble(dl, R, T)
+    @test length(e.nodes) == 3   # a1, [a], [b]
+    @test e.nodes[1] == LU.LumenNode{R}(2, 3, 0)
+    @test e.nodes[3].leaf == 2
 end
 
 @testset "ThresholdSpace" begin
