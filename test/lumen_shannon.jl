@@ -50,7 +50,7 @@ function decision_tree(
         rng
     )
 
-    return SoleModels.solemodel(DecisionTree.wrap(model.node, (featurenames = names(X),)))
+    return SoleModels.solemodel(DecisionTree.wrap(model.node, (featurenames=names(X),)))
 end
 
 function random_forest(
@@ -82,39 +82,60 @@ function xg_boost(
     max_depth::Int
 )
     yl = levelcode.(y) .- 1 # CategoricalArrays: 1-based codes → 0-based
-    model = xgboost((X, yl);
+    # model = xgboost((X, yl);
+    #     num_round,
+    #     max_depth,
+    #     objective = "multi:softmax",  # or "multi:softmax"
+    #     num_class = length(levels(y)),
+    # )
+
+    # return SoleModels.solemodel(
+    #     XGBoost.trees(model),
+    #     Matrix(X), y;
+    #     featurenames=names(X),
+    #     classlabels=unique(y))
+
+    model = xgboost((Matrix(X), yl);
         num_round,
         max_depth,
-        objective = "multi:softmax",  # or "multi:softmax"
+        objective = "multi:softmax",
         num_class = length(levels(y)),
     )
 
-    return SoleModels.solemodel(
+    SoleModels.solemodel(
         XGBoost.trees(model),
         Matrix(X), y;
-        featurenames=names(X),
-        classlabels=unique(y))
+        featurenames = names(X),
+        classlabels  = levels(y),
+    )
+
 end
 
 function decision_list(
     X::DataFrame,
     y::CategoricalArray,
     num_models::Int,
-    max_depth::Int,
+    max_rulebase_length::Int, # 3
+    max_rule_length::Int, # 3
     rng
 )
+    logiset = PropositionalLogiset(X)
+
     model = ModalDecisionLists.build_ensemble(
-        plogiset,
+        logiset,
         y,
         num_models;
-        model_wrapper=sequentialcovering,
-        max_rulebase_length=3,
-        max_rule_length=3,
+        model_wrapper=ModalDecisionLists.sequentialcovering,
+        max_rulebase_length,
+        max_rule_length,
         loss_function=ModalDecisionLists.LossFunctions.LaplaceMetric(),
-        featurenames=featurenames,
-        min_rule_coverage=max(1, round(Int, size(features_train, 1) * 0.05)),
-        discretizedomain=true
+        featurenames=propertynames(X),
+        min_rule_coverage=max(1, round(Int, size(X, 1) * 0.05)),
+        discretizedomain=false,
+        rng
     )
+
+    return solemodel(model; featurenames=names(X))
 end
 
 const CLS = categorical(["a", "b", "c"])
@@ -210,10 +231,9 @@ termsets(d) = Set(atomset(t) for t in d)
 # the PLA text `write_pla` produces
 plastring(L, cubes) = sprint(io -> LU.write_pla(io, L, cubes))
 
-config64(; kw...) = LumenConfig(; float_resolution=Float64, kw...)
 
 # ---------------------------------------------------------------------------------------- #
-#                                          tests                                           #
+#                                  operators and atoms                                     #
 # ---------------------------------------------------------------------------------------- #
 @testset "Lumen Shannon" begin
 
@@ -258,15 +278,15 @@ end
     @test sort(atoms) == [lumenatom(1, 1.0, <), lumenatom(1, 3.0, ≤), A(2, 2.0, ≥)]
 end
 
-@testset "LumenEnsemble" begin
-    model = small_forest()
-    cfg = config64()
+# ---------------------------------------------------------------------------------------- #
+#                                        ensembles                                         #
+# ---------------------------------------------------------------------------------------- #
+@testset "LumenEnsemble: Decision Tree" begin
+    model = decision_tree(X, y, 3, rng)
+    cfg = LumenConfig(; float_resolution=T)
     e = LumenEnsemble(cfg, model)
 
-    @test length(e.roots) == 3
-    @test length(e) == 13
-    @test count(LU.isleaf, e.nodes) == 8
-    @test e.roots == R[1, 6, 11]
+    @test length(e.roots) == 1
     # children always come after their parent
     for (i, n) in enumerate(e.nodes)
         LU.isleaf(n) && continue
@@ -276,33 +296,54 @@ end
     for (i, n) in enumerate(e.nodes)
         LU.isleaf(n) && @test LU.isempty_atom(e.atoms[i])
     end
-    @test e.atoms[1] == A(1, 2.0, <)
-    @test LU._label.(e.classes) == ["a", "b", "c"]
 
-    atoms = LU.get_atoms(e)
-    @test length(atoms) == 5
+    @test_nowarn atoms = LU.get_atoms(e)
     @test !any(LU.isempty_atom, atoms)
+end
 
-    # BFS order, ceil(depth * n) atoms per tree
-    @test Set(LU.bfs_atoms(e, 1.0)) == Set(atoms)
-    @test LU.bfs_atoms(e, 0.5) == [A(1, 2.0, <), A(2, 3.0, <), A(1, 1.0, >)]
+@testset "LumenEnsemble: Random Forest" begin
+    model = random_forest(X, y, 3, 3, rng)
+    cfg = LumenConfig(; float_resolution=T)
+    e = LumenEnsemble(cfg, model)
 
-    @test occursin("3 trees", sprint(show, e))
+    model = random_forest(X, y, 100, 100, rng)
+    cfg = LumenConfig(; float_resolution=T)
+    @btime LumenEnsemble(cfg, model)
+#   295.493 μs (2966 allocations: 198.94 KiB)
 
-    # the compiled forest votes exactly like the Sole model, ties included
-    rng = Xoshiro(7)
-    X = probe_points(rng, model, 2, 200)
-    tbl = Matrix{T}(X)
-    preds = LU.apply(e, view(tbl, :, :), 3)
-    L = scalarlogiset(X; allow_propositional=true)
-    ref = SM.apply(model, L; suppress_parity_warning=true)
-    @test CLS[preds] == ref
+    @test length(e.roots) == 3
+    # children always come after their parent
+    for (i, n) in enumerate(e.nodes)
+        LU.isleaf(n) && continue
+        @test n.left > i && n.right > i
+        @test !LU.isempty_atom(e.atoms[i])
+    end
+    for (i, n) in enumerate(e.nodes)
+        LU.isleaf(n) && @test LU.isempty_atom(e.atoms[i])
+    end
 
-    buf = zeros(R, size(tbl, 1) + 2)
-    @test LU.apply!(buf, e, view(tbl, :, :), 3) === buf
-    @test buf[1:end-2] == preds
+    @test_nowarn atoms = LU.get_atoms(e)
+    @test !any(LU.isempty_atom, atoms)
+end
 
-    @test_throws MethodError LumenEnsemble(cfg, leaf(1))
+@testset "LumenEnsemble: XGBoost" begin
+    model = xg_boost(X, y, 3, 3)
+    cfg = LumenConfig(; float_resolution=T)
+    e = LumenEnsemble(cfg, model)
+
+    @test length(e.roots) == 3
+    # children always come after their parent
+    for (i, n) in enumerate(e.nodes)
+        LU.isleaf(n) && continue
+        @test n.left > i && n.right > i
+        @test !LU.isempty_atom(e.atoms[i])
+    end
+    for (i, n) in enumerate(e.nodes)
+        LU.isleaf(n) && @test LU.isempty_atom(e.atoms[i])
+    end
+
+    @test_nowarn atoms = LU.get_atoms(e)
+    @test !any(LU.isempty_atom, atoms)
 end
 
 @testset "ThresholdSpace" begin

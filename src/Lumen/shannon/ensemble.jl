@@ -236,6 +236,45 @@ level, anything else is returned as is. Used to compare a model's
 _label(x::CategoricalValue) = CategoricalArrays.unwrap(x)
 _label(x) = x
 
+function _fillensemble(
+    node,
+    atoms::Vector{LumenAtom{R,T}},
+    nodes::Vector{LumenNode{R}},
+    classes::Vector{S}
+)::R where {R<:Unsigned,T<:AbstractFloat,S}
+    # reserve slot first so children get higher ids
+    push!(nodes, LumenNode{R}(zero(R), zero(R), zero(R)))
+    push!(atoms, LumenAtom{R,T}())
+    id = R(length(nodes))
+
+    if node isa SM.ConstantModel
+        # the leaf's class is the levelcode of its outcome; remember the
+        # outcome itself, the tie breaker needs it
+        o = outcome(node)
+        c = levelcode(o)
+        if c > length(classes)
+            resize!(classes, length(CategoricalArrays.levels(o)))
+        end
+        classes[c] = o
+        atoms[id] = LumenAtom{R,T}()
+        nodes[id] = LumenNode{R}(zero(R), zero(R), R(c))
+    elseif node isa SM.Branch
+        cond = SL.value(antecedent(node))
+        left = _fillensemble(posconsequent(node), atoms, nodes, classes)
+        right = _fillensemble(negconsequent(node), atoms, nodes, classes)
+        atoms[id] = LumenAtom{R,T}(
+            R(SD.i_variable(SD.feature(cond))),
+            T(SD.threshold(cond)),
+            evalop(SD.test_operator(cond)),                
+        )
+        nodes[id] = LumenNode{R}(left, right, zero(R))
+    else
+        throw(ArgumentError("unsupported model node $(typeof(node))"))
+    end
+
+    return id
+end
+
 """
     LumenEnsemble(config::LumenConfig{R,T}, model) -> LumenEnsemble{R,T}
     LumenEnsemble(model::DecisionEnsemble, R, T) -> LumenEnsemble{R,T}
@@ -248,13 +287,6 @@ categorical outcomes and scalar conditions are supported; any other node
 type throws an `ArgumentError`.
 """
 function LumenEnsemble(
-    ::LumenConfig{R,T},
-    model::AbstractModel
-) where {R<:Unsigned,T<:AbstractFloat}
-    LumenEnsemble(model, R, T)
-end
-
-function LumenEnsemble(
     model::DecisionEnsemble{U,SM.Branch{S}},
     R::Type{<:Unsigned},
     T::Type{<:AbstractFloat}
@@ -264,46 +296,26 @@ function LumenEnsemble(
     roots = R[]
     classes = S[]
 
-    function fillensemble(node)::R
-        # reserve slot first so children get higher ids
-        push!(nodes, LumenNode{R}(zero(R), zero(R), zero(R)))
-        push!(atoms, LumenAtom{R,T}())
-        id = R(length(nodes))
-
-        if node isa SM.ConstantModel
-            # the leaf's class is the levelcode of its outcome; remember the
-            # outcome itself, the tie breaker needs it
-            o = outcome(node)
-            c = levelcode(o)
-            if c > length(classes)
-                resize!(classes, length(CategoricalArrays.levels(o)))
-            end
-            classes[c] = o
-            atoms[id] = LumenAtom{R,T}()
-            nodes[id] = LumenNode{R}(zero(R), zero(R), R(c))
-        elseif node isa SM.Branch
-            cond = SL.value(antecedent(node))
-            left = fillensemble(posconsequent(node))
-            right = fillensemble(negconsequent(node))
-            atoms[id] = LumenAtom{R,T}(
-                R(SD.i_variable(SD.feature(cond))),
-                T(SD.threshold(cond)),
-                evalop(SD.test_operator(cond)),                
-            )
-            nodes[id] = LumenNode{R}(left, right, zero(R))
-        else
-            throw(ArgumentError("unsupported model node $(typeof(node))"))
-        end
-
-        return id
-    end
-
     for m in models(model)
-        push!(roots, fillensemble(m))
+        push!(roots, _fillensemble(m, atoms, nodes, classes))
     end
 
     aggregate = SM.weighted_aggregation(model)
     return LumenEnsemble{R,T,S,typeof(aggregate)}(atoms, nodes, roots, classes, aggregate)
+end
+
+function LumenEnsemble(
+    ::LumenConfig{R,T},
+    model::SoleModels.DecisionTree
+) where {R<:Unsigned,T<:AbstractFloat}
+    LumenEnsemble(DecisionEnsemble([model.root]), R, T)
+end
+
+function LumenEnsemble(
+    ::LumenConfig{R,T},
+    model::AbstractModel
+) where {R<:Unsigned,T<:AbstractFloat}
+    LumenEnsemble(model, R, T)
 end
 
 # a `LumenEnsemble` indexes and iterates as its vector of nodes
@@ -463,3 +475,49 @@ function apply!(
 
     return preds
 end
+
+# abstract type LumenVote end
+
+# # random forests: what you have today
+# struct MajorityVote{S,A<:Base.Callable} <: LumenVote
+#     classes::Vector{S}
+#     aggregate::A
+# end
+
+# # boosting: leaf `l` adds `values[l]` to the score of class `treeclass[k]`
+# struct BoostVote{T<:AbstractFloat,R<:Unsigned} <: LumenVote
+#     values::Vector{T}
+#     treeclass::Vector{R}      # one entry per tree (per root)
+# end
+
+# struct LumenEnsemble{R<:Unsigned,T<:AbstractFloat,V<:LumenVote}
+#     atoms::Vector{LumenAtom{R,T}}
+#     nodes::Vector{LumenNode{R}}
+#     roots::Vector{R}
+#     vote::V
+# end
+
+# shared walk
+# @inline function walk(f::LumenEnsemble, d, i, r)
+#     node = f.nodes[r]
+#     while !isleaf(node)
+#         a = f.atoms[r]
+#         r = evalop(a.op, d[i, a.feat], a.thr) ? node.left : node.right
+#         node = f.nodes[r]
+#     end
+#     return node.leaf
+# end
+
+# function apply!(preds, f::LumenEnsemble{R,T,<:BoostVote}, d, nclasses) where {R,T}
+#     scores = Vector{T}(undef, nclasses)
+#     v = f.vote
+#     @inbounds for i in 1:size(d, 1)
+#         fill!(scores, zero(T))
+#         for k in eachindex(f.roots)
+#             scores[v.treeclass[k]] += v.values[walk(f, d, i, f.roots[k])]
+#         end
+#         preds[i] = R(argmax(scores))     # first max, as XGBoost
+#     end
+#     return preds
+# end
+
