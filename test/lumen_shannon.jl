@@ -1,19 +1,115 @@
 using Test
 using SolePostHoc
-using SoleModels, SoleData, SoleLogics
-using CategoricalArrays, DataFrames, Random
-
 const LU = SolePostHoc.Lumen
-const SM = SoleModels
 
-# ---------------------------------------------------------------------------- #
-#                                   helpers                                    #
-# ---------------------------------------------------------------------------- #
+using SoleModels
+using ModalDecisionLists
+
+using CategoricalArrays
+using DecisionTree
+using RDatasets
+using StableRNGs
+using XGBoost
+
+# using SoleModels, SoleData, SoleLogics
+# using CategoricalArrays, DataFrames, Random
+
+
+# const SM = SoleModels
+
+
+
+# ---------------------------------------------------------------------------------------- #
+#                                      configuration                                       #
+# ---------------------------------------------------------------------------------------- #
+rng = StableRNG(42)
 const R = UInt32
-const T = Float64
-const CLS = categorical(["a", "b", "c"])
+const T = Float32
 
-A(f, thr, op) = LU.LumenAtom{R,T}(R(f), T(thr), LU.evalop(op))
+iris_df = dataset("datasets", "iris")
+y = iris_df.Species
+X = T.(select(iris_df, Not(:Species)))
+
+# ---------------------------------------------------------------------------------------- #
+#                                         utils                                            #
+# ---------------------------------------------------------------------------------------- #
+lumenatom(f, thr, op) = LU.LumenAtom{R,T}(R(f), T(thr), LU.evalop(op))
+
+function decision_tree(
+    X::DataFrame,
+    y::CategoricalArray,
+    max_depth::Int,
+    rng
+)
+    n_subfeatures = 0
+
+    model = DecisionTree.build_tree(
+        y, Matrix(X),
+        n_subfeatures,
+        max_depth;
+        rng
+    )
+
+    return SoleModels.solemodel(DecisionTree.wrap(model.node, (featurenames = names(X),)))
+end
+
+function random_forest(
+    X::DataFrame,
+    y::CategoricalArray,
+    n_trees::Int,
+    max_depth::Int,
+    rng
+)
+    n_subfeatures = -1
+    partial_sampling = 0.7
+
+    model = DecisionTree.build_forest(
+        y, Matrix(X),
+        n_subfeatures,
+        n_trees,
+        partial_sampling,
+        max_depth;
+        rng
+    )
+
+    return SoleModels.solemodel(model; featurenames=names(X))
+end
+
+function xg_boost(
+    X::DataFrame,
+    y::CategoricalArray,
+    num_round::Int,
+    max_depth::Int
+)
+    yl = levelcode.(y) .- 1 # CategoricalArrays: 1-based codes → 0-based
+    model = xgboost((X, yl);
+        num_round,
+        max_depth,
+        objective = "multi:softmax",  # or "multi:softmax"
+        num_class = length(levels(y)),
+    )
+
+    return SoleModels.solemodel(
+        XGBoost.trees(model),
+        Matrix(X), y;
+        featurenames=names(X),
+        classlabels=unique(y))
+end
+
+function decision_list()
+    model = ModalDecisionLists.build_ensemble(
+        plogiset, labels_train, numero_alberi;
+        model_wrapper=sequentialcovering,
+        max_rulebase_length=3,
+        max_rule_length=3,
+        loss_function=ModalDecisionLists.LossFunctions.LaplaceMetric(),
+        featurenames=featurenames,
+        min_rule_coverage=max(1, round(Int, size(features_train, 1) * 0.05)),
+        discretizedomain=true
+    )
+end
+
+const CLS = categorical(["a", "b", "c"])
 
 atom(fn, f, op, t) = Atom(ScalarCondition(VariableValue(f, fn[f]), op, t))
 leaf(c) = ConstantModel(CLS[c])
@@ -49,8 +145,8 @@ function randtree(rng, nfeat, depth, pool; root=true)
         randtree(rng, nfeat, depth - 1, pool; root=false))
 end
 
-random_forest(rng, ntrees, nfeat, depth, pool) =
-    forest([randtree(rng, nfeat, depth, pool) for _ in 1:ntrees], nfeat)
+# random_forest(rng, ntrees, nfeat, depth, pool) =
+#     forest([randtree(rng, nfeat, depth, pool) for _ in 1:ntrees], nfeat)
 
 # the thresholds of a model's splits, per feature
 function model_thresholds(model, nfeat)
@@ -108,9 +204,9 @@ plastring(L, cubes) = sprint(io -> LU.write_pla(io, L, cubes))
 
 config64(; kw...) = LumenConfig(; float_resolution=Float64, kw...)
 
-# ---------------------------------------------------------------------------- #
-#                                    tests                                     #
-# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------------------- #
+#                                          tests                                           #
+# ---------------------------------------------------------------------------------------- #
 @testset "Lumen Shannon" begin
 
 @testset "operators" begin
@@ -133,11 +229,11 @@ config64(; kw...) = LumenConfig(; float_resolution=Float64, kw...)
 end
 
 @testset "LumenAtom" begin
-    a = A(2, 1.5, <)
-    @test LU.dual(a) == A(2, 1.5, ≥)
+    a = lumenatom(2, 1.5, <)
+    @test LU.dual(a) == lumenatom(2, 1.5, ≥)
     @test LU.dual(LU.dual(a)) == a
-    @test hash(a) == hash(A(2, 1.5, <))
-    @test a != A(2, 1.5, ≤)
+    @test hash(a) == hash(lumenatom(2, 1.5, <))
+    @test a != lumenatom(2, 1.5, ≤)
 
     e = LU.LumenAtom{R,T}()
     @test LU.isempty_atom(e)
@@ -145,13 +241,13 @@ end
     @test LU.isempty_atom(LU.LumenAtom())
     @test LU.LumenAtom() isa LU.LumenAtom{UInt32,Float64}
 
-    atoms = [A(1, 1.0, <), A(2, 2.0, ≥), A(1, 3.0, ≤)]
+    atoms = [lumenatom(1, 1.0, <), lumenatom(2, 2.0, ≥), lumenatom(1, 3.0, ≤)]
     @test LU.get_features(atoms) == R[1, 2, 1]
     @test LU.get_thresholds(atoms) == [1.0, 2.0, 3.0]
     @test LU.get_thresholds(atoms, R(1)) == [1.0, 3.0]
     @test LU.get_op(atoms) == LU.evalop.([<, ≥, ≤])
     @test LU.featidxs(atoms, R(1)) == [1, 3]
-    @test sort(atoms) == [A(1, 1.0, <), A(1, 3.0, ≤), A(2, 2.0, ≥)]
+    @test sort(atoms) == [lumenatom(1, 1.0, <), lumenatom(1, 3.0, ≤), A(2, 2.0, ≥)]
 end
 
 @testset "LumenEnsemble" begin
@@ -623,5 +719,9 @@ end
     ds = lumen_shannon(config64(; M=1), m1)
     @test_broken length(SM.rules(ds)) == 1
 end
+
+# ---------------------------------------------------------------------------------------- #
+#                                      input formats                                       #
+# ---------------------------------------------------------------------------------------- #
 
 end
