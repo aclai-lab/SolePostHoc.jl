@@ -118,6 +118,24 @@ function decision_list(
 end
 
 # ---------------------------------------------------------------------------------------- #
+#                                        evaluate                                          #
+# ---------------------------------------------------------------------------------------- #
+function evaluate(
+    rules::LU.DecisionSet,
+    model::SoleModels.AbstractModel,
+    X::DataFrame
+)
+    ds_rules = SoleModels.rules(rules)
+    logiset = PropositionalLogiset(X)
+    y_pred = SoleModels.apply(model, logiset)
+
+    return map(
+        r -> SoleModels.evaluaterule(r, logiset, y_pred, compute_explanations=true,),
+        ds_rules
+    )
+end
+
+# ---------------------------------------------------------------------------------------- #
 #                                  operators and atoms                                     #
 # ---------------------------------------------------------------------------------------- #
 @testset "Lumen Shannon" begin
@@ -464,28 +482,60 @@ end
 #                                      lumen shannon                                       #
 # ---------------------------------------------------------------------------------------- #
 @testset "Lumen Shannon" begin
-    @testset "Lumen: Decision Tree" begin
-        model = decision_tree(X, y, 5, rng)
-        cfg = LumenConfig(; float_resolution=T)
-        rules = lumen_shannon(cfg, model)
-    end
+    for seed in [11,23,33,42]
+        rng = StableRNG(seed)
 
-    @testset "LumenEnsemble: Random Forest" begin
-        model = random_forest(X, y, 3, 3, rng)
-        cfg = LumenConfig(; float_resolution=T)
-        rules = lumen_shannon(cfg, model)
-    end
+        @testset "Lumen: Decision Tree" begin
+            model = decision_tree(X, y, 5, rng)
+            cfg = LumenConfig(; float_resolution=T)
+            rules = lumen_shannon(cfg, model)
 
-    @testset "LumenEnsemble: XGBoost" begin
-        model = xg_boost(X, y, 3, 3)
-        cfg = LumenConfig(; float_resolution=T)
-        rules = lumen_shannon(cfg, model)
-    end
+            rule_evaluations = evaluate(rules, model, X)
 
-    @testset "LumenEnsemble: Decision List" begin
-        model = decision_list(X, y, 3, 3, 3, rng)
-        cfg = LumenConfig(; float_resolution=T)
-        rules = lumen_shannon(cfg, model)
+            for r in rule_evaluations
+                @test r.sensitivity == 1.0
+                @test r.specificity == 1.0
+            end
+        end
+
+        @testset "LumenEnsemble: Random Forest" begin
+            model = random_forest(X, y, 20, 5, rng)
+            cfg = LumenConfig(; float_resolution=T)
+            rules = lumen_shannon(cfg, model)
+
+            rule_evaluations = evaluate(rules, model, X)
+
+            for r in rule_evaluations
+                @test r.sensitivity == 1.0
+                @test r.specificity == 1.0
+            end
+        end
+
+        @testset "LumenEnsemble: XGBoost" begin
+            model = xg_boost(X, y, 50, 5)
+            cfg = LumenConfig(; float_resolution=T)
+            rules = lumen_shannon(cfg, model)
+
+            rule_evaluations = evaluate(rules, model, X)
+
+            for r in rule_evaluations
+                @test r.sensitivity == 1.0
+                @test r.specificity == 1.0
+            end
+        end
+
+        @testset "LumenEnsemble: Decision List" begin
+            model = decision_list(X, y, 50, 3, 3, rng)
+            cfg = LumenConfig(; float_resolution=T)
+            rules = lumen_shannon(cfg, model)
+
+            rule_evaluations = evaluate(rules, model, X)
+
+            for r in rule_evaluations
+                @test r.sensitivity == 1.0
+                @test r.specificity == 1.0
+            end
+        end
     end
 end
 
