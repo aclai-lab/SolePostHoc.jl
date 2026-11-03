@@ -82,19 +82,6 @@ function xg_boost(
     max_depth::Int
 )
     yl = levelcode.(y) .- 1 # CategoricalArrays: 1-based codes → 0-based
-    # model = xgboost((X, yl);
-    #     num_round,
-    #     max_depth,
-    #     objective = "multi:softmax",  # or "multi:softmax"
-    #     num_class = length(levels(y)),
-    # )
-
-    # return SoleModels.solemodel(
-    #     XGBoost.trees(model),
-    #     Matrix(X), y;
-    #     featurenames=names(X),
-    #     classlabels=unique(y))
-
     model = xgboost((Matrix(X), yl);
         num_round,
         max_depth,
@@ -102,13 +89,12 @@ function xg_boost(
         num_class = length(levels(y)),
     )
 
-    SoleModels.solemodel(
+    return SoleModels.solemodel(
         XGBoost.trees(model),
         Matrix(X), y;
         featurenames = names(X),
         classlabels  = levels(y),
     )
-
 end
 
 function decision_list(
@@ -326,7 +312,12 @@ end
     cfg = LumenConfig(; float_resolution=T)
     e = LumenEnsemble(cfg, model)
 
-    @test length(e.roots) == 3
+    nclasses = length(levels(y))
+
+    @test e.vote isa LU.BoostVote
+    # one tree per class per round, scoring for the classes in turn
+    @test length(e.roots) == 3 * nclasses
+    @test e.vote.treeclass == repeat(R.(1:nclasses), 3)
     # children always come after their parent
     for (i, n) in enumerate(e.nodes)
         LU.isleaf(n) && continue
@@ -336,9 +327,51 @@ end
     for (i, n) in enumerate(e.nodes)
         LU.isleaf(n) && @test LU.isempty_atom(e.atoms[i])
     end
+    # every leaf points at its own value
+    leaves = [n.leaf for n in e.nodes if LU.isleaf(n)]
+    @test sort(leaves) == R.(1:length(e.vote.values))
 
     atoms = @test_nowarn LU.get_atoms(e)
     @test !any(LU.isempty_atom, atoms)
+    # XGBoost splits are always `<`, on finite thresholds and real columns
+    @test all(a -> a.op == LU.evalop(<) && isfinite(a.thr) && a.feat ≤ ncol(X), atoms)
+
+    # the compiled trees classify exactly as the Sole model, on the data and
+    # on points at, just below and just above every threshold
+    lumen(Xp) = LU.apply(e, view(Matrix(Xp), :, :), nclasses)
+    sole(Xp) = levelcode.(SoleModels.apply(model,
+        scalarlogiset(Xp; allow_propositional=true); suppress_parity_warning=true))
+    @test lumen(X) == sole(X)
+
+    cand = map(1:ncol(X)) do f
+        ts = [a.thr for a in atoms if a.feat == f]
+        isempty(ts) ? T[0] : unique!(vcat(ts, prevfloat.(ts), nextfloat.(ts),
+            minimum(ts) - 1, maximum(ts) + 1))
+    end
+    Xp = DataFrame([n => [rand(rng, cand[j]) for _ in 1:500]
+        for (j, n) in enumerate(propertynames(X))])
+    @test lumen(Xp) == sole(Xp)
+
+    # and as XGBoost itself (`multi:softmax` predicts 0-based class indices)
+    @test lumen(X) == R.(XGBoost.predict(booster, Matrix(X))) .+ one(R)
+end
+
+@testset "LumenEnsemble: XGBoost single-leaf trees" begin
+    # with min_child_weight above the data size no split is possible, so
+    # every tree is a single leaf: XGBoostExt's dummy `V[class] < Inf` splits
+    # must compile to bare leaves
+    yl = levelcode.(y) .- 1
+    booster = xgboost((Matrix(X), yl); num_round=2, max_depth=2,
+        objective="multi:softmax", num_class=length(levels(y)),
+        min_child_weight=1e6)
+    model = SoleModels.solemodel(XGBoost.trees(booster), Matrix(X), y;
+        featurenames=names(X), classlabels=levels(y))
+    e = LumenEnsemble(model, R, T)
+
+    @test all(r -> LU.isleaf(e.nodes[r]), e.roots)
+    @test isempty(LU.get_atoms(e))
+    @test LU.apply(e, view(Matrix(X), :, :), length(levels(y))) ==
+        levelcode.(SoleModels.apply(model, scalarlogiset(X; allow_propositional=true)))
 end
 
 @testset "LumenEnsemble: Decision List" begin

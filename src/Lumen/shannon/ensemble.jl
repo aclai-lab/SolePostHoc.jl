@@ -196,10 +196,63 @@ Base.hash(n::LumenNode, h::UInt) =
 #                               Lumen Ensemble                                 #
 # ---------------------------------------------------------------------------- #
 """
-    LumenEnsemble{R,T,S,A}
+    LumenVote
 
-A `DecisionEnsemble` compiled into flat arrays, so that classifying a point
-walks plain vectors instead of Sole model objects.
+How the trees of a [`LumenEnsemble`](@ref) combine into a class, and what a
+leaf's `leaf` field means. Each rule has its own [`apply!`](@ref) method,
+chosen by dispatch on the ensemble's `V` parameter, so the tree walk pays
+nothing for the choice.
+
+See also [`MajorityVote`](@ref), [`BoostVote`](@ref).
+"""
+abstract type LumenVote end
+
+"""
+    MajorityVote{S,A}
+
+Random forests, single trees and decision lists: every tree votes for the
+class of the leaf it reaches, and a leaf's `leaf` field is that class's
+levelcode.
+
+# Fields
+- `classes::Vector{S}`: `classes[c]` is the leaf outcome whose levelcode is
+  `c` (the categorical value itself, not its plain label).
+- `aggregate::A`: the model's vote aggregation, `SM.weighted_aggregation`.
+
+Both exist for one purpose: [`apply!`](@ref) breaks a tied vote exactly as
+`SM.apply` does, by handing the trees' outcomes to the model's own
+aggregation. Its tie rule depends on the model, so no fixed rule could
+reproduce it.
+"""
+struct MajorityVote{S,A<:Base.Callable} <: LumenVote
+    classes::Vector{S}
+    aggregate::A
+end
+
+"""
+    BoostVote{R}
+
+Gradient boosting (`DecisionXGBoost`): tree `k` adds the value of the leaf
+it reaches to the score of class `treeclass[k]`, and the class with the
+highest score wins. A leaf's `leaf` field is an index into `values`.
+
+# Fields
+- `values::Vector{Float64}`: the leaf values, in leaf order. `Float64`
+  because `SM.apply` sums them in `Float64`, and matching its rounding keeps
+  near ties classified the same way.
+- `treeclass::Vector{R}`: the levelcode of the class each tree scores for,
+  one entry per root.
+"""
+struct BoostVote{R<:Unsigned} <: LumenVote
+    values::Vector{Float64}
+    treeclass::Vector{R}
+end
+
+"""
+    LumenEnsemble{R,T,V}
+
+A tree ensemble compiled into flat arrays, so that classifying a point walks
+plain vectors instead of Sole model objects.
 
 # Fields
 - `atoms::Vector{LumenAtom{R,T}}`: the condition of node `i` (the empty atom
@@ -207,23 +260,15 @@ walks plain vectors instead of Sole model objects.
 - `nodes::Vector{LumenNode{R}}`: every node of every tree; children always
   have higher indices than their parent.
 - `roots::Vector{R}`: the root index of each tree, in the model's order.
-- `classes::Vector{S}`: `classes[c]` is the leaf outcome whose levelcode is
-  `c` (the categorical value itself, not its plain label).
-- `aggregate::A`: the model's vote aggregation, `SM.weighted_aggregation`.
-
-`classes` and `aggregate` exist for one purpose: [`apply!`](@ref) breaks a
-tied vote exactly as `SM.apply` does, by handing the trees' outcomes to the
-model's own aggregation. Its tie rule depends on the model, so no fixed rule
-could reproduce it.
+- `vote::V`: how the trees' leaves combine into a class, a [`LumenVote`](@ref).
 
 Build one with `LumenEnsemble(config, model)`.
 """
-struct LumenEnsemble{R<:Unsigned,T<:AbstractFloat,S,A<:Base.Callable}
+struct LumenEnsemble{R<:Unsigned,T<:AbstractFloat,V<:LumenVote}
     atoms::Vector{LumenAtom{R,T}}
     nodes::Vector{LumenNode{R}}
     roots::Vector{R}
-    classes::Vector{S}
-    aggregate::A
+    vote::V
 end
 
 """
@@ -398,9 +443,9 @@ function LumenEnsemble(
         push!(roots, _fillensemble(m, atoms, nodes, classes))
     end
 
-    aggregate = SM.weighted_aggregation(model)
+    vote = MajorityVote(classes, SM.weighted_aggregation(model))
 
-    return LumenEnsemble{R,T,S,typeof(aggregate)}(atoms, nodes, roots, classes, aggregate)
+    return LumenEnsemble(atoms, nodes, roots, vote)
 end
 
 function LumenEnsemble(
@@ -417,9 +462,83 @@ function LumenEnsemble(
         push!(roots, _fillensemble(m, atoms, nodes, classes))
     end
 
-    aggregate = SM.weighted_aggregation(model)
+    vote = MajorityVote(classes, SM.weighted_aggregation(model))
 
-    return LumenEnsemble{R,T,S,typeof(aggregate)}(atoms, nodes, roots, classes, aggregate)
+    return LumenEnsemble(atoms, nodes, roots, vote)
+end
+
+# XGBoost trees: the same walk as `_fillensemble`, but a leaf stores the
+# index of its value in `values` instead of a class
+function _fillboost(
+    node::SM.ConstantModel,
+    atoms::Vector{LumenAtom{R,T}},
+    nodes::Vector{LumenNode{R}},
+    values::Vector{Float64}
+)::R where {R<:Unsigned,T<:AbstractFloat}
+    push!(values, Float64(SM.info(node).leaf_value))
+    push!(atoms, LumenAtom{R,T}())
+    push!(nodes, LumenNode{R}(zero(R), zero(R), R(length(values))))
+
+    return R(length(nodes))
+end
+
+function _fillboost(
+    node::SM.Branch,
+    atoms::Vector{LumenAtom{R,T}},
+    nodes::Vector{LumenNode{R}},
+    values::Vector{Float64}
+)::R where {R<:Unsigned,T<:AbstractFloat}
+    cond = SL.value(antecedent(node))
+
+    # XGBoostExt turns a tree that is a single leaf into a dummy split
+    # `V[class] < Inf` with that leaf on both sides: compile the leaf alone,
+    # so that neither a bogus feature index nor an `Inf` atom gets in
+    if SD.test_operator(cond) === (<) && isinf(SD.threshold(cond))
+        return _fillboost(posconsequent(node), atoms, nodes, values)
+    end
+
+    # reserve slot first so children get higher ids
+    push!(nodes, LumenNode{R}(zero(R), zero(R), zero(R)))
+    push!(atoms, LumenAtom{R,T}())
+    id = R(length(nodes))
+
+    left = _fillboost(posconsequent(node), atoms, nodes, values)
+    right = _fillboost(negconsequent(node), atoms, nodes, values)
+    atoms[id] = LumenAtom{R,T}(
+        R(SD.i_variable(SD.feature(cond))),
+        T(SD.threshold(cond)),
+        evalop(SD.test_operator(cond)),
+    )
+    nodes[id] = LumenNode{R}(left, right, zero(R))
+
+    return id
+end
+
+# Tree `k` scores for class `(k - 1) % nclass + 1` of the sorted supporting
+# labels, as XGBoost lays out `multi:*` models and `SM.apply` reads them back
+# (SoleBase's `bestguess` on leaf scores).
+function LumenEnsemble(
+    model::SM.DecisionXGBoost,
+    R::Type{<:Unsigned},
+    T::Type{<:AbstractFloat}
+)
+    labels = sort(unique(SM.info(model).supporting_labels))
+    eltype(labels) <: CategoricalValue || throw(ArgumentError(
+        "XGBoost models need categorical class labels, got $(eltype(labels))"))
+    nclass = length(labels)
+
+    atoms = LumenAtom{R,T}[]
+    nodes = LumenNode{R}[]
+    roots = R[]
+    values = Float64[]
+    treeclass = R[]
+
+    for (k, m) in enumerate(models(model))
+        push!(roots, _fillboost(m, atoms, nodes, values))
+        push!(treeclass, R(levelcode(labels[(k - 1) % nclass + 1])))
+    end
+
+    return LumenEnsemble(atoms, nodes, roots, BoostVote(values, treeclass))
 end
 
 # single list is a one-member ensemble, binary classification ?
@@ -510,8 +629,14 @@ function Base.show(io::IO, ::MIME"text/plain", e::LumenEnsemble{R,T}) where {R,T
     println(io)
     println(io, "  splits:   ", nsplits)
     println(io, "  features: ", length(feats))
-    print(io,   "  classes:  ", length(unique(n.leaf for n in e.nodes if isleaf(n))))
+    print(io,   "  classes:  ", _nclasses(e))
 end
+
+# number of classes the trees can output
+_nclasses(e::LumenEnsemble{R,T,<:MajorityVote}) where {R,T} =
+    length(unique(n.leaf for n in e.nodes if isleaf(n)))
+_nclasses(e::LumenEnsemble{R,T,<:BoostVote}) where {R,T} =
+    length(unique(e.vote.treeclass))
 
 # ---------------------------------------------------------------------------- #
 #                                   apply                                      #
@@ -521,18 +646,22 @@ end
     apply!(preds, f::LumenEnsemble, d, nclasses) -> preds
 
 Classify every row of `d` (one point per row, column `j` holding feature
-`j`) by majority vote of the trees of `f`, writing the winning class (a
-levelcode in `1:nclasses`) of row `i` into `preds[i]`. `preds` must hold at
-least `size(d, 1)` entries; `apply` allocates it.
+`j`) with the trees of `f`, writing the winning class (a levelcode in
+`1:nclasses`) of row `i` into `preds[i]`. `preds` must hold at least
+`size(d, 1)` entries; `apply` allocates it.
 
 Each tree is walked from its root, going `left` when the node's atom holds
-and `right` otherwise, until a leaf casts its vote. A clear majority is
-decided here; a tie at the maximum is handed to the model's own aggregation
-(`f.aggregate`) with the trees' outcomes in tree order, which is exactly what
-`SM.apply` does, so the two always agree. Ties are the only place an
-allocation can happen.
+and `right` otherwise, until it reaches a leaf; how the leaves combine
+depends on the ensemble's [`LumenVote`](@ref):
 
-Unweighted: every tree counts once, as in the models this path compiles.
+- [`MajorityVote`](@ref): every tree votes for its leaf's class, unweighted.
+  A clear majority is decided here; a tie at the maximum is handed to the
+  model's own aggregation with the trees' outcomes in tree order, which is
+  exactly what `SM.apply` does, so the two always agree. Ties are the only
+  place an allocation can happen.
+- [`BoostVote`](@ref): every tree adds its leaf's value to its class's
+  score, and the highest score wins, the first one on a tie, as `SM.apply`
+  does for `DecisionXGBoost`. Nothing is allocated per row.
 """
 function apply(
     f::LumenEnsemble{R,T},
@@ -540,6 +669,25 @@ function apply(
     nclasses::Integer
 ) where {R<:Unsigned,T<:AbstractFloat}
     apply!(Vector{R}(undef, size(d, 1)), f, d, nclasses)
+end
+
+# walk one tree from root `r` on row `i` of `d`, returning its leaf's `leaf`
+# field: a class for `MajorityVote`, a value index for `BoostVote`
+@inline function _walk(
+    f::LumenEnsemble{R,T},
+    d::SubArray{T},
+    i::Integer,
+    r::R
+)::R where {R<:Unsigned,T<:AbstractFloat}
+    @inbounds begin
+        node = f.nodes[r]
+        while !isleaf(node)
+            a = f.atoms[r]
+            r = evalop(a.op, d[i, a.feat], a.thr) ? node.left : node.right
+            node = f.nodes[r]
+        end
+    end
+    return node.leaf
 end
 
 """
@@ -551,30 +699,24 @@ Votes and tie breaking are as described there. `preds` must hold at least
 """
 function apply!(
     preds::Vector{R},
-    f::LumenEnsemble{R,T},
+    f::LumenEnsemble{R,T,<:MajorityVote},
     d::SubArray{T},
     nclasses::Integer
 ) where {R<:Unsigned,T<:AbstractFloat}
     n = size(d, 1)
     counts = Vector{Float64}(undef, nclasses)
     roots = f.roots
+    classes = f.vote.classes
     votes = Vector{R}(undef, length(roots)) # leaf class of every tree
-    tied = similar(f.classes, length(roots)) # touched only on a tie
+    tied = similar(classes, length(roots)) # touched only on a tie
 
     @inbounds for i in 1:n
         fill!(counts, 0.0)
 
         for k in eachindex(roots)
-            r = roots[k]
-            node = f.nodes[r]
-            while !isleaf(node)
-                a = f.atoms[r]
-                r = evalop(a.op, d[i, a.feat], a.thr) ?
-                    node.left : node.right
-                node = f.nodes[r]
-            end
-            counts[node.leaf] += 1
-            votes[k] = node.leaf
+            c = _walk(f, d, i, roots[k])
+            counts[c] += 1
+            votes[k] = c
         end
 
         best = 1
@@ -593,9 +735,9 @@ function apply!(
         # voted class), so no fixed rule here can match every model.
         if tie
             @inbounds for k in eachindex(votes)
-                tied[k] = f.classes[votes[k]]
+                tied[k] = classes[votes[k]]
             end
-            best = levelcode(f.aggregate(tied; suppress_parity_warning=true))
+            best = levelcode(f.vote.aggregate(tied; suppress_parity_warning=true))
         end
         preds[i] = best
     end
@@ -603,48 +745,25 @@ function apply!(
     return preds
 end
 
-# abstract type LumenVote end
+function apply!(
+    preds::Vector{R},
+    f::LumenEnsemble{R,T,<:BoostVote},
+    d::SubArray{T},
+    nclasses::Integer
+) where {R<:Unsigned,T<:AbstractFloat}
+    scores = Vector{Float64}(undef, nclasses)
+    roots = f.roots
+    values = f.vote.values
+    treeclass = f.vote.treeclass
 
-# # random forests: what you have today
-# struct MajorityVote{S,A<:Base.Callable} <: LumenVote
-#     classes::Vector{S}
-#     aggregate::A
-# end
+    @inbounds for i in 1:size(d, 1)
+        fill!(scores, 0.0)
+        for k in eachindex(roots)
+            scores[treeclass[k]] += values[_walk(f, d, i, roots[k])]
+        end
+        # first maximum, as `argmax` in `bestguess`
+        preds[i] = R(argmax(scores))
+    end
 
-# # boosting: leaf `l` adds `values[l]` to the score of class `treeclass[k]`
-# struct BoostVote{T<:AbstractFloat,R<:Unsigned} <: LumenVote
-#     values::Vector{T}
-#     treeclass::Vector{R}      # one entry per tree (per root)
-# end
-
-# struct LumenEnsemble{R<:Unsigned,T<:AbstractFloat,V<:LumenVote}
-#     atoms::Vector{LumenAtom{R,T}}
-#     nodes::Vector{LumenNode{R}}
-#     roots::Vector{R}
-#     vote::V
-# end
-
-# shared walk
-# @inline function walk(f::LumenEnsemble, d, i, r)
-#     node = f.nodes[r]
-#     while !isleaf(node)
-#         a = f.atoms[r]
-#         r = evalop(a.op, d[i, a.feat], a.thr) ? node.left : node.right
-#         node = f.nodes[r]
-#     end
-#     return node.leaf
-# end
-
-# function apply!(preds, f::LumenEnsemble{R,T,<:BoostVote}, d, nclasses) where {R,T}
-#     scores = Vector{T}(undef, nclasses)
-#     v = f.vote
-#     @inbounds for i in 1:size(d, 1)
-#         fill!(scores, zero(T))
-#         for k in eachindex(f.roots)
-#             scores[v.treeclass[k]] += v.values[walk(f, d, i, f.roots[k])]
-#         end
-#         preds[i] = R(argmax(scores))     # first max, as XGBoost
-#     end
-#     return preds
-# end
-
+    return preds
+end
