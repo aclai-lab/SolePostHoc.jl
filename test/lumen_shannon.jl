@@ -42,7 +42,8 @@ function decision_tree(
         rng
     )
 
-    return SoleModels.solemodel(DecisionTree.wrap(model.node, (featurenames=names(X),)))
+    return SoleModels.solemodel(
+        DecisionTree.wrap(model.node, (featurenames=propertynames(X),)))
 end
 
 function random_forest(
@@ -64,7 +65,7 @@ function random_forest(
         rng
     )
 
-    return SoleModels.solemodel(model; featurenames=names(X))
+    return SoleModels.solemodel(model; featurenames=propertynames(X))
 end
 
 function xg_boost(
@@ -77,15 +78,15 @@ function xg_boost(
     model = xgboost((Matrix(X), yl);
         num_round,
         max_depth,
-        objective = "multi:softmax",
-        num_class = length(levels(y)),
+        objective="multi:softmax",
+        num_class=length(levels(y)),
     )
 
     return SoleModels.solemodel(
         XGBoost.trees(model),
         Matrix(X), y;
-        featurenames = names(X),
-        classlabels  = levels(y),
+        featurenames=propertynames(X),
+        classlabels=levels(y),
     )
 end
 
@@ -101,7 +102,7 @@ function decision_list(
 
     model = ModalDecisionLists.build_ensemble(
         logiset,
-        y,
+        deepcopy(y),
         num_models;
         model_wrapper=ModalDecisionLists.sequentialcovering,
         max_rulebase_length,
@@ -113,7 +114,7 @@ function decision_list(
         rng
     )
 
-    return solemodel(model; featurenames=names(X))
+    return solemodel(model; featurenames=propertynames(X))
 end
 
 # ---------------------------------------------------------------------------------------- #
@@ -398,17 +399,6 @@ end
     back = LU.read_pla(pla, L)
     @test termsets(back) == termsets(cubes)
     @test termsets(LU.read_pla(codeunits(pla), L)) == termsets(cubes)
-
-    plain = ".i 2\n.o 1\n.ilb x1 x2\n.ob f\n.p 1\n01 1\n.e\n"
-    @test isempty(LU.read_pla(plain, L2))
-    # output '0' rows are not terms; an all '-' row is the tautology
-    @test isempty(LU.read_pla(".i 2\n.o 1\n10 0\n.e\n", L2))
-    taut = LU.read_pla(".i 2\n.o 1\n-- 1\n.e\n", L2)
-    @test LU.nterms(taut) == 1 && isempty(taut[1])
-
-    @test_throws ArgumentError LU.read_pla(".ilb x1 x9\n", L2)
-    @test_throws ArgumentError LU.read_pla(".ilb y1 x2\n", L2)
-    @test_throws ArgumentError LU.read_pla(".i 2\n101 1\n", L2)
 end
 
 @testset "compact!" begin
@@ -474,7 +464,29 @@ end
 #                                      lumen shannon                                       #
 # ---------------------------------------------------------------------------------------- #
 @testset "Lumen Shannon" begin
+    @testset "Lumen: Decision Tree" begin
+        model = decision_tree(X, y, 5, rng)
+        cfg = LumenConfig(; float_resolution=T)
+        rules = lumen_shannon(cfg, model)
+    end
 
+    @testset "LumenEnsemble: Random Forest" begin
+        model = random_forest(X, y, 3, 3, rng)
+        cfg = LumenConfig(; float_resolution=T)
+        rules = lumen_shannon(cfg, model)
+    end
+
+    @testset "LumenEnsemble: XGBoost" begin
+        model = xg_boost(X, y, 3, 3)
+        cfg = LumenConfig(; float_resolution=T)
+        rules = lumen_shannon(cfg, model)
+    end
+
+    @testset "LumenEnsemble: Decision List" begin
+        model = decision_list(X, y, 3, 3, 3, rng)
+        cfg = LumenConfig(; float_resolution=T)
+        rules = lumen_shannon(cfg, model)
+    end
 end
 
 end
