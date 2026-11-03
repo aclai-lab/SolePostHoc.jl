@@ -23,10 +23,11 @@ y = iris_df.Species
 X = T.(select(iris_df, Not(:Species)))
 
 # ---------------------------------------------------------------------------------------- #
-#                                         utils                                            #
+#                                   HOW TO TRAIN MODELS                                    #
 # ---------------------------------------------------------------------------------------- #
-lumenatom(f, thr, op) = LU.LumenAtom{R,T}(R(f), T(thr), LU.evalop(op))
-
+# Due to its architecture, lumen shannon does not allow flexibility in the choice of types.
+# It is very important that models meet certain specifications; the following functions
+# show how the models must be trained.
 function decision_tree(
     X::DataFrame,
     y::CategoricalArray,
@@ -118,8 +119,10 @@ function decision_list(
 end
 
 # ---------------------------------------------------------------------------------------- #
-#                                        evaluate                                          #
+#                                          utils                                           #
 # ---------------------------------------------------------------------------------------- #
+lumenatom(f, thr, op) = LU.LumenAtom{R,T}(R(f), T(thr), LU.evalop(op))
+
 function evaluate(
     rules::LU.DecisionSet,
     model::SoleModels.AbstractModel,
