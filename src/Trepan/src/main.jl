@@ -1,7 +1,7 @@
 module TREPAN
 
 # using Revise
-using Pkg
+# using Pkg
 using SoleModels
 using IterTools, DataFrames
 using DecisionTree: load_data, build_forest, apply_forest

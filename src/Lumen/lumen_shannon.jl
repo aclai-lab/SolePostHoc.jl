@@ -36,6 +36,11 @@
 # ============================================================================ #
 
 # ---------------------------------------------------------------------------- #
+#                                accepted models                               #
+# ---------------------------------------------------------------------------- #
+const MODELS = Union{SM.DecisionTree,SM.DecisionEnsemble,SM.DecisionXGBoost}
+
+# ---------------------------------------------------------------------------- #
 #                                   operators                                  #
 # ---------------------------------------------------------------------------- #
 #     _opfun(op::UInt8) -> Function
@@ -143,7 +148,7 @@ assign(UInt32, ["b", "a", "b"], true)  # (["a", "b"], UInt32[2, 1, 2])
 """
 function assign(
     ::Type{R},
-    y::Vector{S},
+    y::AbstractVector{S},
     sorted::Bool=false
 ) where {R<:Unsigned,S}
     labels = sorted ? sort!(unique(y)) : unique(y)
@@ -196,7 +201,7 @@ See also: [`LumenConfig`](@ref), [`lumen`](@ref).
 """
 function lumen_shannon(
     config::LumenConfig{R,T},
-    model::SM.DecisionEnsemble,
+    model::MODELS,
     featurenames::Vector{Symbol},
     feat_idxs::Vector{R},
     classnames::Vector{String},
