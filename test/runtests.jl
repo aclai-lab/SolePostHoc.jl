@@ -4,7 +4,8 @@ using IterTools
 using Random
 
 # fill your Artifacts.toml file;
-fillartifacts() # comment this line in debug
+using SoleData: Artifacts # comment this line in debug
+Artifacts.fillartifacts() # comment this line in debug
 
 function run_tests(list)
     println("\n" * ("#"^50))
